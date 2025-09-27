@@ -13,18 +13,30 @@ export class LocalStorageProvider extends BaseStorageProvider {
     runOnSave?: boolean;
   };
 
-  constructor(config: { basePath: string; cleanup?: any } = { basePath: './outputs' }) {
+  constructor(config: { basePath: string; cleanup?: any } = { basePath: 'outputs' }) {
     super(config);
     this.basePath = path.resolve(config.basePath);
     this.generationsPath = path.join(this.basePath, 'images', 'generations');
     this.cleanupConfig = config.cleanup;
   }
 
+  private getRelativePath(filePath: string): string {
+    return path.relative(process.cwd(), filePath);
+  }
+
   async save(buffer: Buffer, metadata: ImageMetadata): Promise<StorageResult> {
     const date = metadata.timestamp.toISOString().split('T')[0];
     const datePath = path.join(this.generationsPath, date);
 
-    await this.ensureDirectory(datePath);
+    // Create directories explicitly
+    try {
+      await fs.mkdir(this.basePath, { recursive: true });
+      await fs.mkdir(path.join(this.basePath, 'images'), { recursive: true });
+      await fs.mkdir(this.generationsPath, { recursive: true });
+      await fs.mkdir(datePath, { recursive: true });
+    } catch (error) {
+      console.error('Error creating directories:', error);
+    }
 
     const filename = this.generateFilename(metadata);
     const filePath = path.join(datePath, filename);
@@ -32,13 +44,17 @@ export class LocalStorageProvider extends BaseStorageProvider {
     await fs.writeFile(filePath, buffer);
     const stats = await fs.stat(filePath);
 
+    // Debug: Show absolute path
+    console.log(`Image saved to absolute path: ${filePath}`);
+    console.log(`Current working directory: ${process.cwd()}`);
+
     // Run automatic cleanup if enabled
     if (this.cleanupConfig?.enabled && this.cleanupConfig?.runOnSave) {
       await this.runAutomaticCleanup();
     }
 
     return {
-      url: `/outputs/images/generations/${date}/${filename}`,
+      url: filePath.replace(/\\/g, '/'), // Use absolute path instead of relative
       filename,
       path: filePath,
       size: stats.size,
@@ -81,7 +97,7 @@ export class LocalStorageProvider extends BaseStorageProvider {
 
           items.push({
             filename: file,
-            url: `/outputs/images/generations/${dateDir}/${file}`,
+            url: this.getRelativePath(filePath).replace(/\\/g, '/'),
             size: stats.size,
             createdAt: stats.mtime,
             metadata: this.extractMetadataFromFile(file, stats.mtime)

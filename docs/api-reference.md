@@ -132,7 +132,7 @@ DEFAULT_MODEL=@cf/black-forest-labs/flux-1-schnell
   "content": [
     {
       "type": "text",
-      "text": "Image generated successfully for prompt: 'A beautiful sunset'\n\n![Generated Image](/cache/image/generations/uuid.jpg)"
+      "text": "Image generated successfully for prompt: 'A beautiful sunset'\n\n![Generated Image](./outputs/image/generations/uuid.jpg)"
     }
   ]
 }

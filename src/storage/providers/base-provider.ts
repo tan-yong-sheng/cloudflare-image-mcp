@@ -14,11 +14,9 @@ export abstract class BaseStorageProvider implements StorageProvider {
   abstract cleanup(options?: CleanupOptions): Promise<CleanupResult>;
   abstract getStatistics(): Promise<StorageStatistics>;
 
-  protected generateFilename(metadata: ImageMetadata): string {
-    const timestamp = metadata.timestamp.toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const modelSlug = metadata.model.split('/').pop()?.replace(/[^a-zA-Z0-9]/g, '-') || 'unknown';
+  protected generateFilename(_metadata: ImageMetadata): string {
     const shortUuid = Math.random().toString(36).substring(2, 8);
-    return `${timestamp}_${modelSlug}_${shortUuid}.jpg`;
+    return `${shortUuid}.jpg`;
   }
 
   protected formatFileSize(bytes: number): string {

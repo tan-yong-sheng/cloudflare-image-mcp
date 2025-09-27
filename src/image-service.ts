@@ -1,17 +1,15 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { CloudflareClient } from './cloudflare-client.js';
 import { getModelByName, getAllSupportedModels, getModelDescriptions } from './models/index.js';
 import { GenerateImageParams } from './types.js';
+import { createLocalStorage } from './storage/factory.js';
 
 export class ImageService {
   private client: CloudflareClient;
-  private cacheDir: string;
+  private storageProvider;
 
-  constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }, cacheDir: string = './cache') {
+  constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
     this.client = new CloudflareClient(config);
-    this.cacheDir = path.join(cacheDir, 'image', 'generations');
+    this.storageProvider = createLocalStorage({ basePath: 'outputs' });
   }
 
   async generateImage(params: GenerateImageParams & { model?: string }): Promise<{
@@ -66,27 +64,28 @@ export class ImageService {
         };
       }
 
-      // Save image to cache directory
-      await fs.mkdir(this.cacheDir, { recursive: true });
-      const filename = `${uuidv4()}.jpg`;
-      const savePath = path.join(this.cacheDir, filename);
-
+      // Prepare image buffer
+      let imageBuffer: Buffer;
       if (result.contentType?.includes('application/json')) {
         // Base64 encoded image
         const imageData = result.data as string;
-        const imageBuffer = Buffer.from(imageData, 'base64');
-        await fs.writeFile(savePath, imageBuffer);
+        imageBuffer = Buffer.from(imageData, 'base64');
       } else {
         // Binary image data
-        const imageBuffer = result.data as Buffer;
-        await fs.writeFile(savePath, imageBuffer);
+        imageBuffer = result.data as Buffer;
       }
 
-      const imageUrl = `/cache/image/generations/${filename}`;
+      // Save using storage provider
+      const metadata = {
+        prompt: params.prompt,
+        model: modelName,
+        timestamp: new Date()
+      };
+      const storageResult = await this.storageProvider.save(imageBuffer, metadata);
 
       return {
         success: true,
-        imageUrl,
+        imageUrl: storageResult.url,
         ignoredParams: ignoredParams || []
       };
 
