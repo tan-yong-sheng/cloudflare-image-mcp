@@ -39,8 +39,6 @@ FEATURES SUPPORTED:
 - Default sizes optimized per model
 
 🎛️ ADVANCED FEATURES:
-- img2img transformation (SDXL models only)
-- Image inpainting with mask support (SDXL models only)
 - Strength control for img2img tasks
 - Negative prompts for better control
 - Seed support for reproducible results

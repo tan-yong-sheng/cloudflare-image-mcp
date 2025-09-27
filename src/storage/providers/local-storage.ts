@@ -9,8 +9,6 @@ export class LocalStorageProvider extends BaseStorageProvider {
   private cleanupConfig?: {
     enabled: boolean;
     olderThanDays?: number;
-    keepCount?: number;
-    runOnSave?: boolean;
   };
 
   constructor(config: { basePath: string; cleanup?: any } = { basePath: 'outputs' }) {
@@ -49,7 +47,7 @@ export class LocalStorageProvider extends BaseStorageProvider {
     console.log(`Current working directory: ${process.cwd()}`);
 
     // Run automatic cleanup if enabled
-    if (this.cleanupConfig?.enabled && this.cleanupConfig?.runOnSave) {
+    if (this.cleanupConfig?.enabled) {
       await this.runAutomaticCleanup();
     }
 
@@ -258,12 +256,6 @@ export class LocalStorageProvider extends BaseStorageProvider {
       filesToDelete = filesToDelete.filter(file => file.createdAt < cutoffDate);
     }
 
-    // Keep N most recent files
-    if (options.keepCount) {
-      filesToDelete.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-      filesToDelete = filesToDelete.slice(0, Math.max(0, filesToDelete.length - options.keepCount));
-    }
-
     return filesToDelete;
   }
 
@@ -279,21 +271,15 @@ export class LocalStorageProvider extends BaseStorageProvider {
   }
 
   private async runAutomaticCleanup(): Promise<void> {
-    if (!this.cleanupConfig?.enabled) return;
+    if (!this.cleanupConfig?.enabled || !this.cleanupConfig.olderThanDays) return;
 
     const options: CleanupOptions = {
       dryRun: false // Always actually delete in automatic mode
     };
 
-    if (this.cleanupConfig.olderThanDays) {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - this.cleanupConfig.olderThanDays);
-      options.olderThan = cutoffDate.toISOString();
-    }
-
-    if (this.cleanupConfig.keepCount) {
-      options.keepCount = this.cleanupConfig.keepCount;
-    }
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - this.cleanupConfig.olderThanDays);
+    options.olderThan = cutoffDate.toISOString();
 
     try {
       const result = await this.cleanup(options);

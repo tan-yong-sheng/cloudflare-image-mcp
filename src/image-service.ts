@@ -9,7 +9,8 @@ export class ImageService {
 
   constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
     this.client = new CloudflareClient(config);
-    this.storageProvider = createLocalStorage({ basePath: 'outputs' });
+    const outputPath = process.env.IMAGE_OUTPUT_PATH || 'outputs';
+    this.storageProvider = createLocalStorage({ basePath: outputPath });
   }
 
   async generateImage(params: GenerateImageParams & { model?: string }): Promise<{

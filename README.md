@@ -6,7 +6,7 @@ A TypeScript MCP server that provides image generation capabilities using Cloudf
 
 - **6 Supported Models**: FLUX Schnell, SDXL Base, SDXL Lightning, DreamShaper LCM, Leonardo Phoenix, Leonardo Lucid Origin
 - **Modular Architecture**: Easy to extend with new models by adding files to `src/models/`
-- **Advanced Features**: img2img, inpainting, negative prompts, size control, guidance optimization
+- **Advanced Features**: negative prompts, size control, guidance optimization
 - **Type-Safe**: Full TypeScript support with Zod validation
 - **MCP Compliant**: Works with Model Context Protocol
 
@@ -173,10 +173,9 @@ src/
 - `DEFAULT_MODEL`: Default model to use (optional, defaults to FLUX Schnell)
 
 ### Storage Configuration
+- `IMAGE_OUTPUT_PATH`: Custom output folder path (default: 'outputs')
 - `IMAGE_CLEANUP_ENABLED`: Enable automatic cleanup of old images (default: false)
 - `IMAGE_CLEANUP_OLDER_THAN_DAYS`: Delete files older than N days (requires IMAGE_CLEANUP_ENABLED=true)
-- `IMAGE_CLEANUP_KEEP_COUNT`: Keep only N most recent files (requires IMAGE_CLEANUP_ENABLED=true)
-- `IMAGE_CLEANUP_RUN_ON_SAVE`: Run cleanup automatically after each image save (default: false)
 
 #### Example Configuration (.env file)
 ```bash
@@ -185,10 +184,10 @@ CLOUDFLARE_API_TOKEN="your_api_token_here"
 CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
 DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
 
-# Optional storage cleanup
+# Optional storage configuration
+IMAGE_OUTPUT_PATH="my_images"
 IMAGE_CLEANUP_ENABLED=true
 IMAGE_CLEANUP_OLDER_THAN_DAYS=30
-IMAGE_CLEANUP_RUN_ON_SAVE=true
 ```
 
 ## Error Handling

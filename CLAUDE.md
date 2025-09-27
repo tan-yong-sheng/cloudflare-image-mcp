@@ -91,8 +91,6 @@ export class FluxSchnellModel extends BaseModel {
 ```bash
 IMAGE_CLEANUP_ENABLED=true
 IMAGE_CLEANUP_OLDER_THAN_DAYS=30
-IMAGE_CLEANUP_KEEP_COUNT=100
-IMAGE_CLEANUP_RUN_ON_SAVE=true
 ```
 
 ### Configuration Architecture
@@ -137,7 +135,7 @@ The codebase supports 6 models with varying capabilities:
 - Model classes: `[Name]Model` (e.g., `FluxSchnellModel`)
 - Storage methods: PascalCase for internal, camelCase for public
 - Configuration: snake_case for environment variables
-- File naming: `YYYY-MM-DDTHH-MM-SS_[model]_[uuid].jpg`
+- File naming: `[random_id].jpg` (simplified random filename)
 
 ### Response Handling
 - Supports both JSON (FLUX, Lucid Origin) and binary (SDXL) responses
@@ -171,6 +169,7 @@ The codebase supports 6 models with varying capabilities:
 
 **Optional:**
 - `DEFAULT_MODEL` - Default model selection
+- `IMAGE_OUTPUT_PATH` - Custom output folder path (default: 'outputs')
 - `IMAGE_CLEANUP_*` - Storage cleanup policies
 
 The architecture emphasizes type safety, modularity, and extensibility while maintaining simplicity for common use cases.
