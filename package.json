@@ -8,6 +8,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "cloudflare-image-mcp": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",

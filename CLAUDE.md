@@ -12,6 +12,34 @@ npm run dev          # Development with tsx watch
 npm run clean        # Clean dist directory
 ```
 
+## Mandatory Pre-Completion Checklist
+
+**Before finishing any code changes, ALWAYS run these three commands:**
+
+```bash
+npm run build        # Build the project to check for compilation errors
+npm run check        # Run TypeScript type checking
+npm run lint         # Run ESLint to check code quality
+```
+
+**Why this is mandatory:**
+- **Build**: Ensures the code compiles without errors and generates the dist/ files
+- **Check**: Catches TypeScript type errors that might cause runtime issues
+- **Lint**: Maintains code consistency and catches potential bugs early
+
+**Example workflow:**
+```bash
+# After making code changes:
+npm run build    # ✅ Must pass
+npm run check    # ✅ Must pass
+npm run lint     # ✅ Must pass
+
+# Only after all three pass, you can:
+# - Commit changes
+# - Create pull requests
+# - Publish the package
+```
+
 ## Architecture Overview
 
 This codebase implements a modular MCP (Model Context Protocol) server for Cloudflare Workers AI image generation with a clean abstraction architecture:
