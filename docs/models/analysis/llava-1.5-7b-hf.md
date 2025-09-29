@@ -1,10 +1,12 @@
 # llava-1.5-7b-hf
 
-Image-to-Text  •  llava-hf
+**Model ID**: @cf/llava-hf/llava-1.5-7b-hf
 
-@cf/llava-hf/llava-1.5-7b-hf
+**Mode**: Image-to-Text
 
-LLaVA is an open-source chatbot trained by fine-tuning LLaMA/Vicuna on GPT-generated multimodal instruction-following data. It is an auto-regressive language model, based on the transformer architecture.
+**Origin**: llava-hf
+
+**Model Info**: LLaVA is an open-source chatbot trained by fine-tuning LLaMA/Vicuna on GPT-generated multimodal instruction-following data. It is an auto-regressive language model, based on the transformer architecture.
 
 ## Usage
 - Workers - TypeScript

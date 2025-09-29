@@ -1,20 +1,16 @@
 # lucid-origin
 
-Text-to-Image  •  Leonardo
+**Model ID**: @cf/leonardo/lucid-origin
 
-@cf/leonardo/lucid-origin
+**Mode**: Text-to-Image 
 
-Lucid Origin from Leonardo.AI is their most adaptable and prompt-responsive model to date. Whether you're generating images with sharp graphic design, stunning full-HD renders, or highly specific creative direction, it adheres closely to your prompts, renders text with accuracy, and supports a wide array of visual styles and aesthetics – from stylized concept art to crisp product mockups.
+**Origin**: Leonardo
 
-Model Info
+**Model Info**: Lucid Origin from Leonardo.AI is their most adaptable and prompt-responsive model to date. Whether you're generating images with sharp graphic design, stunning full-HD renders, or highly specific creative direction, it adheres closely to your prompts, renders text with accuracy, and supports a wide array of visual styles and aesthetics – from stylized concept art to crisp product mockups.
 
-Partner
+**Partner**: Yes
 
-Yes
-
-Unit Pricing
-
-$0.007 per 512 by 512 tile, $0.00013 per step
+**Unit Pricing**: $0.007 per 512 by 512 tile, $0.00013 per step
 
 ## Usage
 

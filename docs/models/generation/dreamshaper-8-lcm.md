@@ -1,20 +1,18 @@
 # dreamshaper-8-lcm
 
-Text-to-Image  •  lykon
+**Model ID**: @cf/lykon/dreamshaper-8-lcm
 
-@cf/lykon/dreamshaper-8-lcm
+**Mode**: Text-to-Image
 
-Stable Diffusion model that has been fine-tuned to be better at photorealism without sacrificing range.
+**Origin**: lykon
 
-Model Info
+**Model Info**: Stable Diffusion model that has been fine-tuned to be better at photorealism without sacrificing range.
 
-More information
 
-[link ↗](https://huggingface.co/Lykon/DreamShaper)
 
-Beta
+More information: [link ↗](https://huggingface.co/Lykon/DreamShaper)
 
-Yes
+Beta: Yes
 
 ## Usage
 

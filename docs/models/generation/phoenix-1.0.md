@@ -1,20 +1,16 @@
 # phoenix-1.0
 
-Text-to-Image  •  Leonardo
+**Model ID**: @cf/leonardo/phoenix-1.0
 
-@cf/leonardo/phoenix-1.0
+**Mode**: Text-to-Image
 
-Phoenix 1.0 is a model by Leonardo.Ai that generates images with exceptional prompt adherence and coherent text.
+**Origin**: Leonardo
 
-Model Info
+**Model Info**: Phoenix 1.0 is a model by Leonardo.Ai that generates images with exceptional prompt adherence and coherent text.
 
-Partner
+**Partner**: Yes
 
-Yes
-
-Unit Pricing
-
-$0.0058 per 512 by 512 tile, $0.00011 per step
+**Unit Pricing**: $0.0058 per 512 by 512 tile, $0.00011 per step
 
 ## Usage
 

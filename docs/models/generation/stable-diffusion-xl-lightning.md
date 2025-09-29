@@ -1,24 +1,18 @@
 #   stable-diffusion-xl-lightning
 
-Text-to-Image  •  bytedance
+**Model ID**: @cf/bytedance/stable-diffusion-xl-lightning
 
-@cf/bytedance/stable-diffusion-xl-lightning
+**Mode**: Text-to-Image
 
-SDXL-Lightning is a lightning-fast text-to-image generation model. It can generate high-quality 1024px images in a few steps.
+**Origin**: bytedance
 
-Model Info
+**Model Info**: SDXL-Lightning is a lightning-fast text-to-image generation model. It can generate high-quality 1024px images in a few steps.
 
-More information
+**More information**: [link ↗](https://huggingface.co/ByteDance/SDXL-Lightning)
 
-[link ↗](https://huggingface.co/ByteDance/SDXL-Lightning)
+**Beta**: Yes
 
-Beta
-
-Yes
-
-Unit Pricing
-
-$0.00 per step
+**Unit Pricing**: $0.00 per step
 
 ## Usage
 

@@ -1,28 +1,20 @@
 # stable-diffusion-v1-5-inpainting
 
-Text-to-Image  •  runwayml
+**Model ID**: @cf/runwayml/stable-diffusion-v1-5-inpainting
 
-@cf/runwayml/stable-diffusion-v1-5-inpainting
+**Mode**: Text-to-Image
 
-Stable Diffusion Inpainting is a latent text-to-image diffusion model capable of generating photo-realistic images given any text input, with the extra capability of inpainting the pictures by using a mask.
+**Origin**: runwayml
 
-Model Info
+**Model Info**: Stable Diffusion Inpainting is a latent text-to-image diffusion model capable of generating photo-realistic images given any text input, with the extra capability of inpainting the pictures by using a mask.
 
-Terms and License
+**Terms and License**: [link ↗](https://github.com/runwayml/stable-diffusion/blob/main/LICENSE)
 
-[link ↗](https://github.com/runwayml/stable-diffusion/blob/main/LICENSE)
+**More information**: [link ↗](https://huggingface.co/runwayml/stable-diffusion-inpainting)
 
-More information
+**Beta**: Yes
 
-[link ↗](https://huggingface.co/runwayml/stable-diffusion-inpainting)
-
-Beta
-
-Yes
-
-Unit Pricing
-
-$0.00 per step
+**Unit Pricing**: $0.00 per step
 
 ## Usage
 - Workers - TypeScript

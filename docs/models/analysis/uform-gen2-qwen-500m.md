@@ -1,12 +1,14 @@
 # uform-gen2-qwen-500m
 
-Image-to-Text  •  unum
+**Model ID**: @cf/unum/uform-gen2-qwen-500m
 
-@cf/unum/uform-gen2-qwen-500m
+**Mode**: Image-to-Text  
 
-UForm-Gen is a small generative vision-language model primarily designed for Image Captioning and Visual Question Answering. The model was pre-trained on the internal image captioning dataset and fine-tuned on public instructions datasets: SVIT, LVIS, VQAs datasets.
+**Origin**: unum
 
-Link: [https://www.unum.cloud/](https://www.unum.cloud/)
+**Model Info**: UForm-Gen is a small generative vision-language model primarily designed for Image Captioning and Visual Question Answering. The model was pre-trained on the internal image captioning dataset and fine-tuned on public instructions datasets: SVIT, LVIS, VQAs datasets.
+
+**Link**: [https://www.unum.cloud/](https://www.unum.cloud/)
 
 ## Usage
 

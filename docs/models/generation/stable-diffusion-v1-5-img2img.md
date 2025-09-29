@@ -1,28 +1,20 @@
 # stable-diffusion-v1-5-img2img
 
-Text-to-Image  •  runwayml
+**Model ID**: @cf/runwayml/stable-diffusion-v1-5-img2img
 
-@cf/runwayml/stable-diffusion-v1-5-img2img
+**Mode**: Text-to-Image
 
-Stable Diffusion is a latent text-to-image diffusion model capable of generating photo-realistic images. Img2img generate a new image from an input image with Stable Diffusion.
+**Origin**: runwayml
 
-Model Info
+**Model Info**: Stable Diffusion is a latent text-to-image diffusion model capable of generating photo-realistic images. Img2img generate a new image from an input image with Stable Diffusion.
 
-Terms and License
+**Terms and License**: [link ↗](https://github.com/runwayml/stable-diffusion/blob/main/LICENSE)
 
-[link ↗](https://github.com/runwayml/stable-diffusion/blob/main/LICENSE)
+**More information**: [link ↗](https://huggingface.co/runwayml/stable-diffusion-v1-5)
 
-More information
+**Beta**: Yes
 
-[link ↗](https://huggingface.co/runwayml/stable-diffusion-v1-5)
-
-Beta
-
-Yes
-
-Unit Pricing
-
-$0.00 per step
+**Unit Pricing**: $0.00 per step
 
 ## Usage
 

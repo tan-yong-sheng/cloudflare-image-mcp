@@ -1,28 +1,20 @@
 # stable-diffusion-xl-base-1.0
 
-Text-to-Image  •  Stability.ai
+**Model ID**: @cf/stabilityai/stable-diffusion-xl-base-1.0
 
-@cf/stabilityai/stable-diffusion-xl-base-1.0
+**Mode**: Text-to-Image
 
-Diffusion-based text-to-image generative model by Stability AI. Generates and modify images based on text prompts.
+**Origin**: Stability.ai
 
-Model Info
+**Model Info**: Diffusion-based text-to-image generative model by Stability AI. Generates and modify images based on text prompts.
 
-Terms and License
+**Terms and License**: [link ↗](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md)
 
-[link ↗](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md)
+**More information**: [link ↗](https://stability.ai/stable-diffusion)
 
-More information
+**Beta**: Yes
 
-[link ↗](https://stability.ai/stable-diffusion)
-
-Beta
-
-Yes
-
-Unit Pricing
-
-$0.00 per step
+**Unit Pricing**: $0.00 per step
 
 ## Usage
 

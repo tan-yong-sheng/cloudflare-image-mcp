@@ -1,16 +1,14 @@
 # flux-1-schnell
 
-Text-to-Image  •  Black Forest Labs
+**Model ID**: @cf/black-forest-labs/flux-1-schnell
 
-@cf/black-forest-labs/flux-1-schnell
+**Mode**: Text-to-Image
 
-FLUX.1 [schnell] is a 12 billion parameter rectified flow transformer capable of generating images from text descriptions.
+**Origin**: Black Forest Labs
 
-Model Info
+**Model Info**: FLUX.1 [schnell] is a 12 billion parameter rectified flow transformer capable of generating images from text descriptions.
 
-Unit Pricing
-
-$0.000053 per 512 by 512 tile, $0.00011 per step
+**Unit Pricing**: $0.000053 per 512 by 512 tile, $0.00011 per step
 
 ## Usage
 
