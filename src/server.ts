@@ -6,6 +6,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { ImageService } from './image-service.js';
 import { GenerateImageParamsSchema } from './types.js';
+import { generateImageToolSchema, generateParameterValidationMessage } from './utils/tool-schema-generator.js';
+import { getModelByName } from './models/index.js';
 
 // Server configuration from environment variables
 const serverConfig = {
@@ -31,46 +33,12 @@ const server = new Server(
 
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  // Generate dynamic schema based on configured model
+  const generateImageSchema = generateImageToolSchema(serverConfig.defaultModel);
+
   return {
     tools: [
-      {
-        name: 'generate_image',
-        description: `Generate an image using Cloudflare Workers AI text-to-image models (configured model: ${serverConfig.defaultModel})`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            prompt: {
-              type: 'string',
-              description: 'Text description of the image to generate',
-            },
-            size: {
-              type: 'string',
-              description: 'Image size in format "widthxheight" (e.g., "1024x1024")',
-              default: '1024x1024',
-            },
-            negativePrompt: {
-              type: 'string',
-              description: 'Text describing what to avoid in the image',
-              default: '',
-            },
-            steps: {
-              type: 'number',
-              description: 'Number of diffusion steps (model-dependent limits)',
-              default: 4,
-            },
-            guidance: {
-              type: 'number',
-              description: 'How closely to follow the prompt (1.0-20.0)',
-              default: 7.5,
-            },
-            seed: {
-              type: 'number',
-              description: 'Random seed for reproducible results',
-            },
-                      },
-          required: ['prompt'],
-        },
-      },
+      generateImageSchema,
       {
         name: 'list_models',
         description: 'List available Cloudflare Workers AI image generation models with their capabilities',
@@ -122,7 +90,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       responseText += `![Generated Image](${result.imageUrl})`;
 
       if (result.ignoredParams && result.ignoredParams.length > 0) {
-        responseText += `\n\nNote: The following parameters were ignored because they are not supported by the configured model: ${result.ignoredParams.join(', ')}`;
+        const model = getModelByName(serverConfig.defaultModel);
+        const validationMessage = generateParameterValidationMessage(params, serverConfig.defaultModel, model.config);
+        if (validationMessage) {
+          responseText += `\n\n${validationMessage}`;
+        }
       }
 
       return {

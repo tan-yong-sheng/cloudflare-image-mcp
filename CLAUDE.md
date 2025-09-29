@@ -20,7 +20,8 @@ This codebase implements a modular MCP (Model Context Protocol) server for Cloud
 
 1. **MCP Server Layer** (`src/server.ts`)
    - Handles MCP protocol communication
-   - Exposes `generate_image` and `list_models` tools
+   - Exposes dynamically generated `generate_image` and `list_models` tools
+   - Tool schemas adapt based on DEFAULT_MODEL environment variable
    - Manages environment configuration and error handling
 
 2. **Service Layer** (`src/image-service.ts`)
@@ -42,6 +43,12 @@ This codebase implements a modular MCP (Model Context Protocol) server for Cloud
    - Handles Cloudflare API communication
    - Supports both JSON and binary response formats
    - Timeout and error handling
+
+6. **Dynamic Schema Generator** (`src/utils/tool-schema-generator.ts`)
+   - Generates tool schemas based on model capabilities
+   - Prevents LLMs from seeing unsupported parameters
+   - Provides model-specific parameter descriptions and constraints
+   - Enables runtime parameter validation with explicit rejection messages
 
 ## Key Abstractions & Patterns
 
@@ -81,17 +88,55 @@ export class FluxSchnellModel extends BaseModel {
 - Configurable cleanup policies via environment variables
 - Extensible for future storage backends
 
-**LocalStorageProvider** features:
-- Organized storage by date (`outputs/images/generations/YYYY-MM-DD/`)
+**S3StorageProvider** features:
+- Cloud storage with S3 or Cloudflare R2 compatibility
 - Automated cleanup with configurable policies
+- CDN URL support for direct image access
 - Metadata extraction from filenames
 - Statistics and listing with filtering
 
 **Environment configuration:**
 ```bash
+# S3 storage configuration
+S3_BUCKET="your-bucket-name"
+S3_REGION="auto"
+S3_ACCESS_KEY="your_access_key"
+S3_SECRET_KEY="your_secret_key"
+S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
+S3_CDN_URL="https://pub-....r2.dev"
+
+# Cleanup configuration
 IMAGE_CLEANUP_ENABLED=true
 IMAGE_CLEANUP_OLDER_THAN_DAYS=30
 ```
+
+### Dynamic Tool Schema Generation
+
+**Tool Schema Generator** provides intelligent parameter adaptation:
+
+**Dynamic Schema Features:**
+- **Parameter Filtering**: Only shows parameters supported by the configured model
+- **Model-Specific Descriptions**: Parameter descriptions include model-specific constraints and recommendations
+- **Range Validation**: Steps and guidance parameters show model-specific min/max values
+- **Default Values**: Intelligent defaults based on model capabilities
+- **Enhanced Error Messages**: Clear feedback when unsupported parameters are used
+
+**How it works:**
+1. When server starts, `generateImageToolSchema()` reads DEFAULT_MODEL environment variable
+2. Schema generator queries model capabilities from `ModelConfig`
+3. Tool description and inputSchema are built dynamically based on supported features
+4. Runtime validation catches any edge cases with explicit rejection messages
+
+**Example behavior:**
+- **FLUX Schnell**: Only shows `prompt`, `seed`, and `steps` parameters
+- **SDXL Base**: Shows all parameters including `size`, `negativePrompt`, `guidance`
+- **Leonardo Lucid Origin**: Shows `size` and `guidance` but not `negativePrompt`
+
+**Benefits:**
+- LLMs only see relevant parameters, reducing invalid requests
+- Model-specific guidance helps users optimize results
+- Clear error messages when unsupported parameters are used
+- Automatic adaptation when DEFAULT_MODEL changes
 
 ### Configuration Architecture
 

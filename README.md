@@ -87,11 +87,11 @@ List all available models with their capabilities and supported parameters.
 
 | Model | Model ID | Size | Guidance | Negative |
 |-------|------|------|----------|----------|
-| FLUX Schnell | @cf/black-forest-labs/flux-1-schnell | ❌ | ❌ | ❌ | 
+| FLUX Schnell | @cf/black-forest-labs/flux-1-schnell | ❌ | ❌ | ❌ |
 | Stable Diffusion XL | @cf/stabilityai/stable-diffusion-xl-base-1.0 | ✅ | ✅ | ✅ |
 | SDXL Lightning | @cf/bytedance/stable-diffusion-xl-lightning | ✅ | ✅ | ✅ |
-| DreamShaper 8 LCM | @cf/lykon/dreamshaper-8-lcm | ✅ | ✅ | ✅ | 
-| Leonardo AI Phoenix 1.0 | @cf/leonardo/phoenix-1.0 | ✅ | ✅ | ✅ | 
+| DreamShaper 8 LCM | @cf/lykon/dreamshaper-8-lcm | ✅ | ✅ | ✅ |
+| Leonardo AI Phoenix 1.0 | @cf/leonardo/phoenix-1.0 | ✅ | ✅ | ✅ |
 | Leonardo Lucid Origin | @cf/leonardo/lucid-origin | ✅ | ✅ | ❌ |
 
 

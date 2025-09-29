@@ -21,7 +21,8 @@ export interface ModelConfig {
   maxHeight?: number;
 }
 
-// Tool parameters schema
+// Tool parameters schema - Note: This is the full schema, but actual validation
+// happens dynamically based on model capabilities in the service layer
 export const GenerateImageParamsSchema = z.object({
   prompt: z.string().min(1, "Prompt is required"),
   size: z.string().default("1024x1024"),

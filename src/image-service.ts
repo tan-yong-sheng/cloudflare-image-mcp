@@ -2,6 +2,7 @@ import { CloudflareClient } from './cloudflare-client.js';
 import { getModelByName, getAllSupportedModels, getModelDescriptions } from './models/index.js';
 import { GenerateImageParams } from './types.js';
 import { createStorage, createConfigFromEnv } from './storage/index.js';
+import { generateParameterValidationMessage } from './utils/tool-schema-generator.js';
 
 export class ImageService {
   private client: CloudflareClient;
@@ -27,18 +28,10 @@ export class ImageService {
     try {
       const model = getModelByName(modelName);
 
-      // Check for unsupported parameters
-      const ignoredParams: string[] = [];
-
-      if (params.negativePrompt && !model.config.supportsNegativePrompt) {
-        ignoredParams.push('negativePrompt');
-      }
-      if (params.size !== '1024x1024' && !model.config.supportsSize) {
-        ignoredParams.push('size');
-      }
-      if (params.guidance !== 7.5 && !model.config.supportsGuidance) {
-        ignoredParams.push('guidance');
-      }
+      // Check for unsupported parameters and generate validation message
+      const validationMessage = generateParameterValidationMessage(params, modelName, model.config);
+      const ignoredParams = validationMessage ?
+        validationMessage.match(/ignored: (.+)$/)?.[1]?.split(', ') || [] : [];
       
       // Build request payload
       const payload = model.buildRequestPayload(params.prompt, {
