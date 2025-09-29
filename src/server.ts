@@ -67,15 +67,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'number',
               description: 'Random seed for reproducible results',
             },
-            imageB64: {
-              type: 'string',
-              description: 'Base64-encoded input image for img2img tasks',
-            },
-            strength: {
-              type: 'number',
-              description: 'Strength of transformation for img2img (0.1-1.0)',
-              default: 1.0,
-            },
             model: {
               type: 'string',
               description: 'Model to use for generation (default: FLUX Schnell)',

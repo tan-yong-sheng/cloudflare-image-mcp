@@ -1,7 +1,7 @@
 import { CloudflareClient } from './cloudflare-client.js';
 import { getModelByName, getAllSupportedModels, getModelDescriptions } from './models/index.js';
 import { GenerateImageParams } from './types.js';
-import { createLocalStorage } from './storage/factory.js';
+import { createStorage, createConfigFromEnv } from './storage/index.js';
 
 export class ImageService {
   private client: CloudflareClient;
@@ -9,8 +9,9 @@ export class ImageService {
 
   constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
     this.client = new CloudflareClient(config);
-    const outputPath = process.env.IMAGE_OUTPUT_PATH || 'outputs';
-    this.storageProvider = createLocalStorage({ basePath: outputPath });
+    const storageConfig = createConfigFromEnv();
+    const { provider } = createStorage(storageConfig);
+    this.storageProvider = provider;
   }
 
   async generateImage(params: GenerateImageParams & { model?: string }): Promise<{
@@ -36,13 +37,7 @@ export class ImageService {
       if (params.guidance !== 7.5 && !model.config.supportsGuidance) {
         ignoredParams.push('guidance');
       }
-      if (params.imageB64 && !model.config.supportsImageInput) {
-        ignoredParams.push('imageB64 (img2img not supported)');
-      }
-      if (params.strength !== 1.0 && !model.config.supportsStrength) {
-        ignoredParams.push('strength');
-      }
-
+      
       // Build request payload
       const payload = model.buildRequestPayload(params.prompt, {
         negativePrompt: params.negativePrompt,
@@ -50,8 +45,6 @@ export class ImageService {
         steps: params.steps,
         guidance: params.guidance,
         seed: params.seed,
-        imageB64: params.imageB64,
-        strength: params.strength,
       });
 
       // Make API request
@@ -120,9 +113,6 @@ export class ImageService {
       if (config.supportsNegativePrompt) features.push('negative prompts');
       if (config.supportsSize) features.push('custom size');
       if (config.supportsGuidance) features.push('guidance control');
-      if (config.supportsImageInput) features.push('img2img');
-      if (config.supportsMask) features.push('inpainting');
-      if (config.supportsStrength) features.push('strength control');
 
       result += `  Supported features: ${features.join(', ') || 'basic generation only'}\n`;
 
@@ -135,8 +125,8 @@ export class ImageService {
     }
 
     result += 'PARAMETER SUPPORT MATRIX:\n';
-    result += 'Model                    | Size | Guidance | Negative | img2img | Inpaint\n';
-    result += '-------------------------|------|----------|----------|---------|--------\n';
+    result += 'Model                    | Size | Guidance | Negative\n';
+    result += '-------------------------|------|----------|----------\n';
 
     for (const model of models) {
       const config = model.config;
@@ -144,10 +134,8 @@ export class ImageService {
       const sizeSupport = config.supportsSize ? '✅' : '❌';
       const guidanceSupport = config.supportsGuidance ? '✅' : '❌';
       const negativeSupport = config.supportsNegativePrompt ? '✅' : '❌';
-      const img2imgSupport = config.supportsImageInput ? '✅' : '❌';
-      const inpaintSupport = config.supportsMask ? '✅' : '❌';
 
-      result += `${modelShort} |  ${sizeSupport}  |    ${guidanceSupport}    |    ${negativeSupport}    |   ${img2imgSupport}   |   ${inpaintSupport}\n`;
+      result += `${modelShort} |  ${sizeSupport}  |    ${guidanceSupport}    |    ${negativeSupport}\n`;
     }
 
     result += '\n✅ = Supported, ❌ = Not supported\n';

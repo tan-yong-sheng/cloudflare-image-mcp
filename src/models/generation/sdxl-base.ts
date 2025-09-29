@@ -11,9 +11,6 @@ export class SDXLBaseModel extends BaseModel {
     supportsSize: true,
     supportsGuidance: true,
     supportsSeed: true,
-    supportsImageInput: true,
-    supportsMask: true,
-    supportsStrength: true,
     outputFormat: 'binary',
     recommendedFor: 'high quality, detailed images',
     defaultGuidance: 12.0,
@@ -45,7 +42,7 @@ export class SDXLBaseModel extends BaseModel {
     return Math.max(10.0, Math.min(guidance, 15.0));
   }
 
-  protected override addStepsToPayload(payload: Record<string, any>, steps: number): void {
+  protected override addStepsToPayload(payload: Record<string, unknown>, steps: number): void {
     // SDXL models use "num_steps" parameter
     payload.num_steps = steps;
   }

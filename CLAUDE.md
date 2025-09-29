@@ -108,14 +108,14 @@ IMAGE_CLEANUP_OLDER_THAN_DAYS=30
 
 The codebase supports 6 models with varying capabilities:
 
-| Model | Size | Guidance | Negative | img2img | Inpaint |
-|-------|------|----------|----------|---------|--------|
-| FLUX Schnell | ❌ | ❌ | ❌ | ❌ | ❌ |
-| SDXL Base | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SDXL Lightning | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DreamShaper LCM | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Leonardo Phoenix | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Leonardo Lucid Origin | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Model | Size | Guidance | Negative |
+|-------|------|----------|----------|
+| FLUX Schnell | ❌ | ❌ | ❌ |
+| SDXL Base | ✅ | ✅ | ✅ | 
+| SDXL Lightning | ✅ | ✅ | ✅ |
+| DreamShaper LCM | ✅ | ✅ | ✅ | 
+| Leonardo Phoenix | ✅ | ✅ | ✅ |
+| Leonardo Lucid Origin | ✅ | ✅ | ❌ |
 
 ## Important Conventions
 

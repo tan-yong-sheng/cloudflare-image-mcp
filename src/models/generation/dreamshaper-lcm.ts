@@ -11,9 +11,6 @@ export class DreamshaperLCMModel extends BaseModel {
     supportsSize: true,
     supportsGuidance: true,
     supportsSeed: true,
-    supportsImageInput: true,
-    supportsMask: true,
-    supportsStrength: true,
     outputFormat: 'binary',
     recommendedFor: 'photorealistic images (LCM - use 4-8 steps, lower guidance)',
     guidanceRange: '1.0-2.0',
@@ -38,7 +35,7 @@ export class DreamshaperLCMModel extends BaseModel {
     return optimized > 2.0 ? 1.5 : optimized;
   }
 
-  protected override addStepsToPayload(payload: Record<string, any>, steps: number): void {
+  protected override addStepsToPayload(payload: Record<string, unknown>, steps: number): void {
     // SDXL-based models use "num_steps" parameter
     payload.num_steps = steps;
   }

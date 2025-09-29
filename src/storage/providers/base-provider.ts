@@ -1,10 +1,9 @@
-import fs from 'fs/promises';
 import { StorageProvider, StorageResult, ImageMetadata, StorageItem, ListOptions, CleanupOptions, CleanupResult, StorageStatistics } from '../types.js';
 
 export abstract class BaseStorageProvider implements StorageProvider {
-  protected config: any;
+  protected config: Record<string, unknown>;
 
-  constructor(config: any) {
+  constructor(config: Record<string, unknown>) {
     this.config = config;
   }
 
@@ -14,9 +13,15 @@ export abstract class BaseStorageProvider implements StorageProvider {
   abstract cleanup(options?: CleanupOptions): Promise<CleanupResult>;
   abstract getStatistics(): Promise<StorageStatistics>;
 
-  protected generateFilename(_metadata: ImageMetadata): string {
+  protected generateFilename(): string {
     const shortUuid = Math.random().toString(36).substring(2, 8);
     return `${shortUuid}.jpg`;
+  }
+
+  protected generateModelPath(model: string, filename: string): string {
+    // Extract model name from full model path (e.g., "@cf/black-forest-labs/flux-1-schnell" -> "flux-schnell")
+    const modelName = model.split('/').pop() || 'unknown';
+    return `${modelName}/${filename}`;
   }
 
   protected formatFileSize(bytes: number): string {
@@ -27,24 +32,9 @@ export abstract class BaseStorageProvider implements StorageProvider {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  protected async ensureDirectory(dirPath: string): Promise<void> {
-    try {
-      await fs.access(dirPath);
-    } catch {
-      await fs.mkdir(dirPath, { recursive: true });
-    }
-  }
-
-  protected parseDateFromFilename(filename: string): Date | null {
-    const match = filename.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
-    if (match) {
-      return new Date(match[1].replace('T', ' ') + ':00');
-    }
-    return null;
-  }
-
-  protected extractModelFromFilename(filename: string): string | null {
-    const match = filename.match(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}_([^_]+)_/);
+  protected extractModelFromFilename(key: string): string | null {
+    // Extract model from path: "outputs/images/generations/2024-09-29/flux-schnell/abc123.jpg"
+    const match = key.match(/outputs\/images\/generations\/\d{4}-\d{2}-\d{2}\/([^/]+)\/[^/]+\.jpg$/);
     return match ? match[1] : null;
   }
 }

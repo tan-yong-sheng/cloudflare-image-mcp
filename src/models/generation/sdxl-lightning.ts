@@ -11,9 +11,6 @@ export class SDXLLightningModel extends BaseModel {
     supportsSize: true,
     supportsGuidance: true,
     supportsSeed: true,
-    supportsImageInput: true,
-    supportsMask: true,
-    supportsStrength: true,
     outputFormat: 'binary',
     recommendedFor: 'fast generation with good quality',
   };
@@ -33,7 +30,7 @@ export class SDXLLightningModel extends BaseModel {
     return prompt;
   }
 
-  protected override addStepsToPayload(payload: Record<string, any>, steps: number): void {
+  protected override addStepsToPayload(payload: Record<string, unknown>, steps: number): void {
     // SDXL models use "num_steps" parameter
     payload.num_steps = steps;
   }

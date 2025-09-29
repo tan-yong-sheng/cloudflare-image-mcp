@@ -47,7 +47,7 @@ export class LeonardoLucidOriginModel extends BaseModel {
     return Math.max(0.0, Math.min(closestValue, 10.0));
   }
 
-  protected override addStepsToPayload(payload: Record<string, any>, steps: number): void {
+  protected override addStepsToPayload(payload: Record<string, unknown>, steps: number): void {
     // Leonardo models use "steps" parameter
     payload.steps = steps;
   }

@@ -60,20 +60,20 @@ List available Cloudflare Workers AI image generation models with their capabili
 ### SDXL Base
 - **Output Format:** Binary
 - **Max Steps:** 20
-- **Supported Parameters:** All parameters including img2img and inpainting
+- **Supported Parameters:** All parameters
 - **Best For:** High quality, detailed images
 - **Optimal Guidance:** 10-15
 
 ### SDXL Lightning
 - **Output Format:** Binary
 - **Max Steps:** 8
-- **Supported Parameters:** All parameters including img2img and inpainting
+- **Supported Parameters:** All parameters
 - **Best For:** Fast generation with good quality
 
 ### DreamShaper LCM
 - **Output Format:** Binary
 - **Max Steps:** 8
-- **Supported Parameters:** All parameters including img2img and inpainting
+- **Supported Parameters:** All parameters
 - **Best For:** Photorealistic images
 - **Optimal Guidance:** 1.0-2.0
 

@@ -27,7 +27,7 @@ export class FluxSchnellModel extends BaseModel {
     return prompt;
   }
 
-  protected override addStepsToPayload(payload: Record<string, any>, steps: number): void {
+  protected override addStepsToPayload(payload: Record<string, unknown>, steps: number): void {
     // FLUX models use "steps" parameter
     payload.steps = steps;
   }

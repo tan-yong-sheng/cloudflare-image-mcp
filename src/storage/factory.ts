@@ -1,5 +1,5 @@
 import { StorageProvider, StorageConfig, CreateStorageResult } from './types.js';
-import { LocalStorageProvider } from './providers/local-storage.js';
+import { S3StorageProvider } from './providers/s3-provider.js';
 
 export class StorageFactory {
   private static instance: StorageFactory;
@@ -21,21 +21,26 @@ export class StorageFactory {
     };
   }
 
-  createProvider(type: string, config: any): StorageProvider {
+  createProvider(type: string, config: Record<string, unknown>): StorageProvider {
     const cacheKey = `${type}-${JSON.stringify(config)}`;
 
     if (this.providers.has(cacheKey)) {
-      return this.providers.get(cacheKey)!;
+      return this.providers.get(cacheKey) as StorageProvider;
     }
 
     let provider: StorageProvider;
 
     switch (type) {
-      case 'local':
-        provider = new LocalStorageProvider(config || { basePath: './outputs' });
-        break;
       case 's3':
-        throw new Error('S3 provider not implemented yet');
+        provider = new S3StorageProvider((config || {
+          bucket: process.env.S3_BUCKET || 'default-bucket',
+          region: process.env.S3_REGION || 'us-east-1',
+          accessKey: process.env.S3_ACCESS_KEY,
+          secretKey: process.env.S3_SECRET_KEY,
+          endpoint: process.env.S3_ENDPOINT,
+          cdnUrl: process.env.S3_CDN_URL
+        }) as ConstructorParameters<typeof S3StorageProvider>[0]);
+        break;
       default:
         throw new Error(`Unknown storage provider: ${type}`);
     }
@@ -53,6 +58,9 @@ export function createStorage(config: StorageConfig): CreateStorageResult {
   return StorageFactory.getInstance().createStorage(config);
 }
 
-export function createLocalStorage(config?: { basePath: string }): StorageProvider {
-  return StorageFactory.getInstance().createProvider('local', config || { basePath: './outputs' });
+export function createS3Storage(config?: Record<string, unknown>): StorageProvider {
+  return StorageFactory.getInstance().createProvider('s3', config || {
+    bucket: process.env.S3_BUCKET || 'default-bucket',
+    region: process.env.S3_REGION || 'us-east-1'
+  });
 }

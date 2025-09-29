@@ -86,14 +86,14 @@ List all available models with their capabilities and supported parameters.
 
 ## Model Support Matrix
 
-| Model | Size | Guidance | Negative | img2img | Inpaint |
-|-------|------|----------|----------|---------|--------|
-| FLUX Schnell | ❌ | ❌ | ❌ | ❌ | ❌ |
-| SDXL Base | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SDXL Lightning | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DreamShaper LCM | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Leonardo Phoenix | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Leonardo Lucid Origin | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Model | Size | Guidance | Negative |
+|-------|------|----------|----------|
+| FLUX Schnell | ❌ | ❌ | ❌ | 
+| SDXL Base | ✅ | ✅ | ✅ |
+| SDXL Lightning | ✅ | ✅ | ✅ |
+| DreamShaper LCM | ✅ | ✅ | ✅ | 
+| Leonardo Phoenix | ✅ | ✅ | ✅ | 
+| Leonardo Lucid Origin | ✅ | ✅ | ❌ |
 
 ## Environment Variables
 
@@ -104,10 +104,19 @@ List all available models with their capabilities and supported parameters.
 ### Optional
 - `DEFAULT_MODEL`: Default model to use (optional, defaults to FLUX Schnell)
 
-### Storage Configuration
-- `IMAGE_OUTPUT_PATH`: Custom output folder path (default: 'outputs')
+### S3 Storage Configuration (Required)
+- `S3_BUCKET`: S3 bucket name for storing generated images
+- `S3_REGION`: S3 region (e.g., "us-east-1")
+- `S3_ACCESS_KEY`: S3 access key (optional for public buckets)
+- `S3_SECRET_KEY`: S3 secret key (optional for public buckets)
+- `S3_ENDPOINT`: Custom endpoint (e.g., Cloudflare R2 endpoint)
+- `S3_CDN_URL`: Custom CDN URL for image links
+
+### Storage Cleanup Configuration
 - `IMAGE_CLEANUP_ENABLED`: Enable automatic cleanup of old images (default: false)
 - `IMAGE_CLEANUP_OLDER_THAN_DAYS`: Delete files older than N days (requires IMAGE_CLEANUP_ENABLED=true)
+- `IMAGE_CLEANUP_KEEP_COUNT`: Keep N most recent files (optional)
+- `IMAGE_CLEANUP_RUN_ON_SAVE`: Run cleanup after each save (default: false)
 
 #### Example Configuration (.env file)
 ```bash
@@ -116,8 +125,15 @@ CLOUDFLARE_API_TOKEN="your_api_token_here"
 CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
 DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
 
-# Optional storage configuration
-IMAGE_OUTPUT_PATH="my_images"
+# Required S3 storage configuration
+S3_BUCKET="your-bucket-name"
+S3_REGION="auto"
+S3_ACCESS_KEY="your_access_key"
+S3_SECRET_KEY="your_secret_key"
+S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
+S3_CDN_URL="https://pub-....r2.dev"
+
+# Optional cleanup configuration
 IMAGE_CLEANUP_ENABLED=true
 IMAGE_CLEANUP_OLDER_THAN_DAYS=30
 ```

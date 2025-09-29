@@ -122,8 +122,6 @@ Update the documentation files:
 | `guidanceRange` | string | Optimal guidance range |
 | `recommendedNegative` | string | Default negative prompt |
 | `notes` | string | Additional model information |
-| `supportsImageInput` | boolean | Whether img2img is supported |
-| `supportsMask` | boolean | Whether inpainting is supported |
 | `supportsStrength` | boolean | Whether strength control is supported |
 | `guidanceValues` | number[] | Supported guidance values |
 | `defaultSize` | string | Default image size |

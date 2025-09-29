@@ -15,9 +15,6 @@ export interface ModelConfig {
   guidanceRange?: string;
   recommendedNegative?: string;
   notes?: string;
-  supportsImageInput?: boolean;
-  supportsMask?: boolean;
-  supportsStrength?: boolean;
   guidanceValues?: number[];
   defaultSize?: string;
   maxWidth?: number;
@@ -32,8 +29,6 @@ export const GenerateImageParamsSchema = z.object({
   steps: z.number().min(1).max(50).default(4),
   guidance: z.number().min(0).max(20).default(7.5),
   seed: z.number().int().min(0).optional(),
-  imageB64: z.string().optional(),
-  strength: z.number().min(0.1).max(1.0).default(1.0),
 });
 
 export type GenerateImageParams = z.infer<typeof GenerateImageParamsSchema>;

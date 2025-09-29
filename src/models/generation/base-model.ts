@@ -26,12 +26,12 @@ export abstract class BaseModel {
   /**
    * Build request payload with model-specific preprocessing
    */
-  buildRequestPayload(prompt: string, params: Record<string, any>): Record<string, any> {
+  buildRequestPayload(prompt: string, params: Record<string, unknown>): Record<string, unknown> {
     const enhancedPrompt = this.preprocessPrompt(prompt);
-    const payload: Record<string, any> = { prompt: enhancedPrompt };
+    const payload: Record<string, unknown> = { prompt: enhancedPrompt };
 
     // Add negative prompt if supported
-    if (this.config.supportsNegativePrompt && params.negativePrompt) {
+    if (this.config.supportsNegativePrompt && typeof params.negativePrompt === 'string') {
       let negativePrompt = params.negativePrompt;
 
       // Auto-enhance negative prompt for SDXL if none provided
@@ -46,7 +46,7 @@ export abstract class BaseModel {
 
     // Add size if supported
     if (this.config.supportsSize) {
-      const size = params.size || this.config.defaultSize || '1024x1024';
+      const size = typeof params.size === 'string' ? params.size : this.config.defaultSize || '1024x1024';
       if (size.includes('x')) {
         const [width, height] = size.split('x').map(Number);
         const maxWidth = this.config.maxWidth || 2048;
@@ -59,30 +59,18 @@ export abstract class BaseModel {
 
     // Add guidance with model-specific optimization
     if (this.config.supportsGuidance) {
-      payload.guidance = this.optimizeGuidance(params.guidance || this.config.defaultGuidance || 7.5);
+      const guidance = typeof params.guidance === 'number' ? params.guidance : this.config.defaultGuidance || 7.5;
+      payload.guidance = this.optimizeGuidance(guidance);
     }
 
     // Add seed if supported
-    if (this.config.supportsSeed && params.seed) {
+    if (this.config.supportsSeed && typeof params.seed === 'number') {
       payload.seed = params.seed;
     }
 
     // Add steps - will be handled by subclass to determine parameter name
-    const steps = Math.min(params.steps || this.config.defaultSteps, this.config.maxSteps);
+    const steps = Math.min(typeof params.steps === 'number' ? params.steps : this.config.defaultSteps, this.config.maxSteps);
     this.addStepsToPayload(payload, steps);
-
-    // Handle image input for img2img
-    if (this.config.supportsImageInput && params.imageB64) {
-      payload.image_b64 = params.imageB64;
-      if (params.strength) {
-        payload.strength = Math.max(0.1, Math.min(1.0, params.strength));
-      }
-    }
-
-    // Handle mask for inpainting
-    if (this.config.supportsMask && params.mask) {
-      payload.mask = params.mask;
-    }
 
     return payload;
   }
@@ -90,7 +78,7 @@ export abstract class BaseModel {
   /**
    * Add steps to payload with correct parameter name - must be implemented by subclasses
    */
-  protected abstract addStepsToPayload(payload: Record<string, any>, steps: number): void;
+  protected abstract addStepsToPayload(payload: Record<string, unknown>, steps: number): void;
 
   /**
    * Model-specific guidance optimization - can be overridden by subclasses
@@ -110,12 +98,6 @@ export abstract class BaseModel {
         return this.config.supportsSize;
       case 'guidance':
         return this.config.supportsGuidance;
-      case 'imageB64':
-        return this.config.supportsImageInput || false;
-      case 'strength':
-        return this.config.supportsStrength || false;
-      case 'mask':
-        return this.config.supportsMask || false;
       case 'seed':
         return this.config.supportsSeed;
       default:

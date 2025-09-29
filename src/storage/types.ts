@@ -20,7 +20,7 @@ export interface ImageMetadata {
   model: string;
   timestamp: Date;
   category?: string;
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
 }
 
 export interface StorageItem {
@@ -70,24 +70,21 @@ export interface StorageStatistics {
 }
 
 export interface StorageConfig {
-  defaultProvider: 'local' | 's3';
+  defaultProvider: 's3';
   providers: {
-    local?: {
-      basePath: string;           // Default: './outputs'
-      cleanup?: {
-        enabled: boolean;         // Enable automatic cleanup
-        olderThanDays?: number;   // Delete files older than N days
-        keepCount?: number;       // Keep N most recent files
-        runOnSave?: boolean;      // Run cleanup after each save
-      };
-    };
-    s3?: {
+    s3: {
       bucket: string;
       region: string;
       accessKey?: string;
       secretKey?: string;
       endpoint?: string;          // For R2 compatibility
       cdnUrl?: string;
+      cleanup?: {
+        enabled: boolean;         // Enable automatic cleanup
+        olderThanDays?: number;   // Delete files older than N days
+        keepCount?: number;       // Keep N most recent files
+        runOnSave?: boolean;      // Run cleanup after each save
+      };
     };
   };
 }

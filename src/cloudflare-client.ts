@@ -10,7 +10,7 @@ export class CloudflareClient {
 
   async generateImage(
     modelName: string,
-    payload: Record<string, any>
+    payload: Record<string, unknown>
   ): Promise<{
     success: boolean;
     data?: string | Buffer;
