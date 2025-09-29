@@ -35,7 +35,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'generate_image',
-        description: 'Generate an image using Cloudflare Workers AI text-to-image models',
+        description: `Generate an image using Cloudflare Workers AI text-to-image models (configured model: ${serverConfig.defaultModel})`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -67,12 +67,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'number',
               description: 'Random seed for reproducible results',
             },
-            model: {
-              type: 'string',
-              description: 'Model to use for generation (default: FLUX Schnell)',
-              default: '@cf/black-forest-labs/flux-1-schnell',
-            },
-          },
+                      },
           required: ['prompt'],
         },
       },
@@ -127,7 +122,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       responseText += `![Generated Image](${result.imageUrl})`;
 
       if (result.ignoredParams && result.ignoredParams.length > 0) {
-        responseText += `\n\nNote: The following parameters were ignored because they are not supported by the selected model: ${result.ignoredParams.join(', ')}`;
+        responseText += `\n\nNote: The following parameters were ignored because they are not supported by the configured model: ${result.ignoredParams.join(', ')}`;
       }
 
       return {

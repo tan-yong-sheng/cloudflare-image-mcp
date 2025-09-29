@@ -6,21 +6,23 @@ import { createStorage, createConfigFromEnv } from './storage/index.js';
 export class ImageService {
   private client: CloudflareClient;
   private storageProvider;
+  private config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string };
 
   constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
+    this.config = config;
     this.client = new CloudflareClient(config);
     const storageConfig = createConfigFromEnv();
     const { provider } = createStorage(storageConfig);
     this.storageProvider = provider;
   }
 
-  async generateImage(params: GenerateImageParams & { model?: string }): Promise<{
+  async generateImage(params: GenerateImageParams): Promise<{
     success: boolean;
     imageUrl?: string;
     error?: string;
     ignoredParams?: string[];
   }> {
-    const modelName = params.model || '@cf/black-forest-labs/flux-1-schnell';
+    const modelName = this.config.defaultModel;
 
     try {
       const model = getModelByName(modelName);

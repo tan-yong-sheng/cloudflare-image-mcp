@@ -64,7 +64,7 @@ npm publish
 
 #### generate_image
 
-Generate an image using Cloudflare Workers AI.
+Generate an image using Cloudflare Workers AI. The model is configured via the `DEFAULT_MODEL` environment variable.
 
 ```typescript
 {
@@ -75,8 +75,7 @@ Generate an image using Cloudflare Workers AI.
   "guidance": 7.5,               // Optional (model-dependent)
   "seed": 12345,                 // Optional
   "imageB64": "base64_encoded_image",  // Optional (for img2img)
-  "strength": 1.0,               // Optional (for img2img)
-  "model": "@cf/black-forest-labs/flux-1-schnell"  // Optional
+  "strength": 1.0                // Optional (for img2img)
 }
 ```
 
@@ -86,14 +85,15 @@ List all available models with their capabilities and supported parameters.
 
 ## Model Support Matrix
 
-| Model | Size | Guidance | Negative |
-|-------|------|----------|----------|
-| FLUX Schnell | ❌ | ❌ | ❌ | 
-| SDXL Base | ✅ | ✅ | ✅ |
-| SDXL Lightning | ✅ | ✅ | ✅ |
-| DreamShaper LCM | ✅ | ✅ | ✅ | 
-| Leonardo Phoenix | ✅ | ✅ | ✅ | 
-| Leonardo Lucid Origin | ✅ | ✅ | ❌ |
+| Model | Model ID | Size | Guidance | Negative |
+|-------|------|------|----------|----------|
+| FLUX Schnell | @cf/black-forest-labs/flux-1-schnell | ❌ | ❌ | ❌ | 
+| Stable Diffusion XL | @cf/stabilityai/stable-diffusion-xl-base-1.0 | ✅ | ✅ | ✅ |
+| SDXL Lightning | @cf/bytedance/stable-diffusion-xl-lightning | ✅ | ✅ | ✅ |
+| DreamShaper 8 LCM | @cf/lykon/dreamshaper-8-lcm | ✅ | ✅ | ✅ | 
+| Leonardo AI Phoenix 1.0 | @cf/leonardo/phoenix-1.0 | ✅ | ✅ | ✅ | 
+| Leonardo Lucid Origin | @cf/leonardo/lucid-origin | ✅ | ✅ | ❌ |
+
 
 ## Environment Variables
 
