@@ -97,6 +97,8 @@ List all available models with their capabilities and supported parameters.
 
 ## Environment Variables
 
+Read more [here](./docs/env_setup.md) to know how to get all environment variables for Cloudflare Workers AI and Cloudflare R2 storage required for this MCP setup.
+
 ### Required
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
@@ -106,9 +108,9 @@ List all available models with their capabilities and supported parameters.
 
 ### S3 Storage Configuration (Required)
 - `S3_BUCKET`: S3 bucket name for storing generated images
-- `S3_REGION`: S3 region (e.g., "us-east-1")
-- `S3_ACCESS_KEY`: S3 access key (optional for public buckets)
-- `S3_SECRET_KEY`: S3 secret key (optional for public buckets)
+- `S3_REGION`: S3 region (e.g., "auto")
+- `S3_ACCESS_KEY`: S3 access key
+- `S3_SECRET_KEY`: S3 secret key
 - `S3_ENDPOINT`: Custom endpoint (e.g., Cloudflare R2 endpoint)
 - `S3_CDN_URL`: Custom CDN URL for image links
 

@@ -33,8 +33,8 @@ export class StorageFactory {
     switch (type) {
       case 's3':
         provider = new S3StorageProvider((config || {
-          bucket: process.env.S3_BUCKET || 'default-bucket',
-          region: process.env.S3_REGION || 'us-east-1',
+          bucket: process.env.S3_BUCKET || 'cloudflare-image-mcp',
+          region: process.env.S3_REGION || 'auto',
           accessKey: process.env.S3_ACCESS_KEY,
           secretKey: process.env.S3_SECRET_KEY,
           endpoint: process.env.S3_ENDPOINT,
@@ -60,7 +60,7 @@ export function createStorage(config: StorageConfig): CreateStorageResult {
 
 export function createS3Storage(config?: Record<string, unknown>): StorageProvider {
   return StorageFactory.getInstance().createProvider('s3', config || {
-    bucket: process.env.S3_BUCKET || 'default-bucket',
-    region: process.env.S3_REGION || 'us-east-1'
+    bucket: process.env.S3_BUCKET || 'cloudflare-image-mcp',
+    region: process.env.S3_REGION || 'auto'
   });
 }

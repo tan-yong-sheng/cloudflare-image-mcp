@@ -161,17 +161,9 @@ IMAGE_CLEANUP_RUN_ON_SAVE=false
 
 ## Usage Examples
 
-### AWS S3 Setup
-```bash
-export S3_BUCKET="my-image-generator"
-export S3_REGION="us-east-1"
-export S3_ACCESS_KEY="your-access-key"
-export S3_SECRET_KEY="your-secret-key"
-```
-
 ### Cloudflare R2 Setup
 ```bash
-export S3_BUCKET="my-image-generator"
+export S3_BUCKET="cloudflare-image-mcp"
 export S3_REGION="auto"
 export S3_ACCESS_KEY="your-r2-token"
 export S3_SECRET_KEY="your-r2-secret"

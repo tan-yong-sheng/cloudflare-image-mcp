@@ -17,8 +17,8 @@ export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
   defaultProvider: 's3',
   providers: {
     s3: {
-      bucket: 'default-bucket',
-      region: 'us-east-1',
+      bucket: 'cloudflare-image-mcp',
+      region: 'auto',
       cleanup: {
         enabled: false,
         olderThanDays: undefined,
@@ -35,8 +35,8 @@ export function createConfigFromEnv(): StorageConfig {
 
   // S3 configuration from environment variables
   config.providers.s3 = {
-    bucket: process.env.S3_BUCKET || 'default-bucket',
-    region: process.env.S3_REGION || 'us-east-1',
+    bucket: process.env.S3_BUCKET || 'cloudflare-image-mcp',
+    region: process.env.S3_REGION || 'auto',
     accessKey: process.env.S3_ACCESS_KEY,
     secretKey: process.env.S3_SECRET_KEY,
     endpoint: process.env.S3_ENDPOINT,
