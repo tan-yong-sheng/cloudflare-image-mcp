@@ -16,7 +16,7 @@ export class LeonardoLucidOriginModel extends BaseModel {
     defaultGuidance: 3.5,
     guidanceRange: '0.0-10.0',
     guidanceValues: [1.0, 1.3, 1.8, 2.5, 3.0, 3.5, 4.0, 4.5],
-    defaultSize: '1120x1120',
+    defaultSize: '1024x1024',
     maxWidth: 2500,
     maxHeight: 2500,
     notes: 'Leonardo AI Lucid Origin - Use contrast 3.5 for medium quality. Most adaptable model with wide style support'
