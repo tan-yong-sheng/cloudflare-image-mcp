@@ -68,7 +68,10 @@ export class ImageService {
       const metadata = {
         prompt: params.prompt,
         model: modelName,
-        timestamp: new Date()
+        timestamp: new Date(),
+        parameters: {
+          size: params.size
+        }
       };
       const storageResult = await this.storageProvider.save(imageBuffer, metadata);
 

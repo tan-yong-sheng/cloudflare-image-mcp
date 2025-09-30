@@ -13,9 +13,9 @@ export abstract class BaseStorageProvider implements StorageProvider {
   abstract cleanup(options?: CleanupOptions): Promise<CleanupResult>;
   abstract getStatistics(): Promise<StorageStatistics>;
 
-  protected generateFilename(): string {
+  protected generateFilename(size?: string): string {
     const shortUuid = Math.random().toString(36).substring(2, 8);
-    return `${shortUuid}.jpg`;
+    return size ? `${shortUuid}_${size}.jpg` : `${shortUuid}.jpg`;
   }
 
   protected generateModelPath(model: string, filename: string): string {

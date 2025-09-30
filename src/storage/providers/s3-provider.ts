@@ -47,7 +47,8 @@ export class S3StorageProvider extends BaseStorageProvider {
 
   async save(buffer: Buffer, metadata: ImageMetadata): Promise<StorageResult> {
     const date = metadata.timestamp.toISOString().split('T')[0];
-    const filename = this.generateFilename();
+    const size = metadata.parameters?.size as string | undefined;
+    const filename = this.generateFilename(size);
     const modelPath = this.generateModelPath(metadata.model, filename);
     const key = `outputs/images/generations/${date}/${modelPath}`;
 
