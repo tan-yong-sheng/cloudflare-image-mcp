@@ -71,9 +71,11 @@ export class S3StorageProvider extends BaseStorageProvider {
       url = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
     }
 
-    // Run automatic cleanup if enabled
+    // Run automatic cleanup if enabled (non-blocking)
     if (this.cleanupConfig?.enabled) {
-      await this.runAutomaticCleanup();
+      this.runAutomaticCleanup().catch(error => {
+        console.error('[S3 Storage Cleanup] Background cleanup failed:', error);
+      });
     }
 
     return {

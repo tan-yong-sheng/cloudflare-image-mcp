@@ -152,7 +152,7 @@ S3_CDN_URL="https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"  # Optional CDN
 
 # Optional Cleanup Configuration
 IMAGE_CLEANUP_ENABLED=true
-IMAGE_CLEANUP_OLDER_THAN=30d
+IMAGE_CLEANUP_OLDER_THAN=1d
 ```
 
 ## Usage Examples

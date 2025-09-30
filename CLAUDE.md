@@ -135,7 +135,7 @@ S3_CDN_URL="https://pub-....r2.dev"
 
 # Cleanup configuration
 IMAGE_CLEANUP_ENABLED=true
-IMAGE_CLEANUP_OLDER_THAN=30d  # 30 days (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
+IMAGE_CLEANUP_OLDER_THAN=1d  # 30 days (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
 ```
 
 ### Dynamic Tool Schema Generation
@@ -244,6 +244,6 @@ The codebase supports 6 models with varying capabilities:
 - `DEFAULT_IMAGE_GENERATION_MODEL` - Default model selection
 - `IMAGE_OUTPUT_PATH` - Custom output folder path (default: 'outputs')
 - `IMAGE_CLEANUP_ENABLED` - Enable automatic cleanup (true/false)
-- `IMAGE_CLEANUP_OLDER_THAN` - Cleanup files older than specified duration (e.g., 30d, 7d, 24h)
+- `IMAGE_CLEANUP_OLDER_THAN` - Cleanup files older than specified duration (e.g., 1d, 7d, 24h)
 
 The architecture emphasizes type safety, modularity, and extensibility while maintaining simplicity for common use cases.

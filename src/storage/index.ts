@@ -44,7 +44,7 @@ export function createConfigFromEnv(): StorageConfig {
 
   // S3 storage cleanup configuration from environment variables
   const cleanupEnabled = process.env.IMAGE_CLEANUP_ENABLED === 'true';
-  const olderThan = process.env.IMAGE_CLEANUP_OLDER_THAN;
+  const olderThan = process.env.IMAGE_CLEANUP_OLDER_THAN || '1d';
 
   let parsedOlderThan: string | undefined;
   if (olderThan) {

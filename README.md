@@ -117,7 +117,7 @@ Read more [here](./docs/env_setup.md) to know how to get all environment variabl
 ### Storage Cleanup Configuration
 - `IMAGE_CLEANUP_ENABLED`: Enable automatic cleanup of old images (default: false)
 - `IMAGE_CLEANUP_OLDER_THAN`: Delete files older than N days (requires IMAGE_CLEANUP_ENABLED=true)
-- `IMAGE_CLEANUP_RUN_ON_SAVE`: Run cleanup after each save (default: false)
+
 
 #### Example Configuration (.env file)
 ```bash
@@ -136,7 +136,7 @@ S3_CDN_URL="https://pub-....r2.dev"
 
 # Optional cleanup configuration
 IMAGE_CLEANUP_ENABLED=true
-IMAGE_CLEANUP_OLDER_THAN=30d # (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
+IMAGE_CLEANUP_OLDER_THAN=1d # (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
 ```
 
 ## Error Handling

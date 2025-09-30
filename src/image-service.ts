@@ -9,6 +9,7 @@ export class ImageService {
   private client: CloudflareClient;
   private storageProvider;
   private config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string };
+  private maxRetries: number;
 
   constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
     this.config = config;
@@ -16,6 +17,17 @@ export class ImageService {
     const storageConfig = createConfigFromEnv();
     const { provider } = createStorage(storageConfig);
     this.storageProvider = provider;
+
+    // Configure retry behavior from environment
+    this.maxRetries = parseInt(process.env.IMAGE_GENERATION_MAX_RETRIES || '3', 10);
+
+    // Validate retry count
+    if (this.maxRetries < 0 || this.maxRetries > 10) {
+      console.warn(`[ImageService] Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 3`);
+      this.maxRetries = 3;
+    }
+
+    console.log(`[ImageService] Initialized with ${this.maxRetries} max retries for rate limiting`);
   }
 
   async generateImage(params: GenerateImageParams): Promise<MultiImageResult> {
@@ -31,32 +43,30 @@ export class ImageService {
         ? validationMessage.match(/ignored: (.+)$/)?.[1]?.split(', ')
         : [];
 
-      // Sequential processing for multiple images
+      // Sequential processing with rate limiting to avoid 429 errors
       const results: SingleImageResult[] = [];
-      const promises = [];
 
       for (let i = 0; i < numOutputs; i++) {
         // Create variation in seed for multiple images
         const seed = params.seed ? params.seed + i : undefined;
 
-        promises.push(this.generateSingleImage({
-          ...params,
-          seed,
-          sequence: i + 1
-        }, model));
-      }
+        // Add delay between requests to avoid rate limiting (1 second base delay)
+        if (i > 0) {
+          await this.delay(1000 * i); // Progressive delay: 1s, 2s, 3s...
+        }
 
-      // Wait for all images to complete (with Promise.allSettled for partial success)
-      const settledResults = await Promise.allSettled(promises);
-
-      for (const settled of settledResults) {
-        if (settled.status === 'fulfilled') {
-          results.push(settled.value);
-        } else {
+        try {
+          const result = await this.generateSingleImageWithRetry({
+            ...params,
+            seed,
+            sequence: i + 1
+          }, model);
+          results.push(result);
+        } catch (error) {
           results.push({
             success: false,
-            error: settled.reason instanceof Error ? settled.reason.message : String(settled.reason),
-            sequence: results.length + 1
+            error: error instanceof Error ? error.message : String(error),
+            sequence: i + 1
           });
         }
       }
@@ -203,5 +213,49 @@ export class ImageService {
     result += '\nFor detailed parameter documentation, see the README.md file.';
 
     return result;
+  }
+
+  /**
+   * Generate single image with retry logic for rate limiting
+   */
+  private async generateSingleImageWithRetry(
+    params: GenerateImageParams & { sequence: number },
+    model: BaseModel
+  ): Promise<SingleImageResult> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await this.generateSingleImage(params, model);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Check if it's a rate limit error (429 or capacity exceeded)
+        const errorMessage = lastError.message.toLowerCase();
+        const isRateLimitError = errorMessage.includes('429') ||
+                                errorMessage.includes('capacity temporarily exceeded') ||
+                                errorMessage.includes('capacity exceeded');
+
+        if (isRateLimitError && attempt < this.maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s...
+          const backoffDelay = Math.pow(2, attempt) * 1000;
+          console.log(`[ImageService] Rate limit hit, retrying in ${backoffDelay}ms (attempt ${attempt}/${this.maxRetries})`);
+          await this.delay(backoffDelay);
+          continue;
+        }
+
+        // Non-retryable error or max retries exceeded
+        throw lastError;
+      }
+    }
+
+    throw lastError || new Error('Unknown error occurred');
+  }
+
+  /**
+   * Simple delay helper for rate limiting
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
