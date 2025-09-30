@@ -44,7 +44,6 @@ export interface ListOptions {
 
 export interface CleanupOptions {
   olderThan?: string;              // ISO date string
-  keepCount?: number;             // Keep N most recent files
   dryRun?: boolean;               // Preview without deleting
 }
 
@@ -81,9 +80,7 @@ export interface StorageConfig {
       cdnUrl?: string;
       cleanup?: {
         enabled: boolean;         // Enable automatic cleanup
-        olderThanDays?: number;   // Delete files older than N days
-        keepCount?: number;       // Keep N most recent files
-        runOnSave?: boolean;      // Run cleanup after each save
+        olderThan?: string;       // Delete files older than duration (ISO date string)
       };
     };
   };

@@ -92,9 +92,7 @@ interface StorageConfig {
       cdnUrl?: string;
       cleanup?: {
         enabled: boolean;         // Enable automatic cleanup
-        olderThanDays?: number;   // Delete files older than N days
-        keepCount?: number;       // Keep N most recent files
-        runOnSave?: boolean;      // Run cleanup after each save
+        olderThan?: number;   // Delete files older than N days (e.g., 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
       };
     };
   };
@@ -154,9 +152,7 @@ S3_CDN_URL="https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"  # Optional CDN
 
 # Optional Cleanup Configuration
 IMAGE_CLEANUP_ENABLED=true
-IMAGE_CLEANUP_OLDER_THAN_DAYS=30
-IMAGE_CLEANUP_KEEP_COUNT=100
-IMAGE_CLEANUP_RUN_ON_SAVE=false
+IMAGE_CLEANUP_OLDER_THAN=30d
 ```
 
 ## Usage Examples

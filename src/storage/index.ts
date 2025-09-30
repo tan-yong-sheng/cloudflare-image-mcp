@@ -1,5 +1,6 @@
 // Import types
 import type { StorageConfig } from './types.js';
+import { parseDurationString } from './duration-parser.js';
 
 // Factory exports
 export {
@@ -21,9 +22,7 @@ export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
       region: 'auto',
       cleanup: {
         enabled: false,
-        olderThanDays: undefined,
-        keepCount: undefined,
-        runOnSave: false
+        olderThan: undefined
       }
     }
   }
@@ -45,18 +44,23 @@ export function createConfigFromEnv(): StorageConfig {
 
   // S3 storage cleanup configuration from environment variables
   const cleanupEnabled = process.env.IMAGE_CLEANUP_ENABLED === 'true';
-  const olderThanDays = process.env.IMAGE_CLEANUP_OLDER_THAN_DAYS ?
-    parseInt(process.env.IMAGE_CLEANUP_OLDER_THAN_DAYS, 10) : undefined;
-  const keepCount = process.env.IMAGE_CLEANUP_KEEP_COUNT ?
-    parseInt(process.env.IMAGE_CLEANUP_KEEP_COUNT, 10) : undefined;
-  const runOnSave = process.env.IMAGE_CLEANUP_RUN_ON_SAVE === 'true';
+  const olderThan = process.env.IMAGE_CLEANUP_OLDER_THAN;
+
+  let parsedOlderThan: string | undefined;
+  if (olderThan) {
+    try {
+      const duration = parseDurationString(olderThan);
+      const cutoffDate = new Date(Date.now() - duration.milliseconds);
+      parsedOlderThan = cutoffDate.toISOString();
+    } catch (error) {
+      throw new Error(`Invalid IMAGE_CLEANUP_OLDER_THAN value: "${olderThan}". ${error instanceof Error ? error.message : 'Invalid duration format'}`);
+    }
+  }
 
   if (cleanupEnabled) {
     config.providers.s3.cleanup = {
       enabled: cleanupEnabled,
-      olderThanDays,
-      keepCount,
-      runOnSave
+      olderThan: parsedOlderThan
     };
   }
 

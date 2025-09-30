@@ -10,7 +10,7 @@ export class S3StorageProvider extends BaseStorageProvider {
   private cdnUrl?: string;
   private cleanupConfig?: {
     enabled: boolean;
-    olderThanDays?: number;
+    olderThan?: string;
   };
 
   constructor(config: {
@@ -22,9 +22,7 @@ export class S3StorageProvider extends BaseStorageProvider {
     cdnUrl?: string;
     cleanup?: {
       enabled: boolean;
-      olderThanDays?: number;
-      keepCount?: number;
-      runOnSave?: boolean;
+      olderThan?: string;
     };
   }) {
     super(config);
@@ -343,15 +341,12 @@ export class S3StorageProvider extends BaseStorageProvider {
   }
 
   private async runAutomaticCleanup(): Promise<void> {
-    if (!this.cleanupConfig?.enabled || !this.cleanupConfig.olderThanDays) return;
+    if (!this.cleanupConfig?.enabled || !this.cleanupConfig.olderThan) return;
 
     const options: CleanupOptions = {
-      dryRun: false // Always actually delete in automatic mode
+      dryRun: false, // Always actually delete in automatic mode
+      olderThan: this.cleanupConfig.olderThan
     };
-
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - this.cleanupConfig.olderThanDays);
-    options.olderThan = cutoffDate.toISOString();
 
     try {
       const result = await this.cleanup(options);

@@ -20,7 +20,7 @@ S3_CDN_URL="https://pub-....r2.dev"
 
 # Cleanup configuration
 IMAGE_CLEANUP_ENABLED="true"
-IMAGE_CLEANUP_OLDER_THAN_DAYS="30"
+IMAGE_CLEANUP_OLDER_THAN="30d"
 ```
 
 ## Part 1: Setup programmatic access to Cloudflare Workers AI
