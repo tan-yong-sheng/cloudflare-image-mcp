@@ -15,7 +15,8 @@ export abstract class BaseStorageProvider implements StorageProvider {
 
   protected generateFilename(size?: string): string {
     const shortUuid = Math.random().toString(36).substring(2, 8);
-    return size ? `${shortUuid}_${size}.jpg` : `${shortUuid}.jpg`;
+    const sizePart = size ? `_${size}` : '';
+    return `${shortUuid}${sizePart}.jpg`;
   }
 
   protected generateModelPath(model: string, filename: string): string {

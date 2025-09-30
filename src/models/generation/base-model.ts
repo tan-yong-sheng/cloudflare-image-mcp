@@ -100,6 +100,7 @@ export abstract class BaseModel {
     return inputSize || this.config.defaultSize || '1024x1024';
   }
 
+  
   /**
    * Check if parameter is supported by this model
    */

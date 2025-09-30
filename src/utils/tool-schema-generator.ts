@@ -28,6 +28,13 @@ export function generateImageToolSchema(defaultModel: string): ToolSchema {
       type: 'number',
       description: 'Random seed for reproducible results',
     },
+    num_outputs: {
+      type: 'number',
+      description: 'Number of images to generate (range: 1-8, default: 1). Tip: If user requests multiple images but doesn\'t specify a count, use 4 for a good variety.',
+      default: 1,
+      minimum: 1,
+      maximum: 8,
+    },
   };
 
   // Conditionally add size parameter if supported

@@ -1,6 +1,7 @@
 import { CloudflareClient } from './cloudflare-client.js';
 import { getModelByName, getAllSupportedModels, getModelDescriptions } from './models/index.js';
-import { GenerateImageParams } from './types.js';
+import { GenerateImageParams, MultiImageResult, SingleImageResult } from './types.js';
+import { BaseModel } from './models/generation/base-model.js';
 import { createStorage, createConfigFromEnv } from './storage/index.js';
 import { generateParameterValidationMessage } from './utils/tool-schema-generator.js';
 
@@ -17,22 +18,81 @@ export class ImageService {
     this.storageProvider = provider;
   }
 
-  async generateImage(params: GenerateImageParams): Promise<{
-    success: boolean;
-    imageUrl?: string;
-    error?: string;
-    ignoredParams?: string[];
-  }> {
+  async generateImage(params: GenerateImageParams): Promise<MultiImageResult> {
     const modelName = this.config.defaultModel;
+    const numOutputs = Math.min(params.num_outputs || 1, 8); // Cap at 8 images
 
     try {
       const model = getModelByName(modelName);
 
       // Check for unsupported parameters and generate validation message
       const validationMessage = generateParameterValidationMessage(params, modelName, model.config);
-      const ignoredParams = validationMessage ?
-        validationMessage.match(/ignored: (.+)$/)?.[1]?.split(', ') || [] : [];
-      
+      const ignoredParams = validationMessage
+        ? validationMessage.match(/ignored: (.+)$/)?.[1]?.split(', ')
+        : [];
+
+      // Sequential processing for multiple images
+      const results: SingleImageResult[] = [];
+      const promises = [];
+
+      for (let i = 0; i < numOutputs; i++) {
+        // Create variation in seed for multiple images
+        const seed = params.seed ? params.seed + i : undefined;
+
+        promises.push(this.generateSingleImage({
+          ...params,
+          seed,
+          sequence: i + 1
+        }, model));
+      }
+
+      // Wait for all images to complete (with Promise.allSettled for partial success)
+      const settledResults = await Promise.allSettled(promises);
+
+      for (const settled of settledResults) {
+        if (settled.status === 'fulfilled') {
+          results.push(settled.value);
+        } else {
+          results.push({
+            success: false,
+            error: settled.reason instanceof Error ? settled.reason.message : String(settled.reason),
+            sequence: results.length + 1
+          });
+        }
+      }
+
+      const successfulCount = results.filter(r => r.success).length;
+      const failedCount = results.filter(r => !r.success).length;
+      const successfulUrls = results.filter(r => r.success).map(r => r.imageUrl).filter(Boolean) as string[];
+
+      return {
+        success: successfulCount > 0,
+        results,
+        imageUrl: successfulUrls.length === 1 ? successfulUrls[0] : successfulUrls,
+        ignoredParams,
+        successfulCount,
+        failedCount
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        results: [{
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        }],
+        ignoredParams: [],
+        successfulCount: 0,
+        failedCount: numOutputs
+      };
+    }
+  }
+
+  private async generateSingleImage(
+    params: GenerateImageParams & { sequence: number },
+    model: BaseModel
+  ): Promise<SingleImageResult> {
+    try {
       // Build request payload
       const payload = model.buildRequestPayload(params.prompt, {
         negativePrompt: params.negativePrompt,
@@ -42,14 +102,15 @@ export class ImageService {
         seed: params.seed,
       });
 
-      // Make API request
-      const result = await this.client.generateImage(modelName, payload);
+      // Make API request with scaled timeout for multiple images
+      const timeoutMs = 60000 + (params.sequence - 1) * 10000; // Base 60s + 10s per additional image
+      const result = await this.client.generateImage(this.config.defaultModel, payload, timeoutMs);
 
       if (!result.success) {
         return {
           success: false,
           error: result.error || 'Unknown error',
-          ignoredParams: ignoredParams || []
+          sequence: params.sequence
         };
       }
 
@@ -68,10 +129,11 @@ export class ImageService {
       const actualOutputSize = model.getActualOutputSize(params.size);
       const metadata = {
         prompt: params.prompt,
-        model: modelName,
+        model: this.config.defaultModel,
         timestamp: new Date(),
         parameters: {
-          size: actualOutputSize
+          size: actualOutputSize,
+          sequence: params.sequence
         }
       };
       const storageResult = await this.storageProvider.save(imageBuffer, metadata);
@@ -79,14 +141,14 @@ export class ImageService {
       return {
         success: true,
         imageUrl: storageResult.url,
-        ignoredParams: ignoredParams || []
+        sequence: params.sequence
       };
 
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        ignoredParams: []
+        sequence: params.sequence
       };
     }
   }

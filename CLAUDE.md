@@ -49,7 +49,7 @@ This codebase implements a modular MCP (Model Context Protocol) server for Cloud
 1. **MCP Server Layer** (`src/server.ts`)
    - Handles MCP protocol communication
    - Exposes dynamically generated `generate_image` and `list_models` tools
-   - Tool schemas adapt based on DEFAULT_MODEL environment variable
+   - Tool schemas adapt based on DEFAULT_IMAGE_GENERATION_MODEL environment variable
    - Manages environment configuration and error handling
 
 2. **Service Layer** (`src/image-service.ts`)
@@ -150,7 +150,7 @@ IMAGE_CLEANUP_OLDER_THAN_DAYS=30
 - **Enhanced Error Messages**: Clear feedback when unsupported parameters are used
 
 **How it works:**
-1. When server starts, `generateImageToolSchema()` reads DEFAULT_MODEL environment variable
+1. When server starts, `generateImageToolSchema()` reads DEFAULT_IMAGE_GENERATION_MODEL environment variable
 2. Schema generator queries model capabilities from `ModelConfig`
 3. Tool description and inputSchema are built dynamically based on supported features
 4. Runtime validation catches any edge cases with explicit rejection messages
@@ -164,13 +164,13 @@ IMAGE_CLEANUP_OLDER_THAN_DAYS=30
 - LLMs only see relevant parameters, reducing invalid requests
 - Model-specific guidance helps users optimize results
 - Clear error messages when unsupported parameters are used
-- Automatic adaptation when DEFAULT_MODEL changes
+- Automatic adaptation when DEFAULT_IMAGE_GENERATION_MODEL changes
 
 ### Configuration Architecture
 
 **Server Configuration:**
 - Required: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-- Optional: `DEFAULT_MODEL` (defaults to FLUX Schnell)
+- Optional: `DEFAULT_IMAGE_GENERATION_MODEL` (defaults to FLUX Schnell)
 
 **Model Configuration:**
 - Each model defines capabilities in `ModelConfig`
@@ -241,7 +241,7 @@ The codebase supports 6 models with varying capabilities:
 - `CLOUDFLARE_ACCOUNT_ID` - Account identifier
 
 **Optional:**
-- `DEFAULT_MODEL` - Default model selection
+- `DEFAULT_IMAGE_GENERATION_MODEL` - Default model selection
 - `IMAGE_OUTPUT_PATH` - Custom output folder path (default: 'outputs')
 - `IMAGE_CLEANUP_*` - Storage cleanup policies
 

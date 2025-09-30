@@ -30,7 +30,7 @@ Set environment variables:
 ```bash
 export CLOUDFLARE_API_TOKEN="your_api_token_here"
 export CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
-export DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"  # Optional
+export DEFAULT_IMAGE_GENERATION_MODEL="@cf/black-forest-labs/flux-1-schnell"  # Optional
 ```
 
 ### Development
@@ -64,7 +64,7 @@ npm publish
 
 #### generate_image
 
-Generate an image using Cloudflare Workers AI. The model is configured via the `DEFAULT_MODEL` environment variable.
+Generate an image using Cloudflare Workers AI. The model is configured via the `DEFAULT_IMAGE_GENERATION_MODEL` environment variable.
 
 ```typescript
 {
@@ -102,7 +102,7 @@ List all available models with their capabilities and supported parameters.
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
 
 ### Optional
-- `DEFAULT_MODEL`: Default model to use (optional, defaults to FLUX Schnell)
+- `DEFAULT_IMAGE_GENERATION_MODEL`: Default model to use (optional, defaults to FLUX Schnell)
 
 ### S3 Storage Configuration (Required)
 - `S3_BUCKET`: S3 bucket name for storing generated images
@@ -123,7 +123,7 @@ List all available models with their capabilities and supported parameters.
 # Required Cloudflare credentials
 CLOUDFLARE_API_TOKEN="your_api_token_here"
 CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
-DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
+DEFAULT_IMAGE_GENERATION_MODEL="@cf/black-forest-labs/flux-1-schnell"
 
 # Required S3 storage configuration
 S3_BUCKET="your-bucket-name"

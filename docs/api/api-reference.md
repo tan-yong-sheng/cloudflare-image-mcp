@@ -120,7 +120,7 @@ CLOUDFLARE_ACCOUNT_ID=your_account_id_here
 ### Optional Environment Variables
 
 ```bash
-DEFAULT_MODEL=@cf/black-forest-labs/flux-1-schnell
+DEFAULT_IMAGE_GENERATION_MODEL=@cf/black-forest-labs/flux-1-schnell
 ```
 
 ## Response Format

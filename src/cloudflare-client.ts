@@ -10,7 +10,8 @@ export class CloudflareClient {
 
   async generateImage(
     modelName: string,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    timeoutMs: number = 60000
   ): Promise<{
     success: boolean;
     data?: string | Buffer;
@@ -26,7 +27,7 @@ export class CloudflareClient {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const response = await fetch(url, {
         method: 'POST',
