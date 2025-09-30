@@ -13,7 +13,7 @@ import { getModelByName } from './models/index.js';
 const serverConfig = {
   cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
   cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-  defaultModel: process.env.DEFAULT_IMAGE_GENERATION_MODEL || '@cf/black-forest-labs/flux-1-schnell',
+  defaultModel: process.env.DEFAULT_IMAGE_GENERATION_MODEL || '@cf/leonardo/lucid-origin',
 };
 
 const imageService = new ImageService(serverConfig);
