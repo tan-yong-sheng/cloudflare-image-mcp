@@ -19,6 +19,7 @@ export interface ModelConfig {
   defaultSize?: string;
   maxWidth?: number;
   maxHeight?: number;
+  fixedOutputSize?: string;
 }
 
 // Tool parameters schema - Note: This is the full schema, but actual validation

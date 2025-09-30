@@ -57,8 +57,8 @@ src/storage/
 ### File Naming Convention
 
 ```typescript
-// Format: {timestamp}_{model-slug}_{short-uuid}.{ext}
-// Example: 20240927_141522_flux-schnell_abc123.jpg
+// Format: {date}/{model-slug}/{short-uuid}_{image_size}.{ext}
+// Example: 20240927/flux-schnell/abc123_1024x1024.jpg
 
 const filename = `${timestamp}_${modelSlug}_${shortUuid}.jpg`;
 ```
@@ -68,13 +68,13 @@ const filename = `${timestamp}_${modelSlug}_${shortUuid}.jpg`;
 #### S3 Storage (AWS S3)
 ```
 File: s3://bucket/generations/2024-09-27/flux-schnell/20240927_141522_flux-schnell_abc123.jpg
-URL: https://bucket.s3.amazonaws.com/generations/2024-09-27/flux-schnell/20240927_141522_flux-schnell_abc123.jpg
+URL: https://bucket.s3.amazonaws.com/generations/2024-09-27/flux-schnell/abc123_1024x1024.jpg
 ```
 
 #### Cloudflare R2 Storage
 ```
 File: s3://bucket/generations/2024-09-27/flux-schnell/20240927_141522_flux-schnell_abc123.jpg
-URL: https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev/generations/2024-09-27/flux-schnell/20240927_141522_flux-schnell_abc123.jpg
+URL: https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev/generations/2024-09-27/flux-schnell/abc123_1024x1024.jpg
 ```
 
 ### Configuration

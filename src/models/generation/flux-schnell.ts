@@ -13,6 +13,7 @@ export class FluxSchnellModel extends BaseModel {
     supportsSeed: true,
     outputFormat: 'base64',
     recommendedFor: 'fast generation, high quality',
+    fixedOutputSize: '1024x1024',
   };
 
   protected override enhancePrompt(prompt: string): string {

@@ -88,6 +88,19 @@ export abstract class BaseModel {
   }
 
   /**
+   * Get the actual output dimensions this model will produce
+   */
+  getActualOutputSize(inputSize?: string): string {
+    // If model has fixed output size, use that
+    if (this.config.fixedOutputSize) {
+      return this.config.fixedOutputSize;
+    }
+
+    // Otherwise, use input size or default
+    return inputSize || this.config.defaultSize || '1024x1024';
+  }
+
+  /**
    * Check if parameter is supported by this model
    */
   isParameterSupported(paramName: string): boolean {

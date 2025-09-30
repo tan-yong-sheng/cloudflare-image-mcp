@@ -65,12 +65,13 @@ export class ImageService {
       }
 
       // Save using storage provider
+      const actualOutputSize = model.getActualOutputSize(params.size);
       const metadata = {
         prompt: params.prompt,
         model: modelName,
         timestamp: new Date(),
         parameters: {
-          size: params.size
+          size: actualOutputSize
         }
       };
       const storageResult = await this.storageProvider.save(imageBuffer, metadata);
