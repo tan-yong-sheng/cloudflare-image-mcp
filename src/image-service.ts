@@ -19,11 +19,11 @@ export class ImageService {
     this.storageProvider = provider;
 
     // Configure retry behavior from environment
-    this.maxRetries = parseInt(process.env.IMAGE_GENERATION_MAX_RETRIES || '3', 10);
+    this.maxRetries = parseInt(process.env.IMAGE_GENERATION_MAX_RETRIES || '1', 10);
 
     // Validate retry count
     if (this.maxRetries < 0 || this.maxRetries > 10) {
-      console.warn(`[ImageService] Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 3`);
+      console.warn(`[ImageService] Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 1`);
       this.maxRetries = 3;
     }
 
