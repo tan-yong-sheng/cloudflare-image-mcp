@@ -20,6 +20,10 @@ A TypeScript MCP server that provides image generation capabilities using Cloudf
 ### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/tan-yong-sheng/cloudflare-image-mcp.git
+
+# Install dependencies
 npm install
 ```
 

@@ -58,10 +58,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/tan-yong-sheng/cloudflare-image-mcp-server.git"
+    "url": "https://github.com/tan-yong-sheng/cloudflare-image-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/tan-yong-sheng/cloudflare-image-mcp-server/issues"
+    "url": "https://github.com/tan-yong-sheng/cloudflare-image-mcp/issues"
   },
-  "homepage": "https://github.com/tan-yong-sheng/cloudflare-image-mcp-server#readme"
+  "homepage": "https://github.com/tan-yong-sheng/cloudflare-image-mcp#readme"
 }
