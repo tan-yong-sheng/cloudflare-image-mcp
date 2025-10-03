@@ -8,6 +8,7 @@ import { ImageService } from './image-service.js';
 import { GenerateImageParamsSchema, MultiImageResult } from './types.js';
 import { generateImageToolSchema, generateParameterValidationMessage } from './utils/tool-schema-generator.js';
 import { getModelByName } from './models/index.js';
+import { createLogger } from './utils/logger.js';
 
 // Server configuration from environment variables
 const serverConfig = {
@@ -17,6 +18,7 @@ const serverConfig = {
 };
 
 const imageService = new ImageService(serverConfig);
+const logger = createLogger('Server');
 
 // Create server instance
 const server = new Server(
@@ -166,10 +168,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Cloudflare Image MCP Server started');
+  logger.info('Cloudflare Image MCP Server started');
 }
 
 main().catch((error) => {
-  console.error('Server error:', error);
+  logger.error('Server error:', error);
   process.exit(1);
 });

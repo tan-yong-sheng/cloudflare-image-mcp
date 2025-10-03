@@ -1,6 +1,8 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { BaseStorageProvider } from './base-provider.js';
 import { StorageResult, ImageMetadata, StorageItem, ListOptions, CleanupOptions, CleanupResult, StorageStatistics } from '../types.js';
+import { parseDurationString } from '../duration-parser.js';
+import { createLogger } from '../../utils/logger.js';
 
 export class S3StorageProvider extends BaseStorageProvider {
   private client: S3Client;
@@ -12,6 +14,7 @@ export class S3StorageProvider extends BaseStorageProvider {
     enabled: boolean;
     olderThan?: string;
   };
+  private logger = createLogger('S3 Storage');
 
   constructor(config: {
     bucket: string;
@@ -31,6 +34,16 @@ export class S3StorageProvider extends BaseStorageProvider {
     this.endpoint = config.endpoint;
     this.cdnUrl = config.cdnUrl;
     this.cleanupConfig = config.cleanup;
+
+    this.logger.debug('Initializing S3 Storage provider', {
+      bucket: this.bucket,
+      region: this.region,
+      endpoint: this.endpoint || 'default',
+      cleanup: {
+        enabled: this.cleanupConfig?.enabled || false,
+        olderThan: this.cleanupConfig?.olderThan || 'not set'
+      }
+    });
 
     this.client = new S3Client({
       region: this.region,
@@ -73,9 +86,9 @@ export class S3StorageProvider extends BaseStorageProvider {
 
     // Run automatic cleanup if enabled (blocking for reliability)
     if (this.cleanupConfig?.enabled) {
-      console.log('[S3 Storage Cleanup] Starting cleanup after image save...');
+      this.logger.cleanup('Starting cleanup after image save');
       await this.runAutomaticCleanup();
-      console.log('[S3 Storage Cleanup] Cleanup completed successfully');
+      this.logger.cleanup('Cleanup completed successfully');
     }
 
     return {
@@ -126,8 +139,12 @@ export class S3StorageProvider extends BaseStorageProvider {
             if (!object.Key || !object.LastModified || !object.Size) continue;
 
             // Parse date and model from key path: outputs/images/generations/YYYY-MM-DD/model/filename.jpg
-            const pathMatch = object.Key.match(/outputs\/images\/generations\/(\d{4}-\d{2}-\d{2})\/([^/]+)\/([^/]+\.jpg)$/);
-            if (!pathMatch) continue;
+            // More flexible regex to handle various image formats and edge cases
+            const pathMatch = object.Key.match(/outputs\/images\/generations\/(\d{4}-\d{2}-\d{2})\/([^/]+)\/([^/]+\.(jpg|jpeg|png|webp))$/i);
+            if (!pathMatch) {
+              this.logger.debug('Skipping file that doesn\'t match expected pattern', { key: object.Key });
+              continue;
+            }
 
             const [, dateDir, modelDir, filename] = pathMatch;
 
@@ -165,7 +182,22 @@ export class S3StorageProvider extends BaseStorageProvider {
   }
 
   async cleanup(options: CleanupOptions = {}): Promise<CleanupResult> {
+    this.logger.cleanup('Starting cleanup', options);
+
     const allFiles = await this.list();
+    this.logger.info(`Found ${allFiles.length} total files in S3`);
+
+    if (allFiles.length === 0) {
+      this.logger.cleanup('No files found to clean up');
+      return { deleted: 0, failed: 0, totalSize: 0, items: [] };
+    }
+
+    // Log some sample files for debugging
+    this.logger.debug('Sample files found:', allFiles.slice(0, 5).map(file => ({
+      filename: file.filename,
+      createdAt: file.createdAt.toISOString()
+    })));
+
     const filesToDelete = this.selectFilesForCleanup(allFiles, options);
 
     const result: CleanupResult = {
@@ -175,8 +207,18 @@ export class S3StorageProvider extends BaseStorageProvider {
       items: []
     };
 
+    this.logger.cleanup(`Processing ${filesToDelete.length} files for ${options.dryRun ? 'dry run' : 'deletion'}`,
+      filesToDelete.map(file => ({
+        filename: file.filename,
+        size: this.formatFileSize(file.size),
+        createdAt: file.createdAt.toISOString()
+      }))
+    );
+
     for (const file of filesToDelete) {
       try {
+        this.logger.debug(`${options.dryRun ? 'Would delete' : 'Deleting'}: ${file.filename}`);
+
         if (!options.dryRun) {
           const key = await this.findFileKey(file.filename);
           if (key) {
@@ -193,6 +235,7 @@ export class S3StorageProvider extends BaseStorageProvider {
               success: true,
               size: file.size
             });
+            this.logger.cleanup(`Deleted: ${file.filename}`);
           } else {
             result.failed++;
             result.items.push({
@@ -201,6 +244,7 @@ export class S3StorageProvider extends BaseStorageProvider {
               error: 'File not found',
               size: file.size
             });
+            this.logger.warn(`File not found: ${file.filename}`);
           }
         } else {
           // Dry run - just count
@@ -211,6 +255,7 @@ export class S3StorageProvider extends BaseStorageProvider {
             success: true,
             size: file.size
           });
+          this.logger.cleanup(`Dry run: Would delete ${file.filename}`);
         }
       } catch (error) {
         result.failed++;
@@ -220,6 +265,7 @@ export class S3StorageProvider extends BaseStorageProvider {
           error: error instanceof Error ? error.message : String(error),
           size: file.size
         });
+        this.logger.error(`Failed to delete ${file.filename}:`, error instanceof Error ? error.message : String(error));
       }
     }
 
@@ -324,8 +370,46 @@ export class S3StorageProvider extends BaseStorageProvider {
 
     // Filter by date
     if (options.olderThan) {
-      const cutoffDate = new Date(options.olderThan);
-      filesToDelete = filesToDelete.filter(file => file.createdAt < cutoffDate);
+      let cutoffDate: Date;
+
+      if (typeof options.olderThan === 'string') {
+        // Check if it's a duration string (e.g., "30min", "1h", "7d")
+        const durationRegex = /^(\d+)(s|min|h|d|w|mon|y)$/i;
+        if (durationRegex.test(options.olderThan)) {
+          try {
+            const duration = parseDurationString(options.olderThan);
+            cutoffDate = new Date(Date.now() - duration.milliseconds);
+            this.logger.cleanup(`Parsed duration: ${options.olderThan} -> ${duration.milliseconds}ms, cutoff: ${cutoffDate.toISOString()}`);
+          } catch (error) {
+            this.logger.error(`Invalid duration format: ${options.olderThan}`, error);
+            return []; // Return empty list if duration is invalid
+          }
+        } else {
+          // Try to parse as ISO date string
+          cutoffDate = new Date(options.olderThan);
+          if (isNaN(cutoffDate.getTime())) {
+            this.logger.error(`Invalid date format: ${options.olderThan}. Expected duration (e.g., "30min") or ISO date string`);
+            return [];
+          }
+          this.logger.cleanup(`Using cutoff date: ${cutoffDate.toISOString()}`);
+        }
+      } else {
+        cutoffDate = new Date(options.olderThan);
+        this.logger.cleanup(`Using cutoff date: ${cutoffDate.toISOString()}`);
+      }
+
+      const beforeFilter = filesToDelete.length;
+      filesToDelete = filesToDelete.filter(file => {
+        const shouldDelete = file.createdAt < cutoffDate;
+        if (!shouldDelete) {
+          this.logger.debug(`Keeping file: ${file.filename}`, {
+            createdAt: file.createdAt.toISOString(),
+            cutoffDate: cutoffDate.toISOString()
+          });
+        }
+        return shouldDelete;
+      });
+      this.logger.cleanup(`Filtered ${beforeFilter} -> ${filesToDelete.length} files for deletion`);
     }
 
     return filesToDelete;
@@ -344,7 +428,7 @@ export class S3StorageProvider extends BaseStorageProvider {
 
   private async runAutomaticCleanup(): Promise<void> {
     if (!this.cleanupConfig?.enabled || !this.cleanupConfig.olderThan) {
-      console.log('[S3 Storage Cleanup] Skipping - cleanup disabled or no olderThan configured');
+      this.logger.debug('Skipping automatic cleanup - disabled or no olderThan configured');
       return;
     }
 
@@ -353,29 +437,31 @@ export class S3StorageProvider extends BaseStorageProvider {
       olderThan: this.cleanupConfig.olderThan
     };
 
-    console.log(`[S3 Storage Cleanup] Looking for files older than ${this.cleanupConfig.olderThan}...`);
+    this.logger.cleanup(`Starting automatic cleanup for files older than ${this.cleanupConfig.olderThan}`);
 
     try {
       const result = await this.cleanup(options);
 
       // Log detailed cleanup results
       if (result.deleted > 0) {
-        console.log(`[S3 Storage Cleanup] ✅ Deleted ${result.deleted} files (${this.formatFileSize(result.totalSize)})`);
+        this.logger.cleanup(`Automatic cleanup completed: ${result.deleted} files deleted (${this.formatFileSize(result.totalSize)})`);
         if (result.failed > 0) {
-          console.warn(`[S3 Storage Cleanup] ⚠️  Failed to delete ${result.failed} files`);
+          this.logger.warn(`Failed to delete ${result.failed} files during automatic cleanup`);
         }
       } else {
-        console.log(`[S3 Storage Cleanup] ✅ No files needed cleanup`);
+        this.logger.cleanup('Automatic cleanup completed: No files needed cleanup');
       }
 
       if (result.items.length > 0) {
         const failedItems = result.items.filter(item => !item.success);
         if (failedItems.length > 0) {
-          console.warn(`[S3 Storage Cleanup] Failed deletions:`, failedItems.map(item => `${item.filename}: ${item.error || 'Unknown error'}`));
+          this.logger.warn('Failed deletions:', failedItems.map(item => `${item.filename}: ${item.error || 'Unknown error'}`));
         }
       }
+
+      this.logger.cleanup('Automatic cleanup finished');
     } catch (error) {
-      console.error('[S3 Storage Cleanup] ❌ Automatic cleanup failed:', error);
+      this.logger.error('Automatic cleanup failed:', error);
       throw error; // Re-throw to make the failure visible
     }
   }

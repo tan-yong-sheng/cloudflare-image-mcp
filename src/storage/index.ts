@@ -49,9 +49,9 @@ export function createConfigFromEnv(): StorageConfig {
   let parsedOlderThan: string | undefined;
   if (olderThan) {
     try {
-      const duration = parseDurationString(olderThan);
-      const cutoffDate = new Date(Date.now() - duration.milliseconds);
-      parsedOlderThan = cutoffDate.toISOString();
+      // Validate that it's a proper duration string, but keep the original string
+      parseDurationString(olderThan);
+      parsedOlderThan = olderThan; // Keep the original duration string (e.g., "30min", "1h", "7d")
     } catch (error) {
       throw new Error(`Invalid IMAGE_CLEANUP_OLDER_THAN value: "${olderThan}". ${error instanceof Error ? error.message : 'Invalid duration format'}`);
     }

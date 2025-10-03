@@ -125,6 +125,17 @@ Read more [here](./docs/env_setup.md) to know how to get all environment variabl
 - `IMAGE_GENERATION_BATCH_DELAY_MS`: Delay between batches of concurrent requests in milliseconds (default: 1000, range: 100-10000)
 - `IMAGE_GENERATION_MAX_RETRIES`: Maximum retry attempts for rate-limited requests (default: 3, range: 0-10)
 
+### Logging Configuration (Optional)
+- `LOG_LEVEL`: Control logging verbosity (error, warn, info, debug) (default: info)
+- `NODE_ENV=development`: Auto-enables debug mode with detailed logging
+
+**Logging Features:**
+- **Centralized logging system** with consistent formatting and timestamps
+- **Service-specific prefixes**: `[Server]`, `[ImageService]`, `[S3 Storage]` for easy identification
+- **Specialized loggers**: 🧹 cleanup, 🚦 rate limiting, 🌐 API, 💾 storage operations
+- **Conditional logging**: Debug messages only show in debug mode
+- **Performance timing**: Built-in timing helpers for performance monitoring
+
 
 #### Example Configuration (.env file)
 ```bash
@@ -149,6 +160,10 @@ IMAGE_CLEANUP_OLDER_THAN=1d # (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
 IMAGE_GENERATION_CONCURRENCY=2    # Default: 2 concurrent requests (range: 1-8)
 IMAGE_GENERATION_BATCH_DELAY_MS=1000  # Default: 1s delay between batches (range: 100-10000ms)
 IMAGE_GENERATION_MAX_RETRIES=3   # Default: 3 retry attempts (range: 0-10)
+
+# Optional logging configuration
+LOG_LEVEL=info                    # Control verbosity: 'error', 'warn', 'info', 'debug'
+NODE_ENV=production              # Set to 'development' for debug mode
 ```
 
 ## Error Handling

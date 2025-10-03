@@ -4,6 +4,7 @@ import { GenerateImageParams, MultiImageResult, SingleImageResult } from './type
 import { BaseModel } from './models/generation/base-model.js';
 import { createStorage, createConfigFromEnv } from './storage/index.js';
 import { generateParameterValidationMessage } from './utils/tool-schema-generator.js';
+import { createLogger } from './utils/logger.js';
 
 export class ImageService {
   private client: CloudflareClient;
@@ -12,6 +13,7 @@ export class ImageService {
   private maxRetries: number;
   private maxConcurrency: number;
   private batchDelayMs: number;
+  private logger = createLogger('ImageService');
 
   constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
     this.config = config;
@@ -31,23 +33,23 @@ export class ImageService {
 
     // Validate retry count
     if (this.maxRetries < 0 || this.maxRetries > 10) {
-      console.warn(`[ImageService] Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 3`);
+      this.logger.warn(`Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 3`);
       this.maxRetries = 3;
     }
 
     // Validate concurrency count (1-8 to be reasonable)
     if (this.maxConcurrency < 1 || this.maxConcurrency > 8) {
-      console.warn(`[ImageService] Invalid IMAGE_GENERATION_CONCURRENCY: ${this.maxConcurrency}, using default of 2`);
+      this.logger.warn(`Invalid IMAGE_GENERATION_CONCURRENCY: ${this.maxConcurrency}, using default of 2`);
       this.maxConcurrency = 2;
     }
 
     // Validate batch delay (100ms to 10s range)
     if (this.batchDelayMs < 100 || this.batchDelayMs > 10000) {
-      console.warn(`[ImageService] Invalid IMAGE_GENERATION_BATCH_DELAY_MS: ${this.batchDelayMs}, using default of 1000`);
+      this.logger.warn(`Invalid IMAGE_GENERATION_BATCH_DELAY_MS: ${this.batchDelayMs}, using default of 1000`);
       this.batchDelayMs = 1000;
     }
 
-    console.log(`[ImageService] Initialized with ${this.maxRetries} max retries, ${this.maxConcurrency} max concurrency, ${this.batchDelayMs}ms batch delay`);
+    this.logger.info(`Initialized with ${this.maxRetries} max retries, ${this.maxConcurrency} max concurrency, ${this.batchDelayMs}ms batch delay`);
   }
 
   async generateImage(params: GenerateImageParams): Promise<MultiImageResult> {
@@ -64,7 +66,7 @@ export class ImageService {
         ? validationMessage.match(/ignored: (.+)$/)?.[1]?.split(', ')
         : [];
 
-      console.log(`[ImageService] Generating ${numOutputs} images with concurrency ${this.maxConcurrency}`);
+      this.logger.info(`Generating ${numOutputs} images with concurrency ${this.maxConcurrency}`);
 
       // Create image generation requests
       const imageRequests: Array<GenerateImageParams & { sequence: number }> = [];
@@ -86,7 +88,7 @@ export class ImageService {
       for (let batchIndex = 0; batchIndex < chunks.length; batchIndex++) {
         const chunk = chunks[batchIndex];
 
-        console.log(`[ImageService] Processing batch ${batchIndex + 1}/${chunks.length} (${chunk.length} concurrent requests)`);
+        this.logger.info(`Processing batch ${batchIndex + 1}/${chunks.length} (${chunk.length} concurrent requests)`);
 
         // Process chunk concurrently
         const batchPromises = chunk.map(request =>
@@ -103,12 +105,12 @@ export class ImageService {
         const batchSuccessCount = processedResults.filter(r => r.success).length;
         const batchFailedCount = processedResults.filter(r => !r.success).length;
 
-        console.log(`[ImageService] Batch ${batchIndex + 1} completed: ${batchSuccessCount} success, ${batchFailedCount} failed`);
+        this.logger.info(`Batch ${batchIndex + 1} completed: ${batchSuccessCount} success, ${batchFailedCount} failed`);
 
-        // Adaptive concurrency reduction for high rate limit errors
-        if (rateLimitErrors > chunk.length * 0.5 && currentConcurrency > 1) {
+        // Adaptive concurrency reduction for rate limit errors - trigger on ANY 429 error
+        if (rateLimitErrors > 0 && currentConcurrency > 1) {
           currentConcurrency = Math.max(1, Math.floor(currentConcurrency / 2));
-          console.warn(`[ImageService] High rate limit errors (${rateLimitErrors}/${chunk.length}), reducing concurrency to ${currentConcurrency}`);
+          this.logger.rateLimit(`Rate limit errors detected (${rateLimitErrors}/${chunk.length}), reducing concurrency to ${currentConcurrency}`);
 
           // Regenerate remaining chunks with reduced concurrency
           if (batchIndex < chunks.length - 1) {
@@ -120,7 +122,7 @@ export class ImageService {
 
         // Rate limiting delay between batches (except last batch)
         if (batchIndex < chunks.length - 1) {
-          console.log(`[ImageService] Waiting ${this.batchDelayMs}ms before next batch...`);
+          this.logger.debug(`Waiting ${this.batchDelayMs}ms before next batch`);
           await this.delay(this.batchDelayMs);
         }
       }
@@ -130,7 +132,7 @@ export class ImageService {
       const failedCount = results.filter(r => !r.success).length;
       const successfulUrls = results.filter(r => r.success).map(r => r.imageUrl).filter(Boolean) as string[];
 
-      console.log(`[ImageService] Generated ${successfulCount}/${numOutputs} images successfully in ${totalTime}ms`);
+      this.logger.info(`Generated ${successfulCount}/${numOutputs} images successfully in ${totalTime}ms`);
 
       return {
         success: successfulCount > 0,
@@ -296,7 +298,7 @@ export class ImageService {
         if (isRateLimitError && attempt < this.maxRetries) {
           // Exponential backoff: 2s, 4s, 8s...
           const backoffDelay = Math.pow(2, attempt) * 1000;
-          console.log(`[ImageService] Rate limit hit, retrying in ${backoffDelay}ms (attempt ${attempt}/${this.maxRetries})`);
+          this.logger.rateLimit(`Rate limit hit, retrying in ${backoffDelay}ms (attempt ${attempt}/${this.maxRetries})`);
           await this.delay(backoffDelay);
           continue;
         }
