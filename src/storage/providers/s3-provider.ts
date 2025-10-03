@@ -71,11 +71,11 @@ export class S3StorageProvider extends BaseStorageProvider {
       url = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
     }
 
-    // Run automatic cleanup if enabled (non-blocking)
+    // Run automatic cleanup if enabled (blocking for reliability)
     if (this.cleanupConfig?.enabled) {
-      this.runAutomaticCleanup().catch(error => {
-        console.error('[S3 Storage Cleanup] Background cleanup failed:', error);
-      });
+      console.log('[S3 Storage Cleanup] Starting cleanup after image save...');
+      await this.runAutomaticCleanup();
+      console.log('[S3 Storage Cleanup] Cleanup completed successfully');
     }
 
     return {
@@ -343,22 +343,40 @@ export class S3StorageProvider extends BaseStorageProvider {
   }
 
   private async runAutomaticCleanup(): Promise<void> {
-    if (!this.cleanupConfig?.enabled || !this.cleanupConfig.olderThan) return;
+    if (!this.cleanupConfig?.enabled || !this.cleanupConfig.olderThan) {
+      console.log('[S3 Storage Cleanup] Skipping - cleanup disabled or no olderThan configured');
+      return;
+    }
 
     const options: CleanupOptions = {
       dryRun: false, // Always actually delete in automatic mode
       olderThan: this.cleanupConfig.olderThan
     };
 
+    console.log(`[S3 Storage Cleanup] Looking for files older than ${this.cleanupConfig.olderThan}...`);
+
     try {
       const result = await this.cleanup(options);
 
-      // Log cleanup results
+      // Log detailed cleanup results
       if (result.deleted > 0) {
-        console.log(`[S3 Storage Cleanup] Deleted ${result.deleted} files (${this.formatFileSize(result.totalSize)})`);
+        console.log(`[S3 Storage Cleanup] ✅ Deleted ${result.deleted} files (${this.formatFileSize(result.totalSize)})`);
+        if (result.failed > 0) {
+          console.warn(`[S3 Storage Cleanup] ⚠️  Failed to delete ${result.failed} files`);
+        }
+      } else {
+        console.log(`[S3 Storage Cleanup] ✅ No files needed cleanup`);
+      }
+
+      if (result.items.length > 0) {
+        const failedItems = result.items.filter(item => !item.success);
+        if (failedItems.length > 0) {
+          console.warn(`[S3 Storage Cleanup] Failed deletions:`, failedItems.map(item => `${item.filename}: ${item.error || 'Unknown error'}`));
+        }
       }
     } catch (error) {
-      console.error('[S3 Storage Cleanup] Automatic cleanup failed:', error);
+      console.error('[S3 Storage Cleanup] ❌ Automatic cleanup failed:', error);
+      throw error; // Re-throw to make the failure visible
     }
   }
 }
