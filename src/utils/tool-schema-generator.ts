@@ -22,7 +22,7 @@ export function generateImageToolSchema(defaultModel: string): ToolSchema {
   const properties: Record<string, unknown> = {
     prompt: {
       type: 'string',
-      description: 'Text description of the image to generate',
+      description: 'Text description of a single image to generate. Quantity is controlled by num_outputs params, not the prompt. Include compositions like collage/grid only when the user explicitly requests it.',
     },
     seed: {
       type: 'number',
