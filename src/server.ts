@@ -24,7 +24,7 @@ const logger = createLogger('Server');
 const server = new Server(
   {
     name: 'cloudflare-image-mcp',
-    version: '0.0.6',
+    version: '0.0.7',
   },
   {
     capabilities: {
