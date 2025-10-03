@@ -22,7 +22,7 @@ const imageService = new ImageService(serverConfig);
 const server = new Server(
   {
     name: 'cloudflare-image-mcp',
-    version: '0.0.5',
+    version: '0.0.6',
   },
   {
     capabilities: {
