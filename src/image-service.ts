@@ -10,6 +10,8 @@ export class ImageService {
   private storageProvider;
   private config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string };
   private maxRetries: number;
+  private maxConcurrency: number;
+  private batchDelayMs: number;
 
   constructor(config: { cloudflareApiToken: string; cloudflareAccountId: string; defaultModel: string }) {
     this.config = config;
@@ -19,20 +21,39 @@ export class ImageService {
     this.storageProvider = provider;
 
     // Configure retry behavior from environment
-    this.maxRetries = parseInt(process.env.IMAGE_GENERATION_MAX_RETRIES || '1', 10);
+    this.maxRetries = parseInt(process.env.IMAGE_GENERATION_MAX_RETRIES || '3', 10);
+
+    // Configure concurrency from environment (default 4 as requested)
+    this.maxConcurrency = parseInt(process.env.IMAGE_GENERATION_CONCURRENCY || '2', 10);
+
+    // Configure batch delay from environment (default 1 second as requested)
+    this.batchDelayMs = parseInt(process.env.IMAGE_GENERATION_BATCH_DELAY_MS || '1000', 10);
 
     // Validate retry count
     if (this.maxRetries < 0 || this.maxRetries > 10) {
-      console.warn(`[ImageService] Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 1`);
+      console.warn(`[ImageService] Invalid IMAGE_GENERATION_MAX_RETRIES: ${this.maxRetries}, using default of 3`);
       this.maxRetries = 3;
     }
 
-    console.log(`[ImageService] Initialized with ${this.maxRetries} max retries for rate limiting`);
+    // Validate concurrency count (1-8 to be reasonable)
+    if (this.maxConcurrency < 1 || this.maxConcurrency > 8) {
+      console.warn(`[ImageService] Invalid IMAGE_GENERATION_CONCURRENCY: ${this.maxConcurrency}, using default of 2`);
+      this.maxConcurrency = 2;
+    }
+
+    // Validate batch delay (100ms to 10s range)
+    if (this.batchDelayMs < 100 || this.batchDelayMs > 10000) {
+      console.warn(`[ImageService] Invalid IMAGE_GENERATION_BATCH_DELAY_MS: ${this.batchDelayMs}, using default of 1000`);
+      this.batchDelayMs = 1000;
+    }
+
+    console.log(`[ImageService] Initialized with ${this.maxRetries} max retries, ${this.maxConcurrency} max concurrency, ${this.batchDelayMs}ms batch delay`);
   }
 
   async generateImage(params: GenerateImageParams): Promise<MultiImageResult> {
     const modelName = this.config.defaultModel;
     const numOutputs = Math.min(params.num_outputs || 1, 8); // Cap at 8 images
+    const startTime = Date.now();
 
     try {
       const model = getModelByName(modelName);
@@ -43,37 +64,73 @@ export class ImageService {
         ? validationMessage.match(/ignored: (.+)$/)?.[1]?.split(', ')
         : [];
 
-      // Sequential processing with rate limiting to avoid 429 errors
+      console.log(`[ImageService] Generating ${numOutputs} images with concurrency ${this.maxConcurrency}`);
+
+      // Create image generation requests
+      const imageRequests: Array<GenerateImageParams & { sequence: number }> = [];
+      for (let i = 0; i < numOutputs; i++) {
+        const seed = params.seed ? params.seed + i : undefined;
+        imageRequests.push({
+          ...params,
+          seed,
+          sequence: i + 1
+        });
+      }
+
+      // Split requests into chunks based on concurrency
+      const chunks = this.chunkArray(imageRequests, this.maxConcurrency);
+      let currentConcurrency = this.maxConcurrency;
       const results: SingleImageResult[] = [];
 
-      for (let i = 0; i < numOutputs; i++) {
-        // Create variation in seed for multiple images
-        const seed = params.seed ? params.seed + i : undefined;
+      // Process each chunk
+      for (let batchIndex = 0; batchIndex < chunks.length; batchIndex++) {
+        const chunk = chunks[batchIndex];
 
-        // Add delay between requests to avoid rate limiting (1 second base delay)
-        if (i > 0) {
-          await this.delay(1000 * i); // Progressive delay: 1s, 2s, 3s...
+        console.log(`[ImageService] Processing batch ${batchIndex + 1}/${chunks.length} (${chunk.length} concurrent requests)`);
+
+        // Process chunk concurrently
+        const batchPromises = chunk.map(request =>
+          this.generateSingleImageWithRetry(request, model)
+        );
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        const rateLimitErrors = this.count429Errors(batchResults);
+
+        // Process batch results
+        const processedResults = this.processBatchResults(batchResults);
+        results.push(...processedResults);
+
+        const batchSuccessCount = processedResults.filter(r => r.success).length;
+        const batchFailedCount = processedResults.filter(r => !r.success).length;
+
+        console.log(`[ImageService] Batch ${batchIndex + 1} completed: ${batchSuccessCount} success, ${batchFailedCount} failed`);
+
+        // Adaptive concurrency reduction for high rate limit errors
+        if (rateLimitErrors > chunk.length * 0.5 && currentConcurrency > 1) {
+          currentConcurrency = Math.max(1, Math.floor(currentConcurrency / 2));
+          console.warn(`[ImageService] High rate limit errors (${rateLimitErrors}/${chunk.length}), reducing concurrency to ${currentConcurrency}`);
+
+          // Regenerate remaining chunks with reduced concurrency
+          if (batchIndex < chunks.length - 1) {
+            const remainingRequests = chunks.slice(batchIndex + 1).flat();
+            const remainingChunks = this.chunkArray(remainingRequests, currentConcurrency);
+            chunks.splice(batchIndex + 1, chunks.length - batchIndex - 1, ...remainingChunks);
+          }
         }
 
-        try {
-          const result = await this.generateSingleImageWithRetry({
-            ...params,
-            seed,
-            sequence: i + 1
-          }, model);
-          results.push(result);
-        } catch (error) {
-          results.push({
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            sequence: i + 1
-          });
+        // Rate limiting delay between batches (except last batch)
+        if (batchIndex < chunks.length - 1) {
+          console.log(`[ImageService] Waiting ${this.batchDelayMs}ms before next batch...`);
+          await this.delay(this.batchDelayMs);
         }
       }
 
+      const totalTime = Date.now() - startTime;
       const successfulCount = results.filter(r => r.success).length;
       const failedCount = results.filter(r => !r.success).length;
       const successfulUrls = results.filter(r => r.success).map(r => r.imageUrl).filter(Boolean) as string[];
+
+      console.log(`[ImageService] Generated ${successfulCount}/${numOutputs} images successfully in ${totalTime}ms`);
 
       return {
         success: successfulCount > 0,
@@ -257,5 +314,50 @@ export class ImageService {
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Helper method to chunk array into smaller arrays
+   */
+  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
+  }
+
+  /**
+   * Count 429 errors in batch results
+   */
+  private count429Errors(results: PromiseSettledResult<SingleImageResult>[]): number {
+    return results.filter(result => {
+      if (result.status === 'rejected') {
+        const errorMessage = result.reason?.toString().toLowerCase() || '';
+        return errorMessage.includes('429') || errorMessage.includes('capacity temporarily exceeded');
+      }
+      return false;
+    }).length;
+  }
+
+  /**
+   * Process settled batch results into SingleImageResult array
+   */
+  private processBatchResults(results: PromiseSettledResult<SingleImageResult>[]): SingleImageResult[] {
+    const batchResults: SingleImageResult[] = [];
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        batchResults.push(result.value);
+      } else {
+        batchResults.push({
+          success: false,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          sequence: batchResults.length + 1
+        });
+      }
+    }
+
+    return batchResults;
   }
 }

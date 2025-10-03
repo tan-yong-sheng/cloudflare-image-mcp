@@ -103,12 +103,10 @@ List all available models with their capabilities and supported parameters.
 
 Read more [here](./docs/env_setup.md) to know how to get all environment variables for Cloudflare Workers AI and Cloudflare R2 storage required for this MCP setup.
 
-### Required
+### Cloudflare Workers AI Configuration for image generation (Required, except DEFAULT_IMAGE_GENERATION_MODEL)
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
-
-### Optional
-- `DEFAULT_IMAGE_GENERATION_MODEL`: Default model to use (optional, defaults to FLUX Schnell)
+- `DEFAULT_IMAGE_GENERATION_MODEL`: Default model to use (optional, defaults to lucid-origin)
 
 ### S3 Storage Configuration (Required)
 - `S3_BUCKET`: S3 bucket name for storing generated images
@@ -118,9 +116,14 @@ Read more [here](./docs/env_setup.md) to know how to get all environment variabl
 - `S3_ENDPOINT`: Custom endpoint (e.g., Cloudflare R2 endpoint)
 - `S3_CDN_URL`: Custom CDN URL for image links
 
-### Storage Cleanup Configuration
+### Storage Cleanup Configuration (Optional)
 - `IMAGE_CLEANUP_ENABLED`: Enable automatic cleanup of old images (default: false)
 - `IMAGE_CLEANUP_OLDER_THAN`: Delete files older than N days (requires IMAGE_CLEANUP_ENABLED=true)
+
+### Performance & Rate Limiting Configuration (Optional)
+- `IMAGE_GENERATION_CONCURRENCY`: Number of concurrent image generation requests (default: 2, range: 1-8)
+- `IMAGE_GENERATION_BATCH_DELAY_MS`: Delay between batches of concurrent requests in milliseconds (default: 1000, range: 100-10000)
+- `IMAGE_GENERATION_MAX_RETRIES`: Maximum retry attempts for rate-limited requests (default: 3, range: 0-10)
 
 
 #### Example Configuration (.env file)
@@ -141,6 +144,11 @@ S3_CDN_URL="https://pub-....r2.dev"
 # Optional cleanup configuration
 IMAGE_CLEANUP_ENABLED=true
 IMAGE_CLEANUP_OLDER_THAN=1d # (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
+
+# Optional performance configuration
+IMAGE_GENERATION_CONCURRENCY=2    # Default: 2 concurrent requests (range: 1-8)
+IMAGE_GENERATION_BATCH_DELAY_MS=1000  # Default: 1s delay between batches (range: 100-10000ms)
+IMAGE_GENERATION_MAX_RETRIES=3   # Default: 3 retry attempts (range: 0-10)
 ```
 
 ## Error Handling
