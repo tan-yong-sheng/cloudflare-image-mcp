@@ -104,6 +104,15 @@ S3_SECRET_KEY="your_secret_key"
 
 ![Create R2 User API Token - Part 4](../static/img/r2-create-user-api-token-part4.png)
 
+
+### Step 6 (Optional): Automatic Cleanup of AI-Generated Images on Cloudflare R2
+
+Use object lifecycle rules to automate the management or deletion of objects in Cloudflare R2 after a specified time.
+
+![Set auto-cleanup of AI-generated images on Cloudflare R2 - Part 1](../static/img/r2-set-object-lifecycle-rule-part1.png)
+
+![Set auto-cleanup of AI-generated images on Cloudflare R2 - Part 2](../static/img/r2-set-object-lifecycle-rule-part2.png)
+
 ## References
 1. Cloudflare Docs - Create API token [https://developers.cloudflare.com/fundamentals/api/get-started/create-token/](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
 2. How to setup Cloudflare R2 bucket & generate access key [https://dev.to/jacksbridger/how-to-setup-cloudflare-r2-bucket-generate-access-key-4icd](https://dev.to/jacksbridger/how-to-setup-cloudflare-r2-bucket-generate-access-key-4icd)
