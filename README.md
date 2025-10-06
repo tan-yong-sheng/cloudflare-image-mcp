@@ -116,9 +116,6 @@ Read more [here](./docs/env_setup.md) to know how to get all environment variabl
 - `S3_ENDPOINT`: Custom endpoint (e.g., Cloudflare R2 endpoint)
 - `S3_CDN_URL`: Custom CDN URL for image links
 
-### Storage Cleanup Configuration (Optional)
-- `IMAGE_CLEANUP_ENABLED`: Enable automatic cleanup of old images (default: false)
-- `IMAGE_CLEANUP_OLDER_THAN`: Delete files older than N days (requires IMAGE_CLEANUP_ENABLED=true)
 
 ### Performance & Rate Limiting Configuration (Optional)
 - `IMAGE_GENERATION_CONCURRENCY`: Number of concurrent image generation requests (default: 2, range: 1-8)
@@ -132,7 +129,7 @@ Read more [here](./docs/env_setup.md) to know how to get all environment variabl
 **Logging Features:**
 - **Centralized logging system** with consistent formatting and timestamps
 - **Service-specific prefixes**: `[Server]`, `[ImageService]`, `[S3 Storage]` for easy identification
-- **Specialized loggers**: 🧹 cleanup, 🚦 rate limiting, 🌐 API, 💾 storage operations
+- **Specialized loggers**: 🚦 rate limiting, 🌐 API, 💾 storage operations
 - **Conditional logging**: Debug messages only show in debug mode
 - **Performance timing**: Built-in timing helpers for performance monitoring
 
@@ -152,9 +149,6 @@ S3_SECRET_KEY="your_secret_key"
 S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
 S3_CDN_URL="https://pub-....r2.dev"
 
-# Optional cleanup configuration
-IMAGE_CLEANUP_ENABLED=true
-IMAGE_CLEANUP_OLDER_THAN=1d # (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
 
 # Optional performance configuration
 IMAGE_GENERATION_CONCURRENCY=2    # Default: 2 concurrent requests (range: 1-8)

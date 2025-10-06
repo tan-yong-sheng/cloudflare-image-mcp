@@ -118,11 +118,7 @@ export class Logger {
     this.log('error', message, ...args);
   }
 
-  // Specialized methods for common use cases
-  cleanup(message: string, ...args: any[]): void {
-    this.info(`🧹 ${message}`, ...args);
-  }
-
+  
   rateLimit(message: string, ...args: any[]): void {
     this.warn(`🚦 ${message}`, ...args);
   }

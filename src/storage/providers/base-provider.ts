@@ -1,4 +1,4 @@
-import { StorageProvider, StorageResult, ImageMetadata, StorageItem, ListOptions, CleanupOptions, CleanupResult, StorageStatistics } from '../types.js';
+import { StorageProvider, StorageResult, ImageMetadata, StorageItem, ListOptions, StorageStatistics } from '../types.js';
 
 export abstract class BaseStorageProvider implements StorageProvider {
   protected config: Record<string, unknown>;
@@ -10,7 +10,6 @@ export abstract class BaseStorageProvider implements StorageProvider {
   abstract save(buffer: Buffer, metadata: ImageMetadata): Promise<StorageResult>;
   abstract delete(filename: string): Promise<boolean>;
   abstract list(options?: ListOptions): Promise<StorageItem[]>;
-  abstract cleanup(options?: CleanupOptions): Promise<CleanupResult>;
   abstract getStatistics(): Promise<StorageStatistics>;
 
   protected generateFilename(size?: string): string {

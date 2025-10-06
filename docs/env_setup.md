@@ -18,9 +18,6 @@ S3_SECRET_KEY="your_secret_key"
 S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
 S3_CDN_URL="https://pub-....r2.dev"
 
-# Cleanup configuration
-IMAGE_CLEANUP_ENABLED="true"
-IMAGE_CLEANUP_OLDER_THAN="1d"
 ```
 
 ## Part 1: Setup programmatic access to Cloudflare Workers AI
@@ -112,6 +109,8 @@ Use object lifecycle rules to automate the management or deletion of objects in 
 ![Set auto-cleanup of AI-generated images on Cloudflare R2 - Part 1](../static/img/r2-set-object-lifecycle-rule-part1.png)
 
 ![Set auto-cleanup of AI-generated images on Cloudflare R2 - Part 2](../static/img/r2-set-object-lifecycle-rule-part2.png)
+
+> **Note**: The application no longer includes cleanup configuration. Use Cloudflare R2's lifecycle rules for automatic deletion of old images.
 
 ## References
 1. Cloudflare Docs - Create API token [https://developers.cloudflare.com/fundamentals/api/get-started/create-token/](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)

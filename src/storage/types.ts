@@ -2,7 +2,6 @@ export interface StorageProvider {
   save(buffer: Buffer, metadata: ImageMetadata): Promise<StorageResult>;
   delete(filename: string): Promise<boolean>;
   list(options?: ListOptions): Promise<StorageItem[]>;
-  cleanup(options?: CleanupOptions): Promise<CleanupResult>;
   getStatistics(): Promise<StorageStatistics>;
 }
 
@@ -42,22 +41,6 @@ export interface ListOptions {
   offset?: number;
 }
 
-export interface CleanupOptions {
-  olderThan?: string;              // ISO date string
-  dryRun?: boolean;               // Preview without deleting
-}
-
-export interface CleanupResult {
-  deleted: number;
-  failed: number;
-  totalSize: number;              // Total size of deleted files in bytes
-  items: {
-    filename: string;
-    success: boolean;
-    error?: string;
-    size: number;
-  }[];
-}
 
 export interface StorageStatistics {
   totalFiles: number;
@@ -78,10 +61,6 @@ export interface StorageConfig {
       secretKey?: string;
       endpoint?: string;          // For R2 compatibility
       cdnUrl?: string;
-      cleanup?: {
-        enabled: boolean;         // Enable automatic cleanup
-        olderThan?: string;       // Delete files older than duration (ISO date string)
-      };
     };
   };
 }

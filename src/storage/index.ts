@@ -1,6 +1,5 @@
 // Import types
 import type { StorageConfig } from './types.js';
-import { parseDurationString } from './duration-parser.js';
 
 // Factory exports
 export {
@@ -19,11 +18,7 @@ export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
   providers: {
     s3: {
       bucket: 'cloudflare-image-mcp',
-      region: 'auto',
-      cleanup: {
-        enabled: false,
-        olderThan: undefined
-      }
+      region: 'auto'
     }
   }
 };
@@ -41,28 +36,6 @@ export function createConfigFromEnv(): StorageConfig {
     endpoint: process.env.S3_ENDPOINT,
     cdnUrl: process.env.S3_CDN_URL
   };
-
-  // S3 storage cleanup configuration from environment variables
-  const cleanupEnabled = process.env.IMAGE_CLEANUP_ENABLED === 'true';
-  const olderThan = process.env.IMAGE_CLEANUP_OLDER_THAN || '1d';
-
-  let parsedOlderThan: string | undefined;
-  if (olderThan) {
-    try {
-      // Validate that it's a proper duration string, but keep the original string
-      parseDurationString(olderThan);
-      parsedOlderThan = olderThan; // Keep the original duration string (e.g., "30min", "1h", "7d")
-    } catch (error) {
-      throw new Error(`Invalid IMAGE_CLEANUP_OLDER_THAN value: "${olderThan}". ${error instanceof Error ? error.message : 'Invalid duration format'}`);
-    }
-  }
-
-  if (cleanupEnabled) {
-    config.providers.s3.cleanup = {
-      enabled: cleanupEnabled,
-      olderThan: parsedOlderThan
-    };
-  }
 
   return config;
 }

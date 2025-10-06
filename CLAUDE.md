@@ -64,7 +64,6 @@ This codebase implements a modular MCP (Model Context Protocol) server for Cloud
 
 4. **Storage Layer** (`src/storage/`)
    - Factory pattern for storage providers
-   - Configurable cleanup automation
    - Extensible provider system (local, future S3)
 
 5. **Client Layer** (`src/cloudflare-client.ts`)
@@ -113,12 +112,10 @@ export class FluxSchnellModel extends BaseModel {
 
 **StorageFactory** manages provider instances with caching:
 - Singleton pattern for efficient reuse
-- Configurable cleanup policies via environment variables
 - Extensible for future storage backends
 
 **S3StorageProvider** features:
 - Cloud storage with S3 or Cloudflare R2 compatibility
-- Automated cleanup with configurable policies
 - CDN URL support for direct image access
 - Metadata extraction from filenames
 - Statistics and listing with filtering
@@ -132,10 +129,6 @@ S3_ACCESS_KEY="your_access_key"
 S3_SECRET_KEY="your_secret_key"
 S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
 S3_CDN_URL="https://pub-....r2.dev"
-
-# Cleanup configuration
-IMAGE_CLEANUP_ENABLED=true
-IMAGE_CLEANUP_OLDER_THAN=1d  # 30 days (supports: 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
 ```
 
 ### Dynamic Tool Schema Generation
@@ -243,7 +236,5 @@ The codebase supports 6 models with varying capabilities:
 **Optional:**
 - `DEFAULT_IMAGE_GENERATION_MODEL` - Default model selection
 - `IMAGE_OUTPUT_PATH` - Custom output folder path (default: 'outputs')
-- `IMAGE_CLEANUP_ENABLED` - Enable automatic cleanup (true/false)
-- `IMAGE_CLEANUP_OLDER_THAN` - Cleanup files older than specified duration (e.g., 1d, 7d, 24h)
 
 The architecture emphasizes type safety, modularity, and extensibility while maintaining simplicity for common use cases.
