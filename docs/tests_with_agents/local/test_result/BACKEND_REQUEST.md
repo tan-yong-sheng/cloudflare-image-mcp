@@ -122,6 +122,59 @@ curl -X POST http://localhost:3000/v1/images/edits \
 
 ---
 
+## New Test Results (2026-01-27)
+
+### Text-to-Image Tests
+
+| Test | Model | Input | Response | Status |
+|------|-------|-------|----------|--------|
+| FLUX.1 schnell txt2img | @cf/black-forest-labs/flux-1-schnell | `{"model":"@cf/black-forest-labs/flux-1-schnell","prompt":"a cyberpunk city skyline at night","n":1,"size":"512x512"}` | `{"created":1769521463485,"data":[{"url":"https://...","revised_prompt":"a cyberpunk city skyline at night"}]}` | PASS |
+| SDXL Lightning txt2img | @cf/bytedance/stable-diffusion-xl-lightning | `{"model":"@cf/bytedance/stable-diffusion-xl-lightning","prompt":"a magical forest with glowing mushrooms","n":1,"size":"512x512"}` | `{"created":1769521484953,"data":[{"url":"https://...","revised_prompt":"a magical forest with glowing mushrooms"}]}` | PASS |
+| Leonardo Phoenix txt2img | @cf/leonardo/phoenix-1.0 | `{"model":"@cf/leonardo/phoenix-1.0","prompt":"ancient dragon flying over mountains","n":1,"size":"512x512"}` | `{"created":1769521493345,"data":[{"url":"https://...","revised_prompt":"ancient dragon flying over mountains"}]}` | PASS |
+
+### Image-to-Image Tests (multipart)
+
+| Test | Model | Input | Response | Status |
+|------|-------|-------|----------|--------|
+| SDXL img2img (multipart) | @cf/stabilityai/stable-diffusion-xl-base-1.0 | `-F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" -F "prompt=Transform into a winter wonderland with snow" -F "image=@test_images/white-cloud-blue-sky-sea.jpg" -F "n=1" -F "size=512x512" -F "strength=0.7"` | `{"created":1769521507256,"data":[{"url":"https://...","revised_prompt":"..."}]}` | PASS |
+
+### Inpainting Tests (multipart)
+
+| Test | Model | Input | Response | Status |
+|------|-------|-------|----------|--------|
+| SD 1.5 Inpainting (multipart) | @cf/runwayml/stable-diffusion-v1-5-inpainting | `-F "model=@cf/runwayml/stable-diffusion-v1-5-inpainting" -F "prompt=Replace background with tropical beach" -F "image=@test_images/white-cloud-blue-sky-sea.jpg" -F "mask=@test_images/mask.png" -F "n=1" -F "size=512x512"` | `{"created":1769521725875,"data":[{"url":"https://...","revised_prompt":"..."}]}` | PASS |
+| SDXL Base Inpainting (multipart) | @cf/stabilityai/stable-diffusion-xl-base-1.0 | `-F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" -F "prompt=Replace background with sunset beach scene" -F "image=@test_images/test_img.jpg" -F "mask=@test_images/test_mask.png" -F "n=1" -F "size=512x512"` | `{"created":1769521737238,"data":[{"url":"https://...","revised_prompt":"..."}]}` | PASS |
+
+### curl Issue Encountered
+
+During testing, encountered a curl issue on Windows Git Bash:
+```
+curl: (26) Failed to open/read local data from file/application
+```
+
+**Solution:** Used forward slashes with absolute Windows paths:
+```bash
+# Works
+curl -X POST http://localhost:3000/v1/images/edits -F "image=@C:/Users/.../test_images/test_img.jpg"
+
+# Failed
+curl -X POST http://localhost:3000/v1/images/edits -F "image=@/c/Users/.../test_images/test_img.jpg"
+```
+
+---
+
+## Updated Summary
+
+| Category | Total | Passed | Failed | Notes |
+|----------|-------|--------|--------|-------|
+| Text-to-Image | 11 | 10 | 1 | 1 NSFW filter |
+| Image-to-Image (multipart) | 6 | 6 | 0 | JSON format has issues |
+| Inpainting (multipart) | 4 | 4 | 0 | JSON format has issues |
+| OpenAI Compatibility | 5 | 5 | 0 | All formats work |
+| **Total** | **26** | **25** | **1** | |
+
+---
+
 ## Recommendations
 
 1. **Use multipart format** for img2img and inpainting operations
