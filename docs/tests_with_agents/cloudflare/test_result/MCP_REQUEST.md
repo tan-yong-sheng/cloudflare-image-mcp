@@ -27,7 +27,7 @@ curl -s "https://cloudflare-image-workers.tys203831.workers.dev/mcp" \
     "tools": [
       {
         "name": "run_models",
-        "description": "You must call \"list_models\" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format \"@cf/black-forest-labs/flux-1-schnell\". You must call \"describe_model\" first to obtain the params required to use this tool, UNLESS the user explicitly provides params. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image, inpainting), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (inpainting).",
+        "description": "You must call \"list_models\" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format \"@cf/black-forest-labs/flux-1-schnell\". You must call \"describe_model\" first to obtain the params required to use this tool, UNLESS the user explicitly provides params. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image, inpainting), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (inpainting).",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -85,7 +85,7 @@ curl -s "https://cloudflare-image-workers.tys203831.workers.dev/mcp" \
     "content": [
       {
         "type": "text",
-        "text": "{\n  \"@cf/black-forest-labs/flux-1-schnell\": [\n    \"text-to-image\"\n  ],\n  \"@cf/black-forest-labs/flux-2-klein-4b\": [\n    \"text-to-image\",\n    \"image-to-image\"\n  ],\n  \"@cf/black-forest-labs/flux-2-dev\": [\n    \"text-to-image\",\n    \"image-to-image\"\n  ],\n  \"@cf/stabilityai/stable-diffusion-xl-base-1.0\": [\n    \"text-to-image\",\n    \"image-to-image\",\n    \"inpainting\"\n  ],\n  \"@cf/bytedance/stable-diffusion-xl-lightning\": [\n    \"text-to-image\"\n  ],\n  \"@cf/lykon/dreamshaper-8-lcm\": [\n    \"text-to-image\",\n    \"image-to-image\"\n  ],\n  \"@cf/leonardo/lucid-origin\": [\n    \"text-to-image\"\n  ],\n  \"@cf/leonardo/phoenix-1.0\": [\n    \"text-to-image\"\n  ],\n  \"@cf/runwayml/stable-diffusion-v1-5-img2img\": [\n    \"image-to-image\"\n  ],\n  \"@cf/runwayml/stable-diffusion-v1-5-inpainting\": [\n    \"inpainting\"\n  ]\n}"
+        "text": "{\n  \"@cf/black-forest-labs/flux-1-schnell\": [\n    \"text-to-image\"\n  ],\n  \"@cf/black-forest-labs/flux-2-klein-4b\": [\n    \"text-to-image\",\n    \"image-to-image\"\n  ],\n  \"@cf/black-forest-labs/flux-2-dev\": [\n    \"text-to-image\",\n    \"image-to-image\"\n  ],\n  \"@cf/stabilityai/stable-diffusion-xl-base-1.0\": [\n    \"text-to-image\",\n    \"image-to-image\",\n    \"inpainting\"\n  ],\n  \"@cf/bytedance/stable-diffusion-xl-lightning\": [\n    \"text-to-image\"\n  ],\n  \"@cf/lykon/dreamshaper-8-lcm-8-lcm\": [\n    \"text-to-image\",\n    \"image-to-image\"\n  ],\n  \"@cf/leonardo/lucid-origin\": [\n    \"text-to-image\"\n  ],\n  \"@cf/leonardo/phoenix-1.0\": [\n    \"text-to-image\"\n  ],\n  \"@cf/runwayml/stable-diffusion-v1-5-img2img\": [\n    \"image-to-image\"\n  ],\n  \"@cf/runwayml/stable-diffusion-v1-5-inpainting\": [\n    \"inpainting\"\n  ]\n}"
       }
     ]
   }
@@ -100,7 +100,7 @@ curl -s "https://cloudflare-image-workers.tys203831.workers.dev/mcp" \
   "@cf/black-forest-labs/flux-2-dev": ["text-to-image", "image-to-image"],
   "@cf/stabilityai/stable-diffusion-xl-base-1.0": ["text-to-image", "image-to-image", "inpainting"],
   "@cf/bytedance/stable-diffusion-xl-lightning": ["text-to-image"],
-  "@cf/lykon/dreamshaper-8-lcm": ["text-to-image", "image-to-image"],
+  "@cf/lykon/dreamshaper-8-lcm-8-lcm": ["text-to-image", "image-to-image"],
   "@cf/leonardo/lucid-origin": ["text-to-image"],
   "@cf/leonardo/phoenix-1.0": ["text-to-image"],
   "@cf/runwayml/stable-diffusion-v1-5-img2img": ["image-to-image"],
@@ -299,8 +299,8 @@ curl -s "https://cloudflare-image-workers.tys203831.workers.dev/mcp" \
 | 1 | tools/list | [x] SUCCESS |
 | 2 | list_models | [x] SUCCESS |
 | 3 | describe_model | [x] SUCCESS |
-| 4 | run_models (flux-schnell) | [x] SUCCESS |
-| 5 | run_models (flux-klein) | [x] SUCCESS |
+| 4 | run_models (@cf/black-forest-labs/flux-1-schnell) | [x] SUCCESS |
+| 5 | run_models (@cf/black-forest-labs/flux-2-klein-4b) | [x] SUCCESS |
 | 6 | run_models (phoenix) | [x] SUCCESS |
 | 7 | Error: missing model_id | [x] SUCCESS |
 | 8 | Error: invalid model_id | [x] SUCCESS |
@@ -314,7 +314,7 @@ curl -s "https://cloudflare-image-workers.tys203831.workers.dev/mcp" \
 | @cf/black-forest-labs/flux-2-dev | text-to-image, image-to-image |
 | @cf/stabilityai/stable-diffusion-xl-base-1.0 | text-to-image, image-to-image, inpainting |
 | @cf/bytedance/stable-diffusion-xl-lightning | text-to-image |
-| @cf/lykon/dreamshaper-8-lcm | text-to-image, image-to-image |
+| @cf/lykon/dreamshaper-8-lcm-8-lcm | text-to-image, image-to-image |
 | @cf/leonardo/lucid-origin | text-to-image |
 | @cf/leonardo/phoenix-1.0 | text-to-image |
 | @cf/runwayml/stable-diffusion-v1-5-img2img | image-to-image |

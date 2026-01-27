@@ -123,7 +123,7 @@ npx wrangler deployments
 
 **Fix:**
 1. List available models: `GET /v1/models`
-2. Use correct model ID or alias from `MODEL_ALIASES`
+2. Use correct full model ID (e.g., `@cf/black-forest-labs/flux-1-schnell`)
 
 ### Issue: Workers deployment fails
 

@@ -31,7 +31,7 @@ const validModelIds = listModels().map(m => m.id);
 const isValidModelId = validModelIds.includes(defaultModelRaw) || defaultModelRaw.startsWith('@cf/');
 
 if (defaultModelRaw && !isValidModelId) {
-  console.error(`Error: DEFAULT_MODEL must be a full model_id (e.g., '@cf/black-forest-labs/flux-1-schnell'), not an alias like 'flux-schnell'`);
+  console.error(`Error: DEFAULT_MODEL must be a full model_id (e.g., '@cf/black-forest-labs/flux-1-schnell'), not an alias like '@cf/black-forest-labs/flux-1-schnell'`);
   console.error(`Valid model_ids: ${validModelIds.join(', ')}`);
   process.exit(1);
 }

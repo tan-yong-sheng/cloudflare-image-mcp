@@ -6,9 +6,9 @@
 
 **Origin**: bytedance
 
-**Model Info**: SDXL-Lightning is a lightning-fast text-to-image generation model. It can generate high-quality 1024px images in a few steps.
+**Model Info**: @cf/bytedance/stable-diffusion-xl-lightning is a lightning-fast text-to-image generation model. It can generate high-quality 1024px images in a few steps.
 
-**More information**: [link ↗](https://huggingface.co/ByteDance/SDXL-Lightning)
+**More information**: [link ↗](https://huggingface.co/ByteDance/@cf/bytedance/stable-diffusion-xl-lightning)
 
 **Beta**: Yes
 

@@ -24,12 +24,12 @@ OpenAI's image edits endpoint expects **multipart/form-data** format:
 
 ## Inpainting Test Cases (OpenAI-Compatible)
 
-### Model: SDXL Base 1.0 (sdxl-base)
+### Model: SDXL Base 1.0 (@cf/stabilityai/stable-diffusion-xl-base-1.0)
 
 ```bash
 # SDXL Inpainting - OpenAI-compatible multipart format
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=sdxl-base" \
+  -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Replace the background with a tropical beach" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "mask=@test_images/mask.png;type=image/png" \
@@ -53,12 +53,12 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 
 ---
 
-### Model: SD 1.5 Inpainting (sd-1.5-inpainting)
+### Model: SD 1.5 Inpainting (@cf/runwayml/stable-diffusion-v1-5-inpainting)
 
 ```bash
 # SD 1.5 Inpainting - OpenAI-compatible multipart format
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=sd-1.5-inpainting" \
+  -F "model=@cf/runwayml/stable-diffusion-v1-5-inpainting" \
   -F "prompt=Replace with a dragon" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "mask=@test_images/mask.png;type=image/png" \
@@ -71,12 +71,12 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 
 ## Image-to-Image Test Cases (OpenAI-Compatible)
 
-### Model: SDXL Base 1.0 (sdxl-base) - No Mask
+### Model: SDXL Base 1.0 (@cf/stabilityai/stable-diffusion-xl-base-1.0) - No Mask
 
 ```bash
 # SDXL Image-to-Image - OpenAI-compatible multipart format (NO mask)
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=sdxl-base" \
+  -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Transform into a winter wonderland scene" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "n=1" \
@@ -86,12 +86,12 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 
 ---
 
-### Model: DreamShaper 8 LCM (dreamshaper) - No Mask
+### Model: @cf/lykon/dreamshaper-8-lcm 8 LCM (@cf/lykon/dreamshaper-8-lcm) - No Mask
 
 ```bash
-# DreamShaper Image-to-Image - OpenAI-compatible multipart format (NO mask)
+# @cf/lykon/dreamshaper-8-lcm Image-to-Image - OpenAI-compatible multipart format (NO mask)
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=dreamshaper" \
+  -F "model=@cf/lykon/dreamshaper-8-lcm" \
   -F "prompt=Make this look like an oil painting" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "n=1" \
@@ -101,12 +101,12 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 
 ---
 
-### Model: SD 1.5 Img2Img (sd-1.5-img2img) - No Mask
+### Model: SD 1.5 Img2Img (@cf/runwayml/stable-diffusion-v1-5-img2img) - No Mask
 
 ```bash
 # SD 1.5 Image-to-Image - OpenAI-compatible multipart format (NO mask)
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=sd-1.5-img2img" \
+  -F "model=@cf/runwayml/stable-diffusion-v1-5-img2img" \
   -F "prompt=Transform into a cyberpunk character" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "n=1" \
@@ -116,12 +116,12 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 
 ---
 
-### Model: FLUX Klein (flux-klein) - No Mask
+### Model: FLUX Klein (@cf/black-forest-labs/flux-2-klein-4b) - No Mask
 
 ```bash
 # FLUX Klein Image-to-Image - OpenAI-compatible multipart format (NO mask)
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=flux-klein" \
+  -F "model=@cf/black-forest-labs/flux-2-klein-4b" \
   -F "prompt=Transform into a cyberpunk style with neon lights" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "n=1" \
@@ -130,12 +130,12 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 
 ---
 
-### Model: FLUX Dev (flux-dev) - No Mask
+### Model: FLUX Dev (@cf/black-forest-labs/flux-2-dev) - No Mask
 
 ```bash
 # FLUX Dev Image-to-Image - OpenAI-compatible multipart format (NO mask)
 curl -X POST "http://localhost:3000/v1/images/edits" \
-  -F "model=flux-dev" \
+  -F "model=@cf/black-forest-labs/flux-2-dev" \
   -F "prompt=Turn this into a watercolor painting" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "n=1" \
@@ -150,7 +150,7 @@ curl -X POST "http://localhost:3000/v1/images/edits" \
 |---------|------------|----------------|
 | Uses `mask` parameter | ✅ Yes | ❌ No |
 | Edits only masked regions | Yes | No (transforms entire image) |
-| Supported Models | SDXL Base, SD 1.5 Inpainting | FLUX Klein/Dev, SDXL Base, DreamShaper, SD 1.5 Img2Img |
+| Supported Models | SDXL Base, SD 1.5 Inpainting | FLUX Klein/Dev, SDXL Base, @cf/lykon/dreamshaper-8-lcm, SD 1.5 Img2Img |
 
 ---
 

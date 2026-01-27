@@ -34,7 +34,7 @@ Status: [/] PASSED
 ```bash
 curl http://localhost:3000/v1/models
 ```
-Result: 6 models returned (FLUX, SDXL, DreamShaper)
+Result: 6 models returned (FLUX, SDXL, @cf/lykon/dreamshaper-8-lcm)
 Status: [/] PASSED
 
 ### 2.3 Image Generation
@@ -153,7 +153,7 @@ Status: [/] PASSED
 ### 5.6 MCP describe_model - Production
 ```bash
 curl -X POST https://cloudflare-image-workers.tys203831.workers.dev/mcp/message \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","name":"describe_model","arguments":{"model":"flux-schnell"}}'
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","name":"describe_model","arguments":{"model":"@cf/black-forest-labs/flux-1-schnell"}}'
 ```
 Result: Returns FLUX.1 [schnell] parameter documentation
 Status: [/] PASSED
@@ -161,7 +161,7 @@ Status: [/] PASSED
 ### 5.7 MCP generate_image - Production ✅
 ```bash
 curl -X POST https://cloudflare-image-workers.tys203831.workers.dev/mcp/message \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","name":"generate_image","arguments":{"prompt":"a cute robot reading a book in a library","model":"flux-schnell"}}'
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","name":"generate_image","arguments":{"prompt":"a cute robot reading a book in a library","model":"@cf/black-forest-labs/flux-1-schnell"}}'
 ```
 Result: `{"content":[{"type":"text","text":"Image generated successfully!\n\n![Generated Image](https://pub-images.example.com/images/2026-01-26/mkvhxfss-acqgp1fv.png)"}]}`
 Status: [/] PASSED - Image generated and stored in R2!
@@ -314,7 +314,7 @@ Response:
 ```bash
 curl -X POST https://cloudflare-image-workers.tys203831.workers.dev/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"generate_image","arguments":{"prompt":"a futuristic cyberpunk city at night with neon lights","model":"flux-klein","n":1}}}'
+  -d '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"generate_image","arguments":{"prompt":"a futuristic cyberpunk city at night with neon lights","model":"@cf/black-forest-labs/flux-2-klein-4b","n":1}}}'
 ```
 Response:
 ```json
@@ -354,7 +354,7 @@ Response:
 ```bash
 curl -X POST https://cloudflare-image-workers.tys203831.workers.dev/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"describe_model","arguments":{"model":"sd-1.5-img2img"}}}'
+  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"describe_model","arguments":{"model":"@cf/runwayml/stable-diffusion-v1-5-img2img"}}}'
 ```
 Response:
 ```json
@@ -391,9 +391,9 @@ Response:
 | `tools/list` | ✅ | Returns 3 tools |
 | `list_models` | ✅ | Returns 10 models |
 | `describe_model` | ✅ | Returns model parameters |
-| `generate_image (flux-schnell)` | ✅ | Generates image |
-| `generate_image (flux-klein)` | ✅ | Generates image (FLUX.2 fixed!) |
-| `generate_image (flux-dev)` | ✅ | Generates image (FLUX.2 fixed!) |
+| `generate_image (@cf/black-forest-labs/flux-1-schnell)` | ✅ | Generates image |
+| `generate_image (@cf/black-forest-labs/flux-2-klein-4b)` | ✅ | Generates image (FLUX.2 fixed!) |
+| `generate_image (@cf/black-forest-labs/flux-2-dev)` | ✅ | Generates image (FLUX.2 fixed!) |
 | `generate_image (phoenix)` | ✅ | Generates image (Leonardo) |
 
 ### Model List (10 models)
@@ -405,7 +405,7 @@ Response:
 | FLUX.2 [dev] | seed, custom-size | text-to-image, image-to-image |
 | Stable Diffusion XL Base 1.0 | seed, custom-size, guidance, negative-prompt | text-to-image, image-to-image, inpainting |
 | SDXL Lightning | seed, custom-size, guidance, negative-prompt | text-to-image |
-| DreamShaper 8 LCM | seed, custom-size, guidance, negative-prompt | text-to-image, image-to-image |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | seed, custom-size, guidance, negative-prompt | text-to-image, image-to-image |
 | Lucid Origin | seed, custom-size, guidance | text-to-image |
 | Phoenix 1.0 | seed, custom-size, guidance, negative-prompt | text-to-image |
 | Stable Diffusion 1.5 Img2Img | seed, custom-size, guidance, negative-prompt | image-to-image |

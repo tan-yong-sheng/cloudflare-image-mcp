@@ -5,43 +5,24 @@
 import type { Env, ModelConfig, ParsedParams } from '../types.js';
 import { ParamParser } from './param-parser.js';
 import { R2StorageService } from './r2-storage.js';
-import { MODEL_CONFIGS, MODEL_ALIASES } from '../config/models.js';
+import { MODEL_CONFIGS } from '../config/models.js';
 
 export class ImageGeneratorService {
   private ai: Ai;
   private storage: R2StorageService;
   private models: Map<string, ModelConfig>;
-  private aliases: Map<string, string>;
 
   constructor(env: Env) {
     this.ai = env.AI;
     this.storage = new R2StorageService(env);
     this.models = new Map(Object.entries(MODEL_CONFIGS));
-    this.aliases = new Map(Object.entries(MODEL_ALIASES));
   }
 
   /**
-   * Resolve model ID from alias or direct ID
-   */
-  resolveModelId(input: string): string {
-    // Check if it's an alias
-    if (this.aliases.has(input)) {
-      return this.aliases.get(input)!;
-    }
-    // Check if it's a direct model ID
-    if (this.models.has(input)) {
-      return input;
-    }
-    // Unknown model
-    throw new Error(`Unknown model: ${input}`);
-  }
-
-  /**
-   * Get model configuration by ID
+   * Get model configuration by full model ID
    */
   getModelConfig(modelId: string): ModelConfig | null {
-    const actualId = this.resolveModelId(modelId);
-    return this.models.get(actualId) || null;
+    return this.models.get(modelId) || null;
   }
 
   /**

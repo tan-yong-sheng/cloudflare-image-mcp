@@ -1,4 +1,4 @@
-# phoenix-1.0
+# @cf/leonardo/phoenix-1.0
 
 **Model ID**: @cf/leonardo/phoenix-1.0
 

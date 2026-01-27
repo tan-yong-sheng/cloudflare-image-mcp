@@ -58,7 +58,7 @@ src/storage/
 
 ```typescript
 // Format: {date}/{model-slug}/{short-uuid}_{image_size}.{ext}
-// Example: 20240927/flux-schnell/abc123_1024x1024.jpg
+// Example: 20240927/@cf/black-forest-labs/flux-1-schnell/abc123_1024x1024.jpg
 
 const filename = `${timestamp}_${modelSlug}_${shortUuid}.jpg`;
 ```
@@ -67,14 +67,14 @@ const filename = `${timestamp}_${modelSlug}_${shortUuid}.jpg`;
 
 #### S3 Storage (AWS S3)
 ```
-File: s3://bucket/generations/2024-09-27/flux-schnell/20240927_141522_flux-schnell_abc123.jpg
-URL: https://bucket.s3.amazonaws.com/generations/2024-09-27/flux-schnell/abc123_1024x1024.jpg
+File: s3://bucket/generations/2024-09-27/@cf/black-forest-labs/flux-1-schnell/20240927_141522_@cf/black-forest-labs/flux-1-schnell_abc123.jpg
+URL: https://bucket.s3.amazonaws.com/generations/2024-09-27/@cf/black-forest-labs/flux-1-schnell/abc123_1024x1024.jpg
 ```
 
 #### Cloudflare R2 Storage
 ```
-File: s3://bucket/generations/2024-09-27/flux-schnell/20240927_141522_flux-schnell_abc123.jpg
-URL: https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev/generations/2024-09-27/flux-schnell/abc123_1024x1024.jpg
+File: s3://bucket/generations/2024-09-27/@cf/black-forest-labs/flux-1-schnell/20240927_141522_@cf/black-forest-labs/flux-1-schnell_abc123.jpg
+URL: https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev/generations/2024-09-27/@cf/black-forest-labs/flux-1-schnell/abc123_1024x1024.jpg
 ```
 
 ### Configuration
@@ -124,7 +124,7 @@ interface StorageConfig {
 // List images with filtering
 await storage.list({
   dateRange: { start: '2024-09-01', end: '2024-09-30' },
-  model: 'flux-schnell'
+  model: '@cf/black-forest-labs/flux-1-schnell'
 });
 
 // Cleanup old images

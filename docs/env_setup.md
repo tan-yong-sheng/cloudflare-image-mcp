@@ -45,8 +45,8 @@ PORT=3000
 # Image expiry time in hours (default: 24)
 IMAGE_EXPIRY_HOURS=24
 
-# Default model (flux-schnell, flux-klein, flux-dev, sdxl-base, sdxl-lightning, dreamshaper)
-DEFAULT_MODEL="flux-schnell"
+# Default model (@cf/black-forest-labs/flux-1-schnell, @cf/black-forest-labs/flux-2-klein-4b, @cf/black-forest-labs/flux-2-dev, @cf/stabilityai/stable-diffusion-xl-base-1.0, @cf/bytedance/stable-diffusion-xl-lightning, @cf/lykon/dreamshaper-8-lcm)
+DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
 ```
 
 ## File Locations
@@ -161,7 +161,7 @@ S3_CDN_URL="https://pub-xxx.r2.dev"
 # Optional
 PORT=3000
 IMAGE_EXPIRY_HOURS=24
-DEFAULT_MODEL="flux-schnell"
+DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
 ```
 
 ### 3. Start Local Server

@@ -6,7 +6,6 @@ import { Request, Response, Router } from 'express';
 import multer from 'multer';
 import {
   getModelConfig,
-  resolveModelId,
   listModels,
   parseModelParams,
   type AIClient,
@@ -86,8 +85,7 @@ export function createImageAPI(
       }
 
       // Get model config
-      const actualModelId = resolveModelId(modelId);
-      const modelConfig = getModelConfig(actualModelId);
+      const modelConfig = getModelConfig(modelId);
 
       if (!modelConfig) {
         return res.status(400).json({
@@ -104,7 +102,7 @@ export function createImageAPI(
       for (let i = 0; i < n; i++) {
         const currentSeed = seed ? seed + i : undefined;
 
-        const result = await aiClient.generateImage(actualModelId, {
+        const result = await aiClient.generateImage(modelId, {
           prompt,
           steps: steps || modelConfig.limits.defaultSteps,
           seed: currentSeed,
@@ -125,7 +123,7 @@ export function createImageAPI(
 
         // Upload to storage
         const uploadResult = await storage.uploadImage(result.data!, {
-          model: actualModelId,
+          model: modelId,
           prompt,
           size,
           steps: String(steps || modelConfig.limits.defaultSteps),

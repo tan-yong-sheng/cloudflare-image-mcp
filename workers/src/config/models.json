@@ -10,7 +10,9 @@
       "apiVersion": 2,
       "inputFormat": "json",
       "responseFormat": "base64",
-      "supportedTasks": ["text-to-image"],
+      "supportedTasks": [
+        "text-to-image"
+      ],
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -41,7 +43,11 @@
         "maxWidth": 2048,
         "minHeight": 512,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "768x768", "1024x1024"]
+        "supportedSizes": [
+          "512x512",
+          "768x768",
+          "1024x1024"
+        ]
       }
     },
     "@cf/black-forest-labs/flux-2-klein-4b": {
@@ -52,7 +58,10 @@
       "apiVersion": 2,
       "inputFormat": "multipart",
       "responseFormat": "base64",
-      "supportedTasks": ["text-to-image", "image-to-image"],
+      "supportedTasks": [
+        "text-to-image",
+        "image-to-image"
+      ],
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -107,7 +116,13 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["256x256", "512x512", "768x768", "1024x1024", "1280x1280"]
+        "supportedSizes": [
+          "256x256",
+          "512x512",
+          "768x768",
+          "1024x1024",
+          "1280x1280"
+        ]
       }
     },
     "@cf/black-forest-labs/flux-2-dev": {
@@ -118,7 +133,10 @@
       "apiVersion": 2,
       "inputFormat": "multipart",
       "responseFormat": "base64",
-      "supportedTasks": ["text-to-image", "image-to-image"],
+      "supportedTasks": [
+        "text-to-image",
+        "image-to-image"
+      ],
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -173,7 +191,13 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["256x256", "512x512", "768x768", "1024x1024", "1280x1280"]
+        "supportedSizes": [
+          "256x256",
+          "512x512",
+          "768x768",
+          "1024x1024",
+          "1280x1280"
+        ]
       }
     },
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": {
@@ -184,7 +208,11 @@
       "apiVersion": 2,
       "inputFormat": "json",
       "responseFormat": "binary",
-      "supportedTasks": ["text-to-image", "image-to-image", "inpainting"],
+      "supportedTasks": [
+        "text-to-image",
+        "image-to-image",
+        "inpainting"
+      ],
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -267,7 +295,15 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["256x256", "512x512", "768x768", "1024x1024", "1280x1280", "1024x1792", "1792x1024"]
+        "supportedSizes": [
+          "256x256",
+          "512x512",
+          "768x768",
+          "1024x1024",
+          "1280x1280",
+          "1024x1792",
+          "1792x1024"
+        ]
       }
     },
     "@cf/bytedance/stable-diffusion-xl-lightning": {
@@ -278,7 +314,9 @@
       "apiVersion": 2,
       "inputFormat": "json",
       "responseFormat": "binary",
-      "supportedTasks": ["text-to-image"],
+      "supportedTasks": [
+        "text-to-image"
+      ],
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -341,18 +379,24 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "1024x1024"]
+        "supportedSizes": [
+          "512x512",
+          "1024x1024"
+        ]
       }
     },
-    "@cf/lykon/dreamshaper-8-lcm": {
-      "id": "@cf/lykon/dreamshaper-8-lcm",
-      "name": "DreamShaper 8 LCM",
+    "@cf/lykon/dreamshaper-8-lcm-8-lcm": {
+      "id": "@cf/lykon/dreamshaper-8-lcm-8-lcm",
+      "name": "@cf/lykon/dreamshaper-8-lcm 8 LCM",
       "description": "Enhanced photorealistic SD model with LCM acceleration",
       "provider": "lykon",
       "apiVersion": 2,
       "inputFormat": "json",
       "responseFormat": "binary",
-      "supportedTasks": ["text-to-image", "image-to-image"],
+      "supportedTasks": [
+        "text-to-image",
+        "image-to-image"
+      ],
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -429,18 +473,22 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "768x768", "1024x1024"]
+        "supportedSizes": [
+          "512x512",
+          "768x768",
+          "1024x1024"
+        ]
       }
     }
   },
   "modelAliases": {
-    "dall-e-3": "@cf/black-forest-labs/flux-1-schnell",
-    "dall-e-2": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
-    "flux-schnell": "@cf/black-forest-labs/flux-1-schnell",
-    "flux-klein": "@cf/black-forest-labs/flux-2-klein-4b",
-    "flux-dev": "@cf/black-forest-labs/flux-2-dev",
-    "sdxl-base": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
-    "sdxl-lightning": "@cf/bytedance/stable-diffusion-xl-lightning",
-    "dreamshaper": "@cf/lykon/dreamshaper-8-lcm"
+    "@cf/black-forest-labs/flux-1-schnell": "@cf/black-forest-labs/flux-1-schnell",
+    "@cf/stabilityai/stable-diffusion-xl-base-1.0": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    "@cf/black-forest-labs/flux-1-schnell": "@cf/black-forest-labs/flux-1-schnell",
+    "@cf/black-forest-labs/flux-2-klein-4b": "@cf/black-forest-labs/flux-2-klein-4b",
+    "@cf/black-forest-labs/flux-2-dev": "@cf/black-forest-labs/flux-2-dev",
+    "@cf/stabilityai/stable-diffusion-xl-base-1.0": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    "@cf/bytedance/stable-diffusion-xl-lightning": "@cf/bytedance/stable-diffusion-xl-lightning",
+    "@cf/lykon/dreamshaper-8-lcm": "@cf/lykon/dreamshaper-8-lcm-8-lcm"
   }
 }

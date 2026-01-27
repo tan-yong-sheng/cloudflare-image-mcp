@@ -22,7 +22,7 @@ This document contains OpenAI-compatible curl requests for testing image generat
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `model` | string | No | Model ID or alias (defaults to flux-schnell) |
+| `model` | string | No | Model ID or alias (defaults to @cf/black-forest-labs/flux-1-schnell) |
 | `prompt` | string | Yes | Text description of the image |
 | `n` | integer | No | Number of images (1-8, default: 1) |
 | `size` | string | No | Image size (e.g., "1024x1024", "512x512") |
@@ -51,7 +51,7 @@ This document contains OpenAI-compatible curl requests for testing image generat
 
 ### Image-to-Image (`/v1/images/edits` without mask)
 Transforms an entire image based on the prompt.
-- **Models:** FLUX.2 [klein/dev], SDXL Base, DreamShaper, SD 1.5 Img2Img
+- **Models:** FLUX.2 [klein/dev], SDXL Base, @cf/lykon/dreamshaper-8-lcm, SD 1.5 Img2Img
 - **Format:** Multipart form data with `image` parameter
 
 ### Inpainting (`/v1/images/edits` with mask)
@@ -66,16 +66,16 @@ Edits only the masked regions of an image.
 
 | Model ID | Alias | Task Types | Input Format |
 |----------|-------|------------|--------------|
-| @cf/black-forest-labs/flux-1-schnell | flux-schnell | text-to-image | JSON |
-| @cf/black-forest-labs/flux-2-klein-4b | flux-klein | txt2img, img2img | JSON / multipart |
-| @cf/black-forest-labs/flux-2-dev | flux-dev | txt2img, img2img | JSON / multipart |
-| @cf/stabilityai/stable-diffusion-xl-base-1.0 | sdxl-base | txt2img, img2img, inpainting | JSON / multipart |
-| @cf/bytedance/stable-diffusion-xl-lightning | sdxl-lightning | text-to-image | JSON |
-| @cf/lykon/dreamshaper-8-lcm | dreamshaper | txt2img, img2img | JSON / multipart |
-| @cf/leonardo/lucid-origin | lucid-origin | text-to-image | JSON |
+| @cf/black-forest-labs/flux-1-schnell | @cf/black-forest-labs/flux-1-schnell | text-to-image | JSON |
+| @cf/black-forest-labs/flux-2-klein-4b | @cf/black-forest-labs/flux-2-klein-4b | txt2img, img2img | JSON / multipart |
+| @cf/black-forest-labs/flux-2-dev | @cf/black-forest-labs/flux-2-dev | txt2img, img2img | JSON / multipart |
+| @cf/stabilityai/stable-diffusion-xl-base-1.0 | @cf/stabilityai/stable-diffusion-xl-base-1.0 | txt2img, img2img, inpainting | JSON / multipart |
+| @cf/bytedance/stable-diffusion-xl-lightning | @cf/bytedance/stable-diffusion-xl-lightning | text-to-image | JSON |
+| @cf/lykon/dreamshaper-8-lcm-8-lcm | @cf/lykon/dreamshaper-8-lcm | txt2img, img2img | JSON / multipart |
+| @cf/leonardo/lucid-origin | @cf/leonardo/lucid-origin | text-to-image | JSON |
 | @cf/leonardo/phoenix-1.0 | phoenix | text-to-image | JSON |
-| @cf/runwayml/stable-diffusion-v1-5-img2img | sd-1.5-img2img | image-to-image | JSON / multipart |
-| @cf/runwayml/stable-diffusion-v1-5-inpainting | sd-1.5-inpainting | inpainting | JSON / multipart |
+| @cf/runwayml/stable-diffusion-v1-5-img2img | @cf/runwayml/stable-diffusion-v1-5-img2img | image-to-image | JSON / multipart |
+| @cf/runwayml/stable-diffusion-v1-5-inpainting | @cf/runwayml/stable-diffusion-v1-5-inpainting | inpainting | JSON / multipart |
 
 ---
 
@@ -88,7 +88,7 @@ Edits only the masked regions of an image.
 curl -X POST http://localhost:3000/v1/images/generations \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "flux-schnell",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
     "prompt": "a cyberpunk city skyline at night",
     "n": 1,
     "size": "1024x1024"
@@ -100,7 +100,7 @@ curl -X POST http://localhost:3000/v1/images/generations \
 ```bash
 # SDXL img2img - Use multipart form data
 curl -X POST http://localhost:3000/v1/images/edits \
-  -F "model=sdxl-base" \
+  -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Transform into a winter wonderland scene" \
   -F "image=@test_images/white-cloud-blue-sky-sea.jpg;type=image/jpeg" \
   -F "n=1" \
@@ -128,7 +128,7 @@ curl -X POST http://localhost:3000/v1/images/edits \
 # IMPORTANT: Use file upload (multipart), NOT JSON with image_b64
 # OpenAI standard: https://platform.openai.com/docs/api-reference/images
 curl -X POST http://localhost:3000/v1/images/edits \
-  -F "model=sdxl-base" \
+  -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Replace the background with a tropical beach" \
   -F "image=@test_images/input_image.jpg;type=image/jpeg" \
   -F "mask=@test_images/mask.png;type=image/png" \
@@ -155,7 +155,7 @@ curl -X POST "https://api.openai.com/v1/images/edits" \
 curl -X POST http://localhost:3000/v1/images/generations \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "flux-schnell",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
     "prompt": "a cyberpunk city",
     "response_format": "b64_json"
   }'
@@ -174,7 +174,7 @@ curl -X POST http://localhost:3000/v1/images/generations \
 | FLUX.2 [dev] | [x] Tested | JSON format |
 | SDXL Base 1.0 | [x] Tested | JSON format |
 | SDXL Lightning | [x] Tested | JSON format |
-| DreamShaper 8 LCM | [x] Tested | JSON format |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | [x] Tested | JSON format |
 | Leonardo Lucid Origin | [!] NSFW | Content filter |
 | Leonardo Phoenix 1.0 | [x] Tested | JSON format |
 
@@ -185,7 +185,7 @@ curl -X POST http://localhost:3000/v1/images/generations \
 | FLUX.2 [klein] | multipart | [x] Tested | `-F "image=@file.jpg"` |
 | FLUX.2 [dev] | multipart | [x] Tested | `-F "image=@file.jpg"` |
 | SDXL Base 1.0 | multipart | [x] Tested | `-F "image=@file.jpg"` |
-| DreamShaper 8 LCM | multipart | [x] Tested | `-F "image=@file.jpg"` |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | multipart | [x] Tested | `-F "image=@file.jpg"` |
 | SD 1.5 Img2Img | multipart | [x] Tested | `-F "image=@file.jpg"` |
 
 ### Inpainting Tests (`/v1/images/edits` with mask)

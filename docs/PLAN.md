@@ -354,7 +354,7 @@ run_models → generates images using model_id
 | @cf/black-forest-labs/flux-2-dev | BFL | text-to-image, image-to-image | Multipart |
 | @cf/stabilityai/stable-diffusion-xl-base-1.0 | StabilityAI | text-to-image, image-to-image, inpainting | JSON |
 | @cf/bytedance/stable-diffusion-xl-lightning | ByteDance | text-to-image | JSON |
-| @cf/lykon/dreamshaper-8-lcm | Lykon | text-to-image, image-to-image | JSON |
+| @cf/lykon/dreamshaper-8-lcm-8-lcm | Lykon | text-to-image, image-to-image | JSON |
 | @cf/leonardo/lucid-origin | Leonardo | text-to-image | JSON |
 | @cf/leonardo/phoenix-1.0 | Leonardo | text-to-image | JSON |
 | @cf/runwayml/stable-diffusion-v1-5-img2img | RunwayML | image-to-image | JSON |

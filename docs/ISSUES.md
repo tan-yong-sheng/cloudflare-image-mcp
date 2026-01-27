@@ -64,7 +64,7 @@ curl https://api.openai.com/v1/images/edits \
 **Workaround:** Use multipart form data format instead:
 ```bash
 curl -X POST http://localhost:3000/v1/images/edits \
-  -F "model=sdxl-base" \
+  -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Transform into a winter scene" \
   -F "image=@test_image.jpg;type=image/jpeg" \
   -F "n=1" \

@@ -1,6 +1,6 @@
-# dreamshaper-8-lcm
+# @cf/lykon/dreamshaper-8-lcm-8-lcm
 
-**Model ID**: @cf/lykon/dreamshaper-8-lcm
+**Model ID**: @cf/lykon/dreamshaper-8-lcm-8-lcm
 
 **Mode**: Text-to-Image
 
@@ -10,7 +10,7 @@
 
 
 
-More information: [link ↗](https://huggingface.co/Lykon/DreamShaper)
+More information: [link ↗](https://huggingface.co/Lykon/@cf/lykon/dreamshaper-8-lcm)
 
 Beta: Yes
 
@@ -30,7 +30,7 @@ export default {
     };
 
     const response = await env.AI.run(
-      "@cf/lykon/dreamshaper-8-lcm",
+      "@cf/lykon/dreamshaper-8-lcm-8-lcm",
       inputs
     );
 
@@ -46,7 +46,7 @@ export default {
 
 - curl
 ```curl
-curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/lykon/dreamshaper-8-lcm  \
+curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/lykon/dreamshaper-8-lcm-8-lcm  \
   -X POST  \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"  \
   -d '{ "prompt": "cyberpunk cat" }'

@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en" class="light">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cloudflare AI Image Generator</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"
+        crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
         :root {
@@ -52,7 +54,9 @@
             transition: all 0.3s;
         }
 
-        .btn:focus { outline: none; }
+        .btn:focus {
+            outline: none;
+        }
 
         .btn-primary {
             background-color: var(--primary);
@@ -88,7 +92,9 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
 
-        input, select, textarea {
+        input,
+        select,
+        textarea {
             background-color: var(--background);
             color: var(--text);
             border: 1px solid var(--border);
@@ -98,7 +104,9 @@
             width: 100%;
         }
 
-        input:focus, select:focus, textarea:focus {
+        input:focus,
+        select:focus,
+        textarea:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
@@ -140,7 +148,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: rgba(0,0,0,0.6);
+            background-color: rgba(0, 0, 0, 0.6);
             border-radius: 0.5rem;
             z-index: 10;
             backdrop-filter: blur(4px);
@@ -160,11 +168,20 @@
             width: 100%;
         }
 
-        .hidden { display: none !important; }
+        .hidden {
+            display: none !important;
+        }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
         }
 
         .animate-pulse {
@@ -172,15 +189,24 @@
         }
 
         @media (max-width: 768px) {
-            .mobile-flex-col { flex-direction: column; }
-            .container { padding-left: 1rem; padding-right: 1rem; }
+            .mobile-flex-col {
+                flex-direction: column;
+            }
+
+            .container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
         }
 
         @media (min-width: 1024px) {
-            .container { max-width: 1200px; }
+            .container {
+                max-width: 1200px;
+            }
         }
     </style>
 </head>
+
 <body class="min-h-screen py-4">
     <div class="container mx-auto px-4 py-4 max-w-6xl">
         <div class="flex items-center justify-between mb-6">
@@ -188,7 +214,8 @@
                 <i class="fa-solid fa-image mr-2"></i>AI Image Generator
             </h1>
             <div class="flex items-center space-x-2">
-                <button id="themeToggle" class="btn btn-secondary p-2 h-10 w-10 flex items-center justify-center" aria-label="Toggle dark theme">
+                <button id="themeToggle" class="btn btn-secondary p-2 h-10 w-10 flex items-center justify-center"
+                    aria-label="Toggle dark theme">
                     <i class="fa-solid fa-moon"></i>
                 </button>
             </div>
@@ -208,16 +235,24 @@
                             <i class="fa-solid fa-robot mr-1"></i>Model
                         </label>
                         <select id="model" class="w-full">
-                            <option value="flux-schnell">FLUX.1 [schnell] - Fast, high quality</option>
-                            <option value="flux-klein">FLUX.2 [klein] - Ultra-fast, supports img2img</option>
-                            <option value="flux-dev">FLUX.2 [dev] - High quality, multi-reference</option>
-                            <option value="sdxl-base">SDXL Base 1.0 - Stable, versatile</option>
-                            <option value="sdxl-lightning">SDXL Lightning - Fast SDXL</option>
-                            <option value="dreamshaper">DreamShaper 8 LCM - Photorealistic</option>
-                            <option value="lucid-origin">Lucid Origin - Leonardo.AI</option>
-                            <option value="phoenix">Phoenix 1.0 - Leonardo.AI</option>
-                            <option value="sd-1.5-img2img">SD 1.5 Img2Img - Image transformation</option>
-                            <option value="sd-1.5-inpainting">SD 1.5 Inpainting - Mask-based editing</option>
+                            <option value="@cf/black-forest-labs/flux-1-schnell">FLUX.1 [schnell] - Fast, high quality
+                            </option>
+                            <option value="@cf/black-forest-labs/flux-2-klein-4b">FLUX.2 [klein] - Ultra-fast, supports
+                                img2img</option>
+                            <option value="@cf/black-forest-labs/flux-2-dev">FLUX.2 [dev] - High quality,
+                                multi-reference</option>
+                            <option value="@cf/stabilityai/stable-diffusion-xl-base-1.0">SDXL Base 1.0 - Stable,
+                                versatile</option>
+                            <option value="@cf/bytedance/stable-diffusion-xl-lightning">SDXL Lightning - Fast SDXL
+                            </option>
+                            <option value="@cf/lykon/dreamshaper-8-lcm-8-lcm">@cf/lykon/dreamshaper-8-lcm 8
+                                LCM - Photorealistic</option>
+                            <option value="@cf/leonardo/lucid-origin">Lucid Origin - Leonardo.AI</option>
+                            <option value="@cf/leonardo/phoenix-1.0">Phoenix 1.0 - Leonardo.AI</option>
+                            <option value="@cf/runwayml/stable-diffusion-v1-5-img2img">SD 1.5 Img2Img - Image
+                                transformation</option>
+                            <option value="@cf/runwayml/stable-diffusion-v1-5-inpainting">SD 1.5 Inpainting - Mask-based
+                                editing</option>
                         </select>
                     </div>
 
@@ -225,14 +260,17 @@
                         <label for="prompt" class="block text-sm font-medium mb-1">
                             <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Prompt
                         </label>
-                        <textarea id="prompt" rows="3" placeholder="Describe your image... Use --param=value for additional settings" class="w-full">cyberpunk cat</textarea>
+                        <textarea id="prompt" rows="3"
+                            placeholder="Describe your image... Use --param=value for additional settings"
+                            class="w-full">cyberpunk cat</textarea>
                     </div>
 
                     <div>
                         <label for="negative_prompt" class="block text-sm font-medium mb-1">
                             <i class="fa-solid fa-ban mr-1"></i>Negative Prompt
                         </label>
-                        <textarea id="negative_prompt" rows="2" placeholder="Elements to avoid..." class="w-full"></textarea>
+                        <textarea id="negative_prompt" rows="2" placeholder="Elements to avoid..."
+                            class="w-full"></textarea>
                     </div>
                 </div>
 
@@ -253,7 +291,8 @@
                                 <label class="block text-sm font-medium">Width</label>
                                 <span id="widthValue" class="text-sm font-mono">1024px</span>
                             </div>
-                            <input type="range" id="width" min="256" max="2048" step="64" value="1024" class="slider w-full">
+                            <input type="range" id="width" min="256" max="2048" step="64" value="1024"
+                                class="slider w-full">
                         </div>
 
                         <div>
@@ -261,7 +300,8 @@
                                 <label class="block text-sm font-medium">Height</label>
                                 <span id="heightValue" class="text-sm font-mono">1024px</span>
                             </div>
-                            <input type="range" id="height" min="256" max="2048" step="64" value="1024" class="slider w-full">
+                            <input type="range" id="height" min="256" max="2048" step="64" value="1024"
+                                class="slider w-full">
                         </div>
 
                         <div>
@@ -277,7 +317,8 @@
                                 <label class="block text-sm font-medium">Guidance</label>
                                 <span id="guidanceValue" class="text-sm font-mono">7.5</span>
                             </div>
-                            <input type="range" id="guidance" min="1" max="30" step="0.5" value="7.5" class="slider w-full">
+                            <input type="range" id="guidance" min="1" max="30" step="0.5" value="7.5"
+                                class="slider w-full">
                         </div>
 
                         <div>
@@ -319,7 +360,9 @@
                     <div class="image-container card">
                         <div id="loadingOverlay" class="loading-mask hidden">
                             <div class="text-center">
-                                <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+                                <div
+                                    class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white">
+                                </div>
                                 <p class="text-white mt-3 font-medium">Generating...</p>
                             </div>
                         </div>
@@ -503,4 +546,5 @@
         });
     </script>
 </body>
+
 </html>

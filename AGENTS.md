@@ -15,7 +15,7 @@ Cloudflare Image MCP is a modular, multi-deployment image generation service tha
 |-------|------------|
 | **Runtime** | Node.js 18+ (local), Cloudflare Workers (cloud) |
 | **Language** | TypeScript |
-| **AI Provider** | Cloudflare Workers AI (FLUX, SDXL, DreamShaper) |
+| **AI Provider** | Cloudflare Workers AI (FLUX, SDXL, @cf/lykon/dreamshaper-8-lcm) |
 | **Storage** | Cloudflare R2 (S3-compatible) |
 | **Protocols** | OpenAI REST API, MCP (stdio + HTTP/SSE) |
 | **Frontend** | HTML + Tailwind CSS (no framework) |
@@ -206,7 +206,7 @@ IMAGE_EXPIRY_HOURS=24
 | FLUX.2 [dev] | txt2img, img2img | prompt, steps, seed, width, height |
 | SDXL Base 1.0 | txt2img, img2img, inpaint | prompt, neg_prompt, steps, guidance, seed, size |
 | SDXL Lightning | txt2img | prompt, neg_prompt, steps, guidance, seed, size |
-| DreamShaper 8 LCM | txt2img, img2img | prompt, neg_prompt, steps, guidance, seed, size |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | txt2img, img2img | prompt, neg_prompt, steps, guidance, seed, size |
 
 ## Development Workflow
 

@@ -14,7 +14,7 @@ Cloudflare Image MCP is a modular image generation service that provides:
 |-------|------------|
 | **Runtime** | Node.js 18+ (local), Cloudflare Workers (cloud) |
 | **Language** | TypeScript |
-| **AI Provider** | Cloudflare Workers AI (FLUX, SDXL, DreamShaper) |
+| **AI Provider** | Cloudflare Workers AI (FLUX, SDXL, @cf/lykon/dreamshaper-8-lcm) |
 | **Storage** | Cloudflare R2 (S3-compatible) |
 | **Protocols** | OpenAI REST API, MCP (stdio + HTTP/SSE) |
 | **Frontend** | HTML + Tailwind CSS (no framework) |

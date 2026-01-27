@@ -3,35 +3,24 @@
 // ============================================================================
 
 import type { ModelConfig, ModelTask } from '../types.js';
-import { MODEL_CONFIGS, MODEL_ALIASES } from './configs.js';
+import { MODEL_CONFIGS } from './configs.js';
 
 /**
- * Resolve a model ID or alias to the full model ID
- * @param input - Model ID or alias (e.g., "flux-schnell" or full ID)
- * @returns Full model ID
- */
-export function resolveModelId(input: string): string {
-  return MODEL_ALIASES[input] || input;
-}
-
-/**
- * Get model configuration by ID or alias
- * @param modelId - Model ID or alias
+ * Get model configuration by full model ID
+ * @param modelId - Full model ID (e.g., @cf/black-forest-labs/flux-1-schnell)
  * @returns Model configuration or null if not found
  */
 export function getModelConfig(modelId: string): ModelConfig | null {
-  const actualId = resolveModelId(modelId);
-  return MODEL_CONFIGS[actualId] || null;
+  return MODEL_CONFIGS[modelId] || null;
 }
 
 /**
- * Check if a model ID or alias is valid
- * @param modelId - Model ID or alias
+ * Check if a model ID is valid
+ * @param modelId - Full model ID
  * @returns True if model exists
  */
 export function isValidModel(modelId: string): boolean {
-  const actualId = resolveModelId(modelId);
-  return actualId in MODEL_CONFIGS;
+  return modelId in MODEL_CONFIGS;
 }
 
 /**
@@ -62,7 +51,7 @@ export function listModels(): Array<{
 export function getModelHelp(modelId: string): string {
   const model = getModelConfig(modelId);
   if (!model) {
-    return `Unknown model: ${modelId}. Available models: ${Object.keys(MODEL_ALIASES).join(', ')}`;
+    return `Unknown model: ${modelId}. Available models: ${Object.keys(MODEL_CONFIGS).join(', ')}`;
   }
 
   let help = `# ${model.name}\n\n`;

@@ -57,7 +57,7 @@ The API is compatible with OpenAI's `/v1/images/generations` endpoint.
 curl -X POST "http://localhost:8787/v1/images/generations" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "flux-schnell",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
     "prompt": "A beautiful sunset over mountains",
     "n": 1,
     "size": "1024x1024"
@@ -77,17 +77,6 @@ curl -X POST "http://localhost:8787/v1/images/generations" \
 }
 ```
 
-### Model Aliases
-
-| Alias | Full Model ID |
-|-------|---------------|
-| `flux-schnell` | `@cf/black-forest-labs/flux-1-schnell` |
-| `flux-klein` | `@cf/black-forest-labs/flux-2-klein-4b` |
-| `flux-dev` | `@cf/black-forest-labs/flux-2-dev` |
-| `sdxl-base` | `@cf/stabilityai/stable-diffusion-xl-base-1.0` |
-| `sdxl-lightning` | `@cf/bytedance/stable-diffusion-xl-lightning` |
-| `dreamshaper` | `@cf/lykon/dreamshaper-8-lcm` |
-
 ### Using `--param=value` Syntax
 
 Embed parameters directly in the prompt:
@@ -96,7 +85,7 @@ Embed parameters directly in the prompt:
 curl -X POST "http://localhost:8787/v1/images/generations" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "flux-schnell",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
     "prompt": "A cyberpunk city at night --steps=4 --seed=12345"
   }'
 ```
@@ -110,7 +99,7 @@ curl -X POST "http://localhost:8787/v1/images/generations" \
 | FLUX.2 [dev] | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ |
 | SDXL Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | SDXL Lightning | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DreamShaper 8 LCM | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 
 ### List Available Models
 
@@ -150,7 +139,7 @@ Generate images using Cloudflare Workers AI.
   "name": "generate_image",
   "arguments": {
     "prompt": "A futuristic city with flying cars",
-    "model": "flux-schnell",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
     "n": 1,
     "size": "1024x1024",
     "steps": 4,
@@ -180,7 +169,7 @@ Get detailed documentation for a specific model.
 {
   "name": "describe_model",
   "arguments": {
-    "model": "flux-schnell"
+    "model": "@cf/black-forest-labs/flux-1-schnell"
   }
 }
 ```
@@ -306,7 +295,7 @@ import requests
 
 url = "http://localhost:8787/v1/images/generations"
 payload = {
-    "model": "flux-schnell",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
     "prompt": "A cat wearing a hat --steps=4",
     "n": 2
 }
@@ -325,7 +314,7 @@ const response = await fetch('http://localhost:8787/v1/images/generations', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    model: 'sdxl-base',
+    model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
     prompt: 'Mountain landscape at sunset',
     n: 1,
     size: '1024x1024'
@@ -352,7 +341,7 @@ payload = {
         "name": "generate_image",
         "arguments": {
             "prompt": "A robot reading a book",
-            "model": "flux-schnell"
+            "model": "@cf/black-forest-labs/flux-1-schnell"
         }
     }
 }

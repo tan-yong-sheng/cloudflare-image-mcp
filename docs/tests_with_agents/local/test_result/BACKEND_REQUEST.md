@@ -18,7 +18,7 @@
 | FLUX.2 [dev] | [x] PASS | JSON format, response_format=url/b64_json |
 | SDXL Base 1.0 | [x] PASS | JSON format, response_format=url/b64_json |
 | SDXL Lightning | [x] PASS | JSON format, response_format=url/b64_json |
-| DreamShaper 8 LCM | [x] PASS | JSON format, response_format=url/b64_json |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | [x] PASS | JSON format, response_format=url/b64_json |
 | Leonardo Lucid Origin | [!] NSFW | Content filter triggered |
 | Leonardo Phoenix 1.0 | [x] PASS | JSON format, response_format=url/b64_json |
 
@@ -30,8 +30,8 @@
 | FLUX.2 [dev] | multipart | [x] PASS | `-F "image=@file.jpg"` |
 | SDXL Base 1.0 | JSON | [!] FAIL | Cloudflare API error - requires investigation |
 | SDXL Base 1.0 | multipart | [x] PASS | `-F "image=@file.jpg"` |
-| DreamShaper 8 LCM | JSON | [!] FAIL | Cloudflare API error - requires investigation |
-| DreamShaper 8 LCM | multipart | [x] PASS | `-F "image=@file.jpg"` |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | JSON | [!] FAIL | Cloudflare API error - requires investigation |
+| @cf/lykon/dreamshaper-8-lcm 8 LCM | multipart | [x] PASS | `-F "image=@file.jpg"` |
 | SD 1.5 Img2Img | JSON | [!] FAIL | Cloudflare API error - requires investigation |
 | SD 1.5 Img2Img | multipart | [x] PASS | `-F "image=@file.jpg"` |
 
@@ -62,28 +62,28 @@
 
 | Test | Model | Input | Response | Status |
 |------|-------|-------|----------|--------|
-| flux-schnell txt2img | flux-schnell | `{"model":"flux-schnell","prompt":"a simple cat","n":1,"size":"512x512"}` | `{"created":...,"data":[{"url":"https://...","revised_prompt":"a simple cat"}]}` | PASS |
-| flux-klein txt2img | flux-klein | `{"model":"flux-klein","prompt":"a futuristic robot","n":1,"size":"512x512"}` | `{"created":...,"data":[{"url":"https://...","revised_prompt":"a futuristic robot"}]}` | PASS |
-| sdxl-base txt2img b64_json | sdxl-base | `{"model":"sdxl-base","prompt":"a product photo","n":1,"size":"512x512","response_format":"b64_json"}` | `{"created":...,"data":[{"b64_json":"..."}]}` | PASS |
+| @cf/black-forest-labs/flux-1-schnell txt2img | @cf/black-forest-labs/flux-1-schnell | `{"model":"@cf/black-forest-labs/flux-1-schnell","prompt":"a simple cat","n":1,"size":"512x512"}` | `{"created":...,"data":[{"url":"https://...","revised_prompt":"a simple cat"}]}` | PASS |
+| @cf/black-forest-labs/flux-2-klein-4b txt2img | @cf/black-forest-labs/flux-2-klein-4b | `{"model":"@cf/black-forest-labs/flux-2-klein-4b","prompt":"a futuristic robot","n":1,"size":"512x512"}` | `{"created":...,"data":[{"url":"https://...","revised_prompt":"a futuristic robot"}]}` | PASS |
+| @cf/stabilityai/stable-diffusion-xl-base-1.0 txt2img b64_json | @cf/stabilityai/stable-diffusion-xl-base-1.0 | `{"model":"@cf/stabilityai/stable-diffusion-xl-base-1.0","prompt":"a product photo","n":1,"size":"512x512","response_format":"b64_json"}` | `{"created":...,"data":[{"b64_json":"..."}]}` | PASS |
 
 ### Image-to-Image Tests (New)
 
 | Test | Model | Format | Input | Response | Status |
 |------|-------|--------|-------|----------|--------|
-| SDXL img2img (JSON) | sdxl-base | JSON | `{"model":"sdxl-base","prompt":"Transform into winter scene","image_b64":"...","n":1,"size":"512x512","strength":0.7}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
-| DreamShaper img2img (JSON) | dreamshaper | JSON | `{"model":"dreamshaper","prompt":"Oil painting style","image_b64":"...","n":1,"size":"512x512","strength":0.5}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
-| SD 1.5 img2img (JSON) | sd-1.5-img2img | JSON | `{"model":"sd-1.5-img2img","prompt":"Cyberpunk character","image_b64":"...","n":1,"size":"512x512","strength":0.6}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
-| SDXL img2img (multipart) | sdxl-base | multipart | `-F "model=sdxl-base" -F "prompt=..." -F "image=@test.jpg" -F "n=1" -F "size=512x512" -F "strength=0.7"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
-| FLUX Klein img2img (multipart) | flux-klein | multipart | `-F "model=flux-klein" -F "prompt=..." -F "image=@test.jpg" -F "n=1" -F "size=512x512"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
+| SDXL img2img (JSON) | @cf/stabilityai/stable-diffusion-xl-base-1.0 | JSON | `{"model":"@cf/stabilityai/stable-diffusion-xl-base-1.0","prompt":"Transform into winter scene","image_b64":"...","n":1,"size":"512x512","strength":0.7}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
+| @cf/lykon/dreamshaper-8-lcm img2img (JSON) | @cf/lykon/dreamshaper-8-lcm | JSON | `{"model":"@cf/lykon/dreamshaper-8-lcm","prompt":"Oil painting style","image_b64":"...","n":1,"size":"512x512","strength":0.5}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
+| SD 1.5 img2img (JSON) | @cf/runwayml/stable-diffusion-v1-5-img2img | JSON | `{"model":"@cf/runwayml/stable-diffusion-v1-5-img2img","prompt":"Cyberpunk character","image_b64":"...","n":1,"size":"512x512","strength":0.6}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
+| SDXL img2img (multipart) | @cf/stabilityai/stable-diffusion-xl-base-1.0 | multipart | `-F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" -F "prompt=..." -F "image=@test.jpg" -F "n=1" -F "size=512x512" -F "strength=0.7"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
+| FLUX Klein img2img (multipart) | @cf/black-forest-labs/flux-2-klein-4b | multipart | `-F "model=@cf/black-forest-labs/flux-2-klein-4b" -F "prompt=..." -F "image=@test.jpg" -F "n=1" -F "size=512x512"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
 
 ### Inpainting Tests (New)
 
 | Test | Model | Format | Input | Response | Status |
 |------|-------|--------|-------|----------|--------|
-| SDXL inpainting (JSON) | sdxl-base | JSON | `{"model":"sdxl-base","prompt":"Replace background","image_b64":"...","mask":"...","n":1,"size":"512x512","strength":0.9}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
-| SD 1.5 inpainting (JSON) | sd-1.5-inpainting | JSON | `{"model":"sd-1.5-inpainting","prompt":"Replace with dragon","image_b64":"...","mask":"...","n":1,"size":"512x512","strength":0.9}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
-| SDXL inpainting (multipart) | sdxl-base | multipart | `-F "model=sdxl-base" -F "prompt=..." -F "image=@test.jpg" -F "mask=@mask.png" -F "n=1" -F "size=512x512" -F "strength=0.9"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
-| SD 1.5 inpainting (multipart) | sd-1.5-inpainting | multipart | `-F "model=sd-1.5-inpainting" -F "prompt=..." -F "image=@test.jpg" -F "mask=@mask.png" -F "n=1" -F "size=512x512" -F "strength=0.9"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
+| SDXL inpainting (JSON) | @cf/stabilityai/stable-diffusion-xl-base-1.0 | JSON | `{"model":"@cf/stabilityai/stable-diffusion-xl-base-1.0","prompt":"Replace background","image_b64":"...","mask":"...","n":1,"size":"512x512","strength":0.9}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
+| SD 1.5 inpainting (JSON) | @cf/runwayml/stable-diffusion-v1-5-inpainting | JSON | `{"model":"@cf/runwayml/stable-diffusion-v1-5-inpainting","prompt":"Replace with dragon","image_b64":"...","mask":"...","n":1,"size":"512x512","strength":0.9}` | `{"error":{"message":"Cannot read properties of undefined (reading 'image')","type":"api_error"}}` | FAIL |
+| SDXL inpainting (multipart) | @cf/stabilityai/stable-diffusion-xl-base-1.0 | multipart | `-F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" -F "prompt=..." -F "image=@test.jpg" -F "mask=@mask.png" -F "n=1" -F "size=512x512" -F "strength=0.9"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
+| SD 1.5 inpainting (multipart) | @cf/runwayml/stable-diffusion-v1-5-inpainting | multipart | `-F "model=@cf/runwayml/stable-diffusion-v1-5-inpainting" -F "prompt=..." -F "image=@test.jpg" -F "mask=@mask.png" -F "n=1" -F "size=512x512" -F "strength=0.9"` | `{"created":...,"data":[{"url":"https://..."}]}` | PASS |
 
 ---
 
@@ -100,7 +100,7 @@
 **Workaround:** Use multipart form data format instead:
 ```bash
 curl -X POST http://localhost:3000/v1/images/edits \
-  -F "model=sdxl-base" \
+  -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Transform into a winter scene" \
   -F "image=@test_image.jpg;type=image/jpeg" \
   -F "n=1" \

@@ -7,7 +7,7 @@ export * from './types.js';
 
 // Models
 export * from './models/index.js';
-export { MODEL_CONFIGS, MODEL_ALIASES, SUPPORTED_MODEL_IDS } from './models/configs.js';
+export { MODEL_CONFIGS } from './models/configs.js';
 
 // AI Client
 export * from './ai/index.js';

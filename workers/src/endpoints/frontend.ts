@@ -4,7 +4,7 @@
 // ============================================================================
 
 export function getFrontendHTML(): string {
-  return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
@@ -214,14 +214,14 @@ export function getFrontendHTML(): string {
                             <i class="fa-solid fa-robot mr-1"></i>Model
                         </label>
                         <select id="model" class="w-full">
-                            <option value="flux-schnell">FLUX.1 [schnell] - Fast, high quality</option>
-                            <option value="flux-klein">FLUX.2 [klein] - Ultra-fast, supports img2img</option>
-                            <option value="flux-dev">FLUX.2 [dev] - High quality, multi-reference</option>
-                            <option value="sdxl-base">SDXL Base 1.0 - Stable, versatile</option>
-                            <option value="sdxl-lightning">SDXL Lightning - Fast SDXL</option>
-                            <option value="dreamshaper">DreamShaper 8 LCM - Photorealistic</option>
-                            <option value="lucid-origin">Lucid Origin - Leonardo.AI</option>
-                            <option value="phoenix">Phoenix 1.0 - Leonardo.AI</option>
+                            <option value="@cf/black-forest-labs/flux-1-schnell">FLUX.1 [schnell] - Fast, high quality</option>
+                            <option value="@cf/black-forest-labs/flux-2-klein-4b">FLUX.2 [klein] - Ultra-fast, supports img2img</option>
+                            <option value="@cf/black-forest-labs/flux-2-dev">FLUX.2 [dev] - High quality, multi-reference</option>
+                            <option value="@cf/stabilityai/stable-diffusion-xl-base-1.0">SDXL Base 1.0 - Stable, versatile</option>
+                            <option value="@cf/bytedance/stable-diffusion-xl-lightning">SDXL Lightning - Fast SDXL</option>
+                            <option value="@cf/lykon/dreamshaper-8-lcm">@cf/lykon/dreamshaper-8-lcm 8 LCM - Photorealistic</option>
+                            <option value="@cf/leonardo/lucid-origin">Lucid Origin - Leonardo.AI</option>
+                            <option value="@cf/leonardo/phoenix-1.0">Phoenix 1.0 - Leonardo.AI</option>
                         </select>
                     </div>
 
@@ -514,10 +514,10 @@ export function getFrontendHTML(): string {
 }
 
 export function serveFrontend(): Response {
-  return new Response(getFrontendHTML(), {
-    headers: {
-      'Content-Type': 'text/html',
-      'Cache-Control': 'no-cache',
-    },
-  });
+    return new Response(getFrontendHTML(), {
+        headers: {
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-cache',
+        },
+    });
 }

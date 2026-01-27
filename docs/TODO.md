@@ -22,9 +22,8 @@
 - [x] Migrate FLUX.2 [dev] config
 - [x] Migrate SDXL Base 1.0 config
 - [x] Migrate SDXL Lightning config
-- [x] Migrate DreamShaper 8 LCM config
+- [x] Migrate @cf/lykon/dreamshaper-8-lcm 8 LCM config
 - [x] Create MODEL_CONFIGS constant
-- [x] Create MODEL_ALIASES constant
 - [x] Create helper functions (resolveModelId, getModelConfig, listModels)
 
 ### Step 1.4: Create AI client (packages/core/src/ai/client.ts)
@@ -242,10 +241,6 @@ To run full tests, the following credentials are needed in `.env`:
 - `@cf/leonardo/lucid-origin` - Lucid Origin model (base64 response)
 - `@cf/leonardo/phoenix-1.0` - Phoenix 1.0 model (binary response)
 
-**Aliases added**:
-- `lucid-origin` → `@cf/leonardo/lucid-origin`
-- `phoenix` → `@cf/leonardo/phoenix-1.0`
-- `phoenix-1.0` → `@cf/leonardo/phoenix-1.0`
 
 ### Issue 5: Missing Stable Diffusion 1.5 models ❌ FIXED
 **File**: `workers/src/config/models.ts`
@@ -255,8 +250,8 @@ To run full tests, the following credentials are needed in `.env`:
 - `@cf/runwayml/stable-diffusion-v1-5-inpainting` - SD 1.5 for inpainting
 
 **Aliases added**:
-- `sd-1.5-img2img` → `@cf/runwayml/stable-diffusion-v1-5-img2img`
-- `sd-1.5-inpainting` → `@cf/runwayml/stable-diffusion-v1-5-inpainting`
+- `@cf/runwayml/stable-diffusion-v1-5-img2img` → `@cf/runwayml/stable-diffusion-v1-5-img2img`
+- `@cf/runwayml/stable-diffusion-v1-5-inpainting` → `@cf/runwayml/stable-diffusion-v1-5-inpainting`
 
 ### Issue 6: Time duration display shows "-" ❌ FIXED
 **File**: `workers/src/endpoints/frontend.ts`
@@ -292,8 +287,8 @@ To run full tests, the following credentials are needed in `.env`:
 - `@cf/runwayml/stable-diffusion-v1-5-inpainting` - SD 1.5 for inpainting
 
 **Added aliases**:
-- `lucid-origin`, `phoenix`, `phoenix-1.0` for Leonardo models
-- `sd-1.5-img2img`, `sd-1.5-inpainting` for SD 1.5 models
+- `@cf/leonardo/lucid-origin`, `@cf/leonardo/phoenix-1.0`, `@cf/leonardo/phoenix-1.0` for Leonardo models
+- `@cf/runwayml/stable-diffusion-v1-5-img2img`, `@cf/runwayml/stable-diffusion-v1-5-inpainting` for SD 1.5 models
 
 **Frontend update**: Updated `packages/local/src/ui/index.html` with new model options in dropdown.
 
@@ -370,7 +365,7 @@ if (inputFormat === 'multipart') {
 3. `@cf/black-forest-labs/flux-2-dev` - FLUX.2 dev (multipart)
 4. `@cf/stabilityai/stable-diffusion-xl-base-1.0` - SDXL Base
 5. `@cf/bytedance/stable-diffusion-xl-lightning` - SDXL Lightning
-6. `@cf/lykon/dreamshaper-8-lcm` - DreamShaper 8 LCM
+6. `@cf/lykon/dreamshaper-8-lcm-8-lcm` - @cf/lykon/dreamshaper-8-lcm 8 LCM
 7. `@cf/leonardo/lucid-origin` - Leonardo Lucid Origin (NEW)
 8. `@cf/leonardo/phoenix-1.0` - Leonardo Phoenix 1.0 (NEW)
 9. `@cf/runwayml/stable-diffusion-v1-5-img2img` - SD 1.5 Img2Img (NEW)

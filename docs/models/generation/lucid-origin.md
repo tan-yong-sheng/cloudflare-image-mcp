@@ -1,6 +1,6 @@
-# lucid-origin
+# @cf/leonardo/lucid-origin
 
-**Model ID**: @cf/leonardo/lucid-origin
+**Model ID**: @cf/leonardo/@cf/leonardo/lucid-origin
 
 **Mode**: Text-to-Image 
 
@@ -28,7 +28,7 @@ export default {
     };
 
     const response = await env.AI.run(
-      "@cf/leonardo/lucid-origin",
+      "@cf/leonardo/@cf/leonardo/lucid-origin",
       inputs
     );
 
@@ -44,7 +44,7 @@ export default {
 
 - curl
 ```curl
-curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/leonardo/lucid-origin  \
+curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/leonardo/@cf/leonardo/lucid-origin  \
   -X POST  \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"  \
   -d '{ "prompt": "cyberpunk cat" }'

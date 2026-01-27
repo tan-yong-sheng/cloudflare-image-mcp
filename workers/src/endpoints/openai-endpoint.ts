@@ -82,8 +82,8 @@ export class OpenAIEndpoint {
       });
     }
 
-    // Resolve model ID
-    const modelId = this.generator.resolveModelId(req.model || 'flux-schnell');
+    // Use model ID directly (full model ID required)
+    const modelId = req.model || '@cf/black-forest-labs/flux-1-schnell';
     const n = req.n || 1;
 
     // Generate images
@@ -150,7 +150,7 @@ export class OpenAIEndpoint {
       imageData = formData.get('image') as string;
       maskData = formData.get('mask') as string || undefined;
       prompt = formData.get('prompt') as string;
-      modelId = this.generator.resolveModelId((formData.get('model') as string) || 'sdxl-base');
+      modelId = (formData.get('model') as string) || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = parseInt(formData.get('n') as string) || 1;
       size = (formData.get('size') as string) || '1024x1024';
     } else {
@@ -159,7 +159,7 @@ export class OpenAIEndpoint {
       imageData = (req as any).image;
       maskData = (req as any).mask;
       prompt = req.prompt;
-      modelId = this.generator.resolveModelId(req.model || 'sdxl-base');
+      modelId = req.model || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = req.n || 1;
       size = req.size || '1024x1024';
     }
@@ -231,14 +231,14 @@ export class OpenAIEndpoint {
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       imageData = formData.get('image') as string;
-      modelId = this.generator.resolveModelId((formData.get('model') as string) || 'flux-klein');
+      modelId = (formData.get('model') as string) || '@cf/black-forest-labs/flux-2-klein-4b';
       n = parseInt(formData.get('n') as string) || 1;
       size = (formData.get('size') as string) || '1024x1024';
     } else {
       const body = await request.json();
       const req = body as OpenAIVariationRequest;
       imageData = req.image;
-      modelId = this.generator.resolveModelId(req.model || 'flux-klein');
+      modelId = req.model || '@cf/black-forest-labs/flux-2-klein-4b';
       n = req.n || 1;
       size = req.size || '1024x1024';
     }

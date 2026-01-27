@@ -147,9 +147,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       supportedSizes: ['512x512', '1024x1024'],
     },
   },
-  '@cf/lykon/dreamshaper-8-lcm': {
-    id: '@cf/lykon/dreamshaper-8-lcm',
-    name: 'DreamShaper 8 LCM',
+  '@cf/lykon/dreamshaper-8-lcm-8-lcm': {
+    id: '@cf/lykon/dreamshaper-8-lcm-8-lcm',
+    name: '@cf/lykon/dreamshaper-8-lcm 8 LCM',
     description: 'Enhanced photorealistic SD model with LCM acceleration',
     provider: 'lykon',
     apiVersion: 2,
@@ -301,30 +301,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   },
 };
 
-export const MODEL_ALIASES: Record<string, string> = {
-  'dall-e-3': '@cf/black-forest-labs/flux-1-schnell',
-  'dall-e-2': '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-  'flux-schnell': '@cf/black-forest-labs/flux-1-schnell',
-  'flux-klein': '@cf/black-forest-labs/flux-2-klein-4b',
-  'flux-dev': '@cf/black-forest-labs/flux-2-dev',
-  'sdxl-base': '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-  'sdxl-lightning': '@cf/bytedance/stable-diffusion-xl-lightning',
-  'dreamshaper': '@cf/lykon/dreamshaper-8-lcm',
-  'lucid-origin': '@cf/leonardo/lucid-origin',
-  'phoenix': '@cf/leonardo/phoenix-1.0',
-  'phoenix-1.0': '@cf/leonardo/phoenix-1.0',
-  'sd-1.5-img2img': '@cf/runwayml/stable-diffusion-v1-5-img2img',
-  'sd-1.5-inpainting': '@cf/runwayml/stable-diffusion-v1-5-inpainting',
-};
-
 export function getModelConfig(modelId: string): ModelConfig | null {
-  // Check if it's an alias
-  const actualId = MODEL_ALIASES[modelId] || modelId;
-  return MODEL_CONFIGS[actualId] || null;
-}
-
-export function resolveModelId(input: string): string {
-  return MODEL_ALIASES[input] || input;
+  return MODEL_CONFIGS[modelId] || null;
 }
 
 export function listModels(): Array<{
