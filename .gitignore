@@ -1,2 +1,12 @@
+.env
+.env.dev
+
+
 dist/
-node_modules/
+node_modules
+
+
+# need to exclude account_id and cdn_url
+workers/wrangler.toml
+# any way to move  account_id and cdn_url to here ...
+.dev.vars

@@ -1,0 +1,523 @@
+// ============================================================================
+// Frontend HTML Template
+// Responsive web UI for image generation
+// ============================================================================
+
+export function getFrontendHTML(): string {
+  return `<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloudflare AI Image Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root {
+            --primary: #5046e5;
+            --primary-light: #6e67eb;
+            --primary-dark: #4338ca;
+            --secondary: #f0f4f8;
+            --text: #1a202c;
+            --text-light: #4a5568;
+            --background: #ffffff;
+            --card-bg: #f7fafc;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+        }
+
+        .dark {
+            --primary: #6e67eb;
+            --primary-light: #8a84ee;
+            --primary-dark: #5046e5;
+            --secondary: #2d3748;
+            --text: #f7fafc;
+            --text-light: #cbd5e0;
+            --background: #111827;
+            --card-bg: #1f2937;
+            --border: #374151;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .btn {
+            padding: 1rem 1.5rem;
+            border-radius: 0.375rem;
+            transition: all 0.3s;
+        }
+
+        .btn:focus { outline: none; }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border);
+            transform: translateY(-1px);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        input, select, textarea {
+            background-color: var(--background);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 5px;
+            background: var(--border);
+            outline: none;
+            margin: 10px 0;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.2);
+        }
+
+        .loading-mask {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0,0,0,0.6);
+            border-radius: 0.5rem;
+            z-index: 10;
+            backdrop-filter: blur(4px);
+        }
+
+        .image-container {
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--card-bg);
+            position: relative;
+            border-radius: 0.5rem;
+            max-height: 400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .hidden { display: none !important; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-flex-col { flex-direction: column; }
+            .container { padding-left: 1rem; padding-right: 1rem; }
+        }
+
+        @media (min-width: 1024px) {
+            .container { max-width: 1200px; }
+        }
+    </style>
+</head>
+<body class="min-h-screen py-4">
+    <div class="container mx-auto px-4 py-4 max-w-6xl">
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl md:text-3xl font-bold flex items-center">
+                <i class="fa-solid fa-image mr-2"></i>AI Image Generator
+            </h1>
+            <div class="flex items-center space-x-2">
+                <button id="themeToggle" class="btn btn-secondary p-2 h-10 w-10 flex items-center justify-center" aria-label="Toggle dark theme">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6 mobile-flex-col">
+            <!-- Left Control Panel -->
+            <div class="w-full lg:w-2/5 space-y-4">
+                <!-- Basic Settings -->
+                <div class="card p-4 space-y-4 fade-in">
+                    <h2 class="text-lg font-semibold flex items-center">
+                        <i class="fa-solid fa-sliders mr-2 text-primary"></i>Settings
+                    </h2>
+
+                    <div>
+                        <label for="model" class="block text-sm font-medium mb-1">
+                            <i class="fa-solid fa-robot mr-1"></i>Model
+                        </label>
+                        <select id="model" class="w-full">
+                            <option value="flux-schnell">FLUX.1 [schnell] - Fast, high quality</option>
+                            <option value="flux-klein">FLUX.2 [klein] - Ultra-fast, supports img2img</option>
+                            <option value="flux-dev">FLUX.2 [dev] - High quality, multi-reference</option>
+                            <option value="sdxl-base">SDXL Base 1.0 - Stable, versatile</option>
+                            <option value="sdxl-lightning">SDXL Lightning - Fast SDXL</option>
+                            <option value="dreamshaper">DreamShaper 8 LCM - Photorealistic</option>
+                            <option value="lucid-origin">Lucid Origin - Leonardo.AI</option>
+                            <option value="phoenix">Phoenix 1.0 - Leonardo.AI</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="prompt" class="block text-sm font-medium mb-1">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Prompt
+                        </label>
+                        <textarea id="prompt" rows="3" placeholder="Describe your image... Use --param=value for additional settings" class="w-full">cyberpunk cat</textarea>
+                    </div>
+
+                    <div>
+                        <label for="negative_prompt" class="block text-sm font-medium mb-1">
+                            <i class="fa-solid fa-ban mr-1"></i>Negative Prompt
+                        </label>
+                        <textarea id="negative_prompt" rows="2" placeholder="Elements to avoid..." class="w-full"></textarea>
+                    </div>
+                </div>
+
+                <!-- Advanced Options -->
+                <div class="card p-4 space-y-4 fade-in">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <i class="fa-solid fa-gear mr-2 text-primary"></i>Advanced Options
+                        </h2>
+                        <button id="toggleAdvanced" class="text-xs btn btn-secondary py-1 px-3">
+                            <i class="fa-solid fa-chevron-down mr-1" id="advancedIcon"></i>Show/Hide
+                        </button>
+                    </div>
+
+                    <div id="advancedOptions" class="space-y-3 hidden">
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <label class="block text-sm font-medium">Width</label>
+                                <span id="widthValue" class="text-sm font-mono">1024px</span>
+                            </div>
+                            <input type="range" id="width" min="256" max="2048" step="64" value="1024" class="slider w-full">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <label class="block text-sm font-medium">Height</label>
+                                <span id="heightValue" class="text-sm font-mono">1024px</span>
+                            </div>
+                            <input type="range" id="height" min="256" max="2048" step="64" value="1024" class="slider w-full">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <label class="block text-sm font-medium">Steps</label>
+                                <span id="stepsValue" class="text-sm font-mono">4</span>
+                            </div>
+                            <input type="range" id="steps" min="1" max="20" step="1" value="4" class="slider w-full">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <label class="block text-sm font-medium">Guidance</label>
+                                <span id="guidanceValue" class="text-sm font-mono">7.5</span>
+                            </div>
+                            <input type="range" id="guidance" min="1" max="30" step="0.5" value="7.5" class="slider w-full">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Seed (leave empty for random)</label>
+                            <div class="flex gap-2">
+                                <input type="number" id="seed" placeholder="Random seed" class="w-full">
+                                <button id="randomSeed" class="btn btn-secondary text-sm py-1 px-3">
+                                    <i class="fa-solid fa-random"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Number of images (1-8)</label>
+                            <input type="number" id="n" min="1" max="8" value="1" class="w-full">
+                        </div>
+                    </div>
+                </div>
+
+                <button id="submitButton" class="btn btn-primary w-full py-3 flex items-center justify-center">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Generate Image
+                </button>
+            </div>
+
+            <!-- Right Image Display -->
+            <div class="w-full lg:w-3/5">
+                <div class="card h-full p-4 space-y-4 fade-in">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <i class="fa-solid fa-image mr-2 text-primary"></i>Result
+                        </h2>
+                        <div class="flex space-x-2">
+                            <button id="copyParamsButton" class="btn btn-secondary text-sm py-1 px-3 hidden">
+                                <i class="fa-solid fa-copy mr-1"></i>Copy Params
+                            </button>
+                            <button id="downloadButton" class="btn btn-secondary text-sm py-1 px-3 hidden">
+                                <i class="fa-solid fa-download mr-1"></i>Download
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="image-container card">
+                        <div id="loadingOverlay" class="loading-mask hidden">
+                            <div class="text-center">
+                                <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+                                <p class="text-white mt-3 font-medium">Generating...</p>
+                            </div>
+                        </div>
+                        <div id="initialPrompt" class="text-center text-gray-400 dark:text-gray-600">
+                            <i class="fa-solid fa-image-portrait text-4xl mb-2"></i>
+                            <p>Click generate to create an image</p>
+                        </div>
+                        <img id="aiImage" class="max-h-full max-w-full rounded hidden" alt="Generated image">
+                    </div>
+
+                    <div id="imageInfo" class="space-y-3 mt-2">
+                        <div class="grid grid-cols-2 gap-3 text-sm">
+                            <div><span class="font-medium">Model:</span> <span id="usedModel">-</span></div>
+                            <div><span class="font-medium">Time:</span> <span id="generationTime">-</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = '/v1';
+
+        // State
+        let currentImageUrl = null;
+
+        // DOM Elements
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        const toggleAdvanced = document.getElementById('toggleAdvanced');
+        const advancedOptions = document.getElementById('advancedOptions');
+        const advancedIcon = document.getElementById('advancedIcon');
+        const submitButton = document.getElementById('submitButton');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const initialPrompt = document.getElementById('initialPrompt');
+        const aiImage = document.getElementById('aiImage');
+        const downloadButton = document.getElementById('downloadButton');
+
+        // Theme toggle
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            html.classList.add('dark');
+            themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
+        }
+
+        themeToggle.addEventListener('click', () => {
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.theme = 'light';
+                themeToggle.innerHTML = '<i class="fa-solid fa-moon"></i>';
+            } else {
+                html.classList.add('dark');
+                localStorage.theme = 'dark';
+                themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
+            }
+        });
+
+        // Advanced options toggle
+        toggleAdvanced.addEventListener('click', () => {
+            advancedOptions.classList.toggle('hidden');
+            advancedIcon.classList.toggle('fa-chevron-down');
+            advancedIcon.classList.toggle('fa-chevron-up');
+        });
+
+        // Slider value displays
+        ['width', 'height', 'steps', 'guidance'].forEach(id => {
+            const slider = document.getElementById(id);
+            const valueDisplay = document.getElementById(id + 'Value');
+            slider.addEventListener('input', () => {
+                valueDisplay.textContent = slider.value + (id === 'guidance' ? '' : 'px');
+            });
+        });
+
+        // Random seed
+        document.getElementById('randomSeed').addEventListener('click', () => {
+            document.getElementById('seed').value = Math.floor(Math.random() * 4294967295);
+        });
+
+        // Generate image
+        submitButton.addEventListener('click', async () => {
+            const model = document.getElementById('model').value;
+            const prompt = document.getElementById('prompt').value;
+            const negativePrompt = document.getElementById('negative_prompt').value;
+            const width = document.getElementById('width').value;
+            const height = document.getElementById('height').value;
+            const steps = document.getElementById('steps').value;
+            const guidance = document.getElementById('guidance').value;
+            const seed = document.getElementById('seed').value;
+            const n = document.getElementById('n').value;
+
+            if (!prompt.trim()) {
+                alert('Please enter a prompt');
+                return;
+            }
+
+            // Show loading
+            initialPrompt.classList.add('hidden');
+            aiImage.classList.add('hidden');
+            downloadButton.classList.add('hidden');
+            loadingOverlay.classList.remove('hidden');
+
+            // Capture start time for duration calculation
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(API_BASE + '/images/generations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: model,
+                        prompt: prompt,
+                        n: parseInt(n),
+                        size: width + 'x' + height,
+                        steps: parseInt(steps),
+                        guidance: parseFloat(guidance),
+                        negative_prompt: negativePrompt,
+                        seed: seed ? parseInt(seed) : undefined,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'Generation failed');
+                }
+
+                const data = await response.json();
+                const imageData = data.data[0];
+
+                // Handle b64_json or url
+                let imageUrl;
+                if (imageData.b64_json) {
+                    imageUrl = 'data:image/png;base64,' + imageData.b64_json;
+                } else {
+                    imageUrl = imageData.url;
+                }
+
+                currentImageUrl = imageUrl;
+
+                // Calculate elapsed time
+                const elapsed = Date.now() - startTime;
+                const elapsedSeconds = (elapsed / 1000).toFixed(1);
+
+                // Display image
+                aiImage.src = imageUrl;
+                aiImage.onload = () => {
+                    loadingOverlay.classList.add('hidden');
+                    aiImage.classList.remove('hidden');
+                    downloadButton.classList.remove('hidden');
+
+                    // Update info
+                    document.getElementById('usedModel').textContent = model;
+                    document.getElementById('generationTime').textContent = elapsedSeconds + 's';
+                };
+
+            } catch (error) {
+                loadingOverlay.classList.add('hidden');
+                initialPrompt.classList.remove('hidden');
+                alert('Error: ' + error.message);
+            }
+        });
+
+        // Download image
+        downloadButton.addEventListener('click', async () => {
+            if (!currentImageUrl) return;
+
+            try {
+                const response = await fetch(currentImageUrl);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'image-' + Date.now() + '.png';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                alert('Download failed: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>`;
+}
+
+export function serveFrontend(): Response {
+  return new Response(getFrontendHTML(), {
+    headers: {
+      'Content-Type': 'text/html',
+      'Cache-Control': 'no-cache',
+    },
+  });
+}

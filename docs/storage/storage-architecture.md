@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the S3-based storage system for generated images, providing cloud storage with S3 or Cloudflare R2 compatibility.
+This document outlines the S3-based storage system for generated images, providing cloud storage with S3 or Cloudflare R2 compatibility and automated cleanup capabilities.
 
 ## Architecture
 
@@ -14,6 +14,7 @@ interface StorageProvider {
   save(buffer: Buffer, metadata: ImageMetadata): Promise<StorageResult>
   delete(filename: string): Promise<boolean>
   list(options?: ListOptions): Promise<StorageItem[]>
+  cleanup(options?: CleanupOptions): Promise<CleanupResult>
   getStatistics(): Promise<StorageStatistics>
 }
 
@@ -39,7 +40,7 @@ interface ImageMetadata {
 1. **S3 Storage** (`s3`)
    - Backend: AWS S3 or Cloudflare R2
    - Best for: Production, cloud deployments
-   - Features: CDN URLs, scalable, global access
+   - Features: CDN URLs, scalable, global access, automated cleanup
 
 ### Implementation Structure
 
@@ -89,6 +90,10 @@ interface StorageConfig {
       secretKey?: string;
       endpoint?: string; // For R2 compatibility
       cdnUrl?: string;
+      cleanup?: {
+        enabled: boolean;         // Enable automatic cleanup
+        olderThan?: number;   // Delete files older than N days (e.g., 30s, 5min, 2h, 7d, 2w, 6mon, 1y)
+      };
     };
   };
 }
@@ -100,7 +105,8 @@ interface StorageConfig {
 - Storage interface and base provider
 - S3 provider with cloud support (AWS S3 and Cloudflare R2)
 - ImageService integration with storage factory
-- Management tools (listing, statistics)
+- Management tools (cleanup, listing, statistics)
+- Automated cleanup with configurable policies
 
 ### Benefits
 
@@ -108,7 +114,7 @@ interface StorageConfig {
 - **Persistent**: Images stored reliably in cloud storage
 - **Scalable**: Built on highly scalable S3 infrastructure
 - **Global**: CDN support for fast image access worldwide
-- **Automated**: Use Cloudflare R2 lifecycle policies for automatic cleanup
+- **Automated**: Configurable cleanup policies to manage storage costs
 - **Organized**: Date and model-based categorization
 - **Reliable**: Enterprise-grade storage with durability guarantees
 
@@ -121,6 +127,11 @@ await storage.list({
   model: 'flux-schnell'
 });
 
+// Cleanup old images
+await storage.cleanup({
+  olderThan: '2024-08-01',
+  keepCount: 100
+});
 
 // Get storage statistics
 const stats = await storage.getStatistics();
@@ -139,6 +150,9 @@ S3_SECRET_KEY="your_secret_key"
 S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"  # Required for R2
 S3_CDN_URL="https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"  # Optional CDN URL
 
+# Optional Cleanup Configuration
+IMAGE_CLEANUP_ENABLED=true
+IMAGE_CLEANUP_OLDER_THAN=1d
 ```
 
 ## Usage Examples

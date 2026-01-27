@@ -1,0 +1,22 @@
+# Cloudflare Workers Image Generation Service
+
+name = "cloudflare-image-workers"
+account_id = "" 
+compatibility_date = "2025-01-01"
+main = "src/index.ts"
+
+# R2 Bucket for image storage
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "cloudflare-image-mcp-images"
+preview_bucket_name = "cloudflare-image-mcp-images-preview"
+
+# Workers AI binding
+[ai]
+binding = "AI"
+account_id = ""
+
+# Environment variables
+[vars]
+IMAGE_EXPIRY_HOURS = 24
+CDN_URL = ""

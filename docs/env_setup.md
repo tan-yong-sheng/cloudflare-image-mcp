@@ -1,117 +1,216 @@
 # Environment Variable Setup
 
-## Part 0: Overview
+## Overview
 
-Below is a guide on how to get the environment variables to setup this `cloudflare-image-mcp`.
+This guide covers all environment variables needed to run the cloudflare-image-mcp project.
 
-All available environment variables:
+## Environment Variables
+
+### Cloudflare Configuration (Required)
+
 ```bash
-# Cloudflare Workers AI configuration
+# Cloudflare API Token (needs AI and Workers AI permissions)
 CLOUDFLARE_API_TOKEN="your_api_token_here"
+
+# Cloudflare Account ID
 CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
+```
 
-# S3 storage configuration
-S3_BUCKET="cloudflare-image-mcp"
+### R2/S3 Storage Configuration (Required for storage features)
+
+```bash
+# R2 bucket name
+S3_BUCKET="cloudflare-image-mcp-images"
+
+# Region (use "auto" for R2)
 S3_REGION="auto"
-S3_ACCESS_KEY="your_access_key"
-S3_SECRET_KEY="your_secret_key"
-S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
-S3_CDN_URL="https://pub-....r2.dev"
 
-```
-
-## Part 1: Setup programmatic access to Cloudflare Workers AI
-
-### Step 1: Create a Cloudflare account
-Go to [https://dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up)
-
-
-## Step 2: Get Cloudflare Account ID
-
-To get `CLOUDFLARE_ACCOUNT_ID`, go to https://dash.cloudflare.com/, and then click 'Overview', and scroll down until you see 'Account ID'. 
-
-![](../static/img/cloudflare-account-id.png)
-
-### Step 3: Go to Manage Account > Account API Tokens, or just straight to [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
-
-To retrieve Cloudflare API Token to programmatically access image generation model in Cloudflare Workers AI:
-
-![](../static/img/create-user-api-token-part1.png)
-
-### Step 4: Select Create Token and fill in the token name, permissions, and the optional expiration date for the token.
-
-![](../static/img/create-user-api-token-part2.png)
-
-
-After done, select Continue to summary and review the details. And your token is created.
-
-![](../static/img/create-user-api-token-part2.png)
-
-![](../static/img/create-user-api-token-part3.png)
-
-![](../static/img/create-user-api-token-part4.png)
-
-## Part 2: Setting up Cloudflare R2 as storage provider for generated images
-
-### Step 1: Create a Cloudflare account
-Go to [https://dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up)
-
-### Step 2: Go to R2 on the left hand panel
-
-![Cloudflare R2 Dashboard](../static/img/cloudflare_r2_dashboard.png)
-
-*Note: You may need to put your credit card details here.*
-
-### Step 3: Create a bucket
-
-Create a R2 bucket called `cloudflare-image-mcp`, which you could use it for `S3_BUCKET` environment variable.
-
-![Create a R2 bucket](../static/img/create_R2_bucket.png)
-
-### Step 4: Make a note of the public details on the settings page
-
-Remember to enable public acess of your storage bucket, by (i) enabling Public Development URL and (ii) make Allowed Origins for 'CORS policy' to be `*`.
-
-Also, here you can get the `S3_ENDPOINT` and `S3_CDN_URL` in format as below:
-
-```bash
+# R2 endpoint URL (get from R2 dashboard)
 S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
 
-S3_CDN_URL="https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"
-```
-
-![Enable public access for cloudflare R2 - Part 1](../static/img/r2-enable-public-access-part1.png)
-
-![Enable public access for cloudflare R2 - Part 2](../static/img/r2-enable-public-access-part2.png)
-
-### Step 5: Access (secrets)
-
-![Create R2 User API Token - Part 1](../static/img/r2-create-user-api-token-part1.png)
-
-![Create R2 User API Token - Part 2](../static/img/r2-create-user-api-token-part2.png)
-
-Also, here you can get the `S3_ACCESS_KEY` and `S3_SECRET_KEY` in format as below:
-
-```bash
+# R2 credentials (create in R2 dashboard > Manage R2 API tokens)
 S3_ACCESS_KEY="your_access_key"
 S3_SECRET_KEY="your_secret_key"
+
+# Public CDN URL for images (configure in R2 dashboard > Settings > Public access)
+S3_CDN_URL="https://pub-your-id.r2.dev"
 ```
 
-![Create R2 User API Token - Part 3](../static/img/r2-create-user-api-token-part3.png)
+### Server Configuration (Optional)
 
-![Create R2 User API Token - Part 4](../static/img/r2-create-user-api-token-part4.png)
+```bash
+# Server port (default: 3000)
+PORT=3000
 
+# Image expiry time in hours (default: 24)
+IMAGE_EXPIRY_HOURS=24
 
-### Step 6 (Optional): Automatic Cleanup of AI-Generated Images on Cloudflare R2
+# Default model (flux-schnell, flux-klein, flux-dev, sdxl-base, sdxl-lightning, dreamshaper)
+DEFAULT_MODEL="flux-schnell"
+```
 
-Use object lifecycle rules to automate the management or deletion of objects in Cloudflare R2 after a specified time.
+## File Locations
 
-![Set auto-cleanup of AI-generated images on Cloudflare R2 - Part 1](../static/img/r2-set-object-lifecycle-rule-part1.png)
+| Variable | File |
+|----------|------|
+| All local variables | `packages/local/.env` |
+| Workers secrets | Cloudflare Dashboard (wrangler secrets) |
 
-![Set auto-cleanup of AI-generated images on Cloudflare R2 - Part 2](../static/img/r2-set-object-lifecycle-rule-part2.png)
+## Part 1: Cloudflare Workers AI Setup
 
-> **Note**: The application no longer includes cleanup configuration. Use Cloudflare R2's lifecycle rules for automatic deletion of old images.
+### Step 1: Get Cloudflare Account ID
+
+1. Go to https://dash.cloudflare.com/
+2. Click 'Overview'
+3. Scroll down to find 'Account ID'
+
+![Account ID location](../static/img/cloudflare-account-id.png)
+
+### Step 2: Create API Token
+
+1. Go to https://dash.cloudflare.com/profile/api-tokens
+2. Click 'Create Token'
+3. Configure with these permissions:
+   - **Workers AI**: Read
+   - **Workers AI**: Write
+   - **Account R2**: Read
+   - **Account R2**: Write
+
+![Create API Token - Part 1](../static/img/create-user-api-token-part1.png)
+
+4. Fill in token name and settings:
+
+![Create API Token - Part 2](../static/img/create-user-api-token-part2.png)
+
+5. Review and create:
+
+![Create API Token - Part 3](../static/img/create-user-api-token-part3.png)
+
+6. Copy your API token:
+
+![Create API Token - Part 4](../static/img/create-user-api-token-part4.png)
+
+## Part 2: Cloudflare R2 Storage Setup
+
+### Step 1: Create R2 Bucket
+
+1. Go to R2 in Cloudflare Dashboard
+2. Click 'Create Bucket'
+3. Name it `cloudflare-image-mcp-images`
+
+![Create R2 Bucket](../static/img/create_R2_bucket.png)
+
+### Step 2: Enable Public Access
+
+1. Go to bucket Settings
+2. Enable 'Public access to bucket'
+3. Set Allowed Origins to `*` for CORS
+
+![R2 Public Access - Part 1](../static/img/r2-enable-public-access-part1.png)
+
+![R2 Public Access - Part 2](../static/img/r2-enable-public-access-part2.png)
+
+### Step 3: Create R2 API Token
+
+1. Go to R2 > Manage R2 API Tokens
+2. Create a new token with:
+   - **Permissions**: Object Read, Object Write
+   - **TTL**: Optional (or no expiration)
+
+![R2 API Token - Part 1](../static/img/r2-create-user-api-token-part1.png)
+
+![R2 API Token - Part 2](../static/img/r2-create-user-api-token-part2.png)
+
+3. Copy the Access Key ID and Secret Access Key:
+
+![R2 API Token - Part 3](../static/img/r2-create-user-api-token-part3.png)
+
+![R2 API Token - Part 4](../static/img/r2-create-user-api-token-part4.png)
+
+### Step 4: Get Endpoint URLs
+
+From R2 bucket Settings, note:
+- **S3_ENDPOINT**: `https://<account-id>.r2.cloudflarestorage.com`
+- **S3_CDN_URL**: `https://pub-<id>.r2.dev` (shown after enabling public access)
+
+## Setting Up Local Development
+
+### 1. Copy Example Environment File
+
+```bash
+cp packages/local/.env.example packages/local/.env
+```
+
+### 2. Fill In Your Values
+
+Edit `packages/local/.env`:
+
+```bash
+# Cloudflare
+CLOUDFLARE_API_TOKEN="ey..."
+CLOUDFLARE_ACCOUNT_ID="3574999..."
+
+# R2 Storage
+S3_BUCKET="cloudflare-image-mcp-images"
+S3_REGION="auto"
+S3_ENDPOINT="https://3574999.r2.cloudflarestorage.com"
+S3_ACCESS_KEY="your_access_key"
+S3_SECRET_KEY="your_secret_key"
+S3_CDN_URL="https://pub-xxx.r2.dev"
+
+# Optional
+PORT=3000
+IMAGE_EXPIRY_HOURS=24
+DEFAULT_MODEL="flux-schnell"
+```
+
+### 3. Start Local Server
+
+```bash
+cd packages/local
+npm run dev
+```
+
+Access at http://localhost:3000
+
+## Setting Up Cloudflare Workers
+
+### 1. Set Secrets
+
+```bash
+cd workers
+
+# Set each secret
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+```
+
+### 2. Deploy
+
+```bash
+npx wrangler deploy
+```
+
+## Troubleshooting
+
+### API Token Not Working
+
+- Ensure token has correct permissions
+- Check token hasn't expired
+
+### R2 Access Denied
+
+- Verify Access Key ID and Secret Access Key
+- Ensure R2 API token has Object Read/Write permissions
+- Check bucket name matches exactly
+
+### Public URL Not Loading
+
+- Verify public access is enabled in R2 settings
+- Check CORS allowed origins includes your domain or `*`
 
 ## References
-1. Cloudflare Docs - Create API token [https://developers.cloudflare.com/fundamentals/api/get-started/create-token/](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
-2. How to setup Cloudflare R2 bucket & generate access key [https://dev.to/jacksbridger/how-to-setup-cloudflare-r2-bucket-generate-access-key-4icd](https://dev.to/jacksbridger/how-to-setup-cloudflare-r2-bucket-generate-access-key-4icd)
+
+- [Cloudflare Docs - Create API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+- [Cloudflare R2 Setup Guide](https://developers.cloudflare.com/r2/get-started/)
+- [R2 with S3 Compatibility](https://developers.cloudflare.com/r2/api/s3/)

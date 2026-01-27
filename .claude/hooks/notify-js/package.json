@@ -1,0 +1,11 @@
+{
+  "name": "notify-js",
+  "version": "0.1.0",
+  "description": "Node.js notify hook wrapper for Claude Code → ntfy.sh",
+  "main": "notify_hook.js",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "minimist": "^1.2.8"
+  }
+}

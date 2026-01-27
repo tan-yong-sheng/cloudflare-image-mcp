@@ -1,12 +1,69 @@
 {
+  "disallowedTools": [
+    "WebSearch",
+    "WebFetch"
+  ],
   "permissions": {
     "allow": [
-      "Bash(npm run lint)",
-      "Bash(npm run build:*)",
-      "WebSearch",
-      "WebFetch"
+      "mcp__chrome-devtools",
+      "mcp__ai-vision-mcp",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "mcp__web-search-scrape",
+      "Read",
+      "Edit",
+      "Write",
+      "Update",
+      "Skill",
+      "Bash"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/notify-js/notify_hook.cjs --priority high --emoji white_check_mark --title \"Claude Code - Task Complete\" --message \"Task is completed\"",
+            "timeout": 30
+          }
+        ]
+      }
     ],
-    "deny": [],
-    "ask": []
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/notify-js/notify_hook.cjs --priority high --emoji shark --title \"Claude Code - Permission needed\" --message \"Permission is needed to proceed with next step\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/notify-js/notify_hook.cjs --priority high --emoji clipboard --title \"Claude Code - Plan Ready\" --message \"Plan is ready for review\""
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/notify-js/notify_hook.cjs --priority high --emoji question --title \"Claude Code - Input Needed\" --message \"Claude Code asks you question and needs your input\""
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "everything-claude-code@everything-claude-code": true
   }
 }
