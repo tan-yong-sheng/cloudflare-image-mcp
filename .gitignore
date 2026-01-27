@@ -5,6 +5,7 @@
 dist/
 node_modules
 
+test_images/
 
 # need to exclude account_id and cdn_url
 workers/wrangler.toml

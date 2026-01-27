@@ -115,7 +115,7 @@ curl -X POST "http://localhost:8787/v1/images/generations" \
 ### List Available Models
 
 ```bash
-curl "http://localhost:8787/api/models"
+curl "http://localhost:8787/api/internal/models"
 ```
 
 ---

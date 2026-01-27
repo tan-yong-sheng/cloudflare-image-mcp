@@ -214,6 +214,10 @@
                             <option value="sdxl-base">SDXL Base 1.0 - Stable, versatile</option>
                             <option value="sdxl-lightning">SDXL Lightning - Fast SDXL</option>
                             <option value="dreamshaper">DreamShaper 8 LCM - Photorealistic</option>
+                            <option value="lucid-origin">Lucid Origin - Leonardo.AI</option>
+                            <option value="phoenix">Phoenix 1.0 - Leonardo.AI</option>
+                            <option value="sd-1.5-img2img">SD 1.5 Img2Img - Image transformation</option>
+                            <option value="sd-1.5-inpainting">SD 1.5 Inpainting - Mask-based editing</option>
                         </select>
                     </div>
 
@@ -418,6 +422,9 @@
             downloadButton.classList.add('hidden');
             loadingOverlay.classList.remove('hidden');
 
+            // Capture start time for duration tracking
+            const startTime = Date.now();
+
             try {
                 const response = await fetch(API_BASE + '/images/generations', {
                     method: 'POST',
@@ -459,9 +466,13 @@
                     aiImage.classList.remove('hidden');
                     downloadButton.classList.remove('hidden');
 
+                    // Calculate elapsed time
+                    const elapsed = Date.now() - startTime;
+                    const elapsedSeconds = (elapsed / 1000).toFixed(1);
+
                     // Update info
                     document.getElementById('usedModel').textContent = model;
-                    document.getElementById('generationTime').textContent = '~' + (data.created ? '?' : '10s');
+                    document.getElementById('generationTime').textContent = elapsedSeconds + 's';
                 };
 
             } catch (error) {

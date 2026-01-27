@@ -273,3 +273,105 @@ To run full tests, the following credentials are needed in `.env`:
 - Phoenix 1.0 - Leonardo.AI
 
 **MCP update**: Updated tool definitions in `workers/src/endpoints/mcp-endpoint.ts` to include new model options in enum.
+
+---
+
+## Bug Fixes (2026-01-27) - Local Server Packages
+
+### Issue 7: Missing models in local packages ✅ FIXED
+**Files**:
+- `packages/core/src/models/configs.ts`
+- `packages/local/src/ui/index.html`
+
+**Problem**: Local server packages were missing the 4 new models that were added to workers.
+
+**Added models to `packages/core/src/models/configs.ts`**:
+- `@cf/leonardo/lucid-origin` - Leonardo Lucid Origin (base64 response)
+- `@cf/leonardo/phoenix-1.0` - Leonardo Phoenix 1.0 (binary response)
+- `@cf/runwayml/stable-diffusion-v1-5-img2img` - SD 1.5 for image-to-image
+- `@cf/runwayml/stable-diffusion-v1-5-inpainting` - SD 1.5 for inpainting
+
+**Added aliases**:
+- `lucid-origin`, `phoenix`, `phoenix-1.0` for Leonardo models
+- `sd-1.5-img2img`, `sd-1.5-inpainting` for SD 1.5 models
+
+**Frontend update**: Updated `packages/local/src/ui/index.html` with new model options in dropdown.
+
+### Issue 8: Time duration not showing on frontend ✅ FIXED
+**File**: `packages/local/src/ui/index.html`
+
+**Problem**: Generation time displayed as "-" because the code didn't capture start time.
+
+**Fix**:
+- Added `const startTime = Date.now();` before API call
+- Calculate elapsed: `const elapsed = Date.now() - startTime;`
+- Display: `document.getElementById('generationTime').textContent = elapsedSeconds + 's';`
+
+### Issue 9: FLUX.2 multipart not working in local server ✅ FIXED
+**File**: `packages/core/src/ai/client.ts`
+
+**Problem**: FLUX.2 models require multipart format but local server was sending JSON.
+
+**Fix**:
+- Added `getModelConfig` import to check `inputFormat`
+- Added `base64ToUint8Array()` helper for binary conversion
+- Added `makeMultipartRequest()` function for multipart requests
+- Modified `generateImage()` to check model config and use multipart for FLUX.2 models
+
+```typescript
+const modelConfig = getModelConfig(modelId);
+const inputFormat = modelConfig?.inputFormat || 'json';
+
+if (inputFormat === 'multipart') {
+  return makeMultipartRequest(modelId, payload);
+}
+```
+
+### Issue 10: MCP tools missing next_step guidance ✅ FIXED
+**Files**:
+- `workers/src/endpoints/mcp-endpoint.ts`
+- `packages/local/src/main.ts`
+- `packages/local/src/mcp/stdio.ts`
+
+**Problem**: MCP tools didn't provide next step guidance for workflow.
+
+**Fix**:
+- `list_models` now returns `next_step: "call describe_model(model_id=\"${user_mentioned_model_id}\")"`
+- `describe_model` now returns `next_step: "call run_models(model_id=\"@cf/...\" prompt=\"your prompt here\")"`
+
+### Issue 11: MCP tools renamed for consistency ✅ FIXED
+**Files**:
+- `workers/src/endpoints/mcp-endpoint.ts`
+- `packages/local/src/main.ts`
+- `packages/local/src/mcp/stdio.ts`
+
+**Changes**:
+- Renamed `generate_image` → `run_models`
+- Renamed `model` parameter → `model_id`
+- Updated tool descriptions to include required "call x tools first" guidance
+
+---
+
+## Verification Results (2026-01-27)
+
+### Local Server (http://localhost:3000)
+- ✅ `/mcp` endpoint working
+- ✅ All 10 models available via `/v1/models`
+- ✅ MCP tools list working
+- ✅ `list_models` returns JSON with `next_step`
+- ✅ `describe_model` returns OpenAPI schema with `next_step`
+- ✅ FLUX.2 models (multipart) working
+- ✅ Time duration display working on frontend
+- ✅ New models visible in frontend dropdown
+
+### Available Models
+1. `@cf/black-forest-labs/flux-1-schnell` - FLUX.1 schnell
+2. `@cf/black-forest-labs/flux-2-klein-4b` - FLUX.2 klein (multipart)
+3. `@cf/black-forest-labs/flux-2-dev` - FLUX.2 dev (multipart)
+4. `@cf/stabilityai/stable-diffusion-xl-base-1.0` - SDXL Base
+5. `@cf/bytedance/stable-diffusion-xl-lightning` - SDXL Lightning
+6. `@cf/lykon/dreamshaper-8-lcm` - DreamShaper 8 LCM
+7. `@cf/leonardo/lucid-origin` - Leonardo Lucid Origin (NEW)
+8. `@cf/leonardo/phoenix-1.0` - Leonardo Phoenix 1.0 (NEW)
+9. `@cf/runwayml/stable-diffusion-v1-5-img2img` - SD 1.5 Img2Img (NEW)
+10. `@cf/runwayml/stable-diffusion-v1-5-inpainting` - SD 1.5 Inpainting (NEW)

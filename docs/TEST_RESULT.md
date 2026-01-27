@@ -258,14 +258,14 @@ npx tsx src/main.ts  # Direct execution
 
 ### Workers Dev Server (workers)
 - Health: http://localhost:8787/health
-- Models: http://localhost:8787/api/models
+- Models: http://localhost:8787/api/internal/models
 - MCP HTTP: POST http://localhost:8787/mcp/message
 - Web UI: http://localhost:8787/
 
 ### Workers Production (deployed)
 - **URL**: https://cloudflare-image-workers.tys203831.workers.dev
 - Health: https://cloudflare-image-workers.tys203831.workers.dev/health
-- Models: https://cloudflare-image-workers.tys203831.workers.dev/api/models
+- Models: https://cloudflare-image-workers.tys203831.workers.dev/api/internal/models
 - MCP HTTP: POST https://cloudflare-image-workers.tys203831.workers.dev/mcp/message
 - Web UI: https://cloudflare-image-workers.tys203831.workers.dev/
 

@@ -29,6 +29,34 @@ export interface ModelConfig {
 }
 
 /**
+ * OpenAPI Schema for a model (auto-generated from ModelConfig)
+ */
+export interface ModelOpenAPISchema {
+  openapi: string;
+  info: {
+    title: string;
+    version: string;
+    description: string;
+  };
+  servers: Array<{ url: string }>;
+  paths: Record<string, unknown>;
+  components: {
+    schemas: {
+      ImageGenerationRequest: {
+        type: 'object';
+        properties: Record<string, unknown>;
+        required: string[];
+      };
+      ImageEditRequest: {
+        type: 'object';
+        properties: Record<string, unknown>;
+        required: string[];
+      };
+    };
+  };
+}
+
+/**
  * Supported generation tasks
  */
 export type ModelTask = 'text-to-image' | 'image-to-image' | 'inpainting';

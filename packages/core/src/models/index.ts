@@ -139,3 +139,140 @@ export function getParameterSchema(modelId: string): Record<string, unknown> {
     required: required.length > 0 ? required : undefined,
   };
 }
+
+/**
+ * Parse and validate parameters based on model schema
+ * Converts string values from multipart/form-data to correct types
+ * @param modelId - Model ID or alias
+ * @param params - Raw parameters (may contain string values)
+ * @returns Parsed parameters with correct types
+ */
+export function parseModelParams(
+  modelId: string,
+  params: Record<string, unknown>
+): Record<string, unknown> {
+  const model = getModelConfig(modelId);
+  if (!model) {
+    return params;
+  }
+
+  const parsed: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    const paramConfig = model.parameters[key];
+    if (!paramConfig) {
+      // Unknown parameter, pass through as-is
+      parsed[key] = value;
+      continue;
+    }
+
+    // Convert based on parameter type
+    if (paramConfig.type === 'integer' || paramConfig.type === 'number') {
+      if (typeof value === 'number') {
+        parsed[key] = value;
+      } else if (typeof value === 'string') {
+        const parsedNum = parseFloat(value);
+        if (isNaN(parsedNum)) {
+          // If can't parse as number, keep as string
+          parsed[key] = value;
+        } else {
+          parsed[key] = paramConfig.type === 'integer' ? Math.round(parsedNum) : parsedNum;
+        }
+      } else {
+        parsed[key] = value;
+      }
+    } else if (paramConfig.type === 'boolean') {
+      if (typeof value === 'boolean') {
+        parsed[key] = value;
+      } else if (typeof value === 'string') {
+        parsed[key] = value.toLowerCase() === 'true' || value === '1';
+      } else {
+        parsed[key] = Boolean(value);
+      }
+    } else {
+      // String type, keep as-is
+      parsed[key] = value;
+    }
+  }
+
+  return parsed;
+}
+
+/**
+ * Generate OpenAPI 3.0 schema for a model
+ * @param modelId - Model ID or alias
+ * @returns OpenAPI schema object
+ */
+export function generateOpenAPISchema(modelId: string): Record<string, unknown> {
+  const model = getModelConfig(modelId);
+  if (!model) {
+    return {};
+  }
+
+  // Build request body schema from parameters
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  for (const [name, config] of Object.entries(model.parameters)) {
+    const prop: Record<string, unknown> = {
+      type: config.type === 'integer' || config.type === 'number' ? 'number' : 'string',
+      description: config.cfParam,
+    };
+
+    if (config.default !== undefined) {
+      prop.default = config.default;
+    }
+    if (config.min !== undefined) {
+      prop.minimum = config.min;
+    }
+    if (config.max !== undefined) {
+      prop.maximum = config.max;
+    }
+    if (config.required) {
+      required.push(name);
+    }
+
+    properties[name] = prop;
+  }
+
+  const schema = {
+    openapi: '3.0.0',
+    info: {
+      title: model.name,
+      version: '1.0.0',
+      description: model.description,
+    },
+    servers: [{ url: 'http://localhost:3000/v1' }],
+    paths: {
+      '/images/generations': {
+        post: {
+          summary: 'Generate images from text prompt',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    model: { type: 'string', default: modelId },
+                    prompt: { type: 'string', description: 'Text description of the image' },
+                    n: { type: 'integer', minimum: 1, maximum: 8, default: 1 },
+                    size: { type: 'string', enum: model.limits.supportedSizes },
+                    response_format: { type: 'string', enum: ['url', 'b64_json'] },
+                    ...properties,
+                  },
+                  required: ['prompt'],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  return schema;
+}

@@ -9,9 +9,11 @@ import { ImageGeneratorService } from '../services/image-generator.js';
 export class MCPEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
+  private cdnUrl: string;
 
   constructor(env: Env) {
     this.generator = new ImageGeneratorService(env);
+    this.cdnUrl = env.CDN_URL || '';
     this.corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -305,16 +307,17 @@ export class MCPEndpoint {
       }];
     }
 
-    // Format response
+    // Format response with full CDN URL
     const textParts: string[] = [];
+    const fullUrl = (path: string) => path.startsWith('http') ? path : `${this.cdnUrl}${path}`;
 
     if (result.images.length === 1) {
       textParts.push(`Image generated successfully!\n`);
-      textParts.push(`![Generated Image](${result.images[0].url})`);
+      textParts.push(`![Generated Image](${fullUrl(result.images[0].url)})`);
     } else {
       textParts.push(`Generated ${result.images.length} images:\n\n`);
       result.images.forEach((img, i) => {
-        textParts.push(`Image ${i + 1}: ![Generated Image ${i + 1}](${img.url})\n`);
+        textParts.push(`Image ${i + 1}: ![Generated Image ${i + 1}](${fullUrl(img.url)})\n`);
       });
     }
 
@@ -336,9 +339,18 @@ export class MCPEndpoint {
       modelMap[model.id] = model.taskTypes;
     }
 
+    // Add next_step guidance
+    const userMentionedModel = '${user_mentioned_model_id}';
+    const nextStep = `call describe_model(model_id="${userMentionedModel}")`;
+
+    const output = {
+      ...modelMap,
+      next_step: nextStep,
+    };
+
     return [{
       type: 'text',
-      text: JSON.stringify(modelMap, null, 2),
+      text: JSON.stringify(output, null, 2),
     }];
   }
 
@@ -415,6 +427,24 @@ export class MCPEndpoint {
         supported_sizes: modelConfig.limits.supportedSizes,
       };
     }
+
+    // Build params string for next_step (exclude prompt since it's added separately)
+    const paramStrings: string[] = [];
+    for (const [key, param] of Object.entries(modelConfig.parameters)) {
+      const p = param as any;
+      // Skip prompt since it's added separately at the end
+      if (p.required && key !== 'prompt') {
+        const cfParam = p.cfParam || key;
+        paramStrings.push(`${cfParam}=value`);
+      }
+    }
+    const paramsStr = paramStrings.join(' ');
+
+    // Add next_step guidance
+    const nextStep = `call run_models(model_id="${modelConfig.id}"${paramsStr ? ' ' + paramsStr : ''} prompt="your prompt here")`;
+
+    // Add next_step to schema
+    schema.next_step = nextStep;
 
     return [{
       type: 'text',

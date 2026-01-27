@@ -300,20 +300,20 @@ import { createAIClient } from '@cloudflare-image-mcp/core/ai';
 ## Migration Steps (In Order)
 
 1. **Create packages/core/**
-   - [ ] Define TypeScript types
-   - [ ] Create model configurations
-   - [ ] Implement AI client abstraction
-   - [ ] Implement storage abstraction
+   - [x] Define TypeScript types
+   - [x] Create model configurations (10 models)
+   - [x] Implement AI client abstraction (with multipart support)
+   - [x] Implement storage abstraction (S3/R2)
    - [ ] Write unit tests
 
 2. **Create packages/local/**
-   - [ ] Set up package structure
-   - [ ] Implement main entry point
-   - [ ] Create stdio MCP transport
-   - [ ] Create REST API server
-   - [ ] Copy web UI
-   - [ ] Create Dockerfile
-   - [ ] Test locally
+   - [x] Set up package structure
+   - [x] Implement main entry point
+   - [x] Create stdio MCP transport
+   - [x] Create REST API server (with multipart handling)
+   - [x] Copy web UI (with 10 models and time display)
+   - [x] Create Dockerfile
+   - [x] Test locally (verified with curl)
 
 3. **Refactor packages/workers/**
    - [ ] Update to use @cloudflare-image-mcp/core
@@ -321,21 +321,57 @@ import { createAIClient } from '@cloudflare-image-mcp/core/ai';
    - [ ] Test with wrangler dev
 
 4. **Cleanup old mcp/ folder**
-   - [ ] Migrate npm package to packages/local
+   - [x] Migrate npm package to packages/local
    - [ ] Update npm registry
-   - [ ] Remove old mcp/ folder
+   - [x] Remove old mcp/ folder
+
+---
+
+## MCP Tools Implementation
+
+### Tool Structure
+```
+list_models → returns JSON {model_id: [taskTypes], next_step: "..."}
+describe_model → returns OpenAPI schema with next_step
+run_models → generates images using model_id
+```
+
+### Workflow Guidance
+1. User calls `list_models` to get available models
+2. `list_models` returns `next_step: "call describe_model(model_id=\"${user_mentioned_model_id}\")"`
+3. User calls `describe_model` with model_id
+4. `describe_model` returns OpenAPI schema with `next_step: "call run_models(model_id=\"@cf/...\" prompt=\"your prompt here\")"`
+5. User calls `run_models` with model_id and params
+
+---
+
+## Model Configurations (10 Models)
+
+| Model ID | Provider | Tasks | Format |
+|----------|----------|-------|--------|
+| @cf/black-forest-labs/flux-1-schnell | BFL | text-to-image | JSON |
+| @cf/black-forest-labs/flux-2-klein-4b | BFL | text-to-image, image-to-image | Multipart |
+| @cf/black-forest-labs/flux-2-dev | BFL | text-to-image, image-to-image | Multipart |
+| @cf/stabilityai/stable-diffusion-xl-base-1.0 | StabilityAI | text-to-image, image-to-image, inpainting | JSON |
+| @cf/bytedance/stable-diffusion-xl-lightning | ByteDance | text-to-image | JSON |
+| @cf/lykon/dreamshaper-8-lcm | Lykon | text-to-image, image-to-image | JSON |
+| @cf/leonardo/lucid-origin | Leonardo | text-to-image | JSON |
+| @cf/leonardo/phoenix-1.0 | Leonardo | text-to-image | JSON |
+| @cf/runwayml/stable-diffusion-v1-5-img2img | RunwayML | image-to-image | JSON |
+| @cf/runwayml/stable-diffusion-v1-5-inpainting | RunwayML | inpainting | JSON |
 
 ---
 
 ## Verification Checklist
 
-- [ ] `packages/core/` builds successfully
-- [ ] `packages/local/` builds successfully
+- [x] `packages/core/` builds successfully
+- [x] `packages/local/` builds successfully
 - [ ] `packages/workers/` builds successfully
 - [ ] All tests pass
-- [ ] Local server runs on port 3000
-- [ ] Local MCP server works with Claude Desktop
+- [x] Local server runs on port 3000
+- [x] Local MCP server works with curl
 - [ ] Workers dev server runs
-- [ ] Frontend loads correctly
-- [ ] API generates images
-- [ ] Docker image builds and runs
+- [x] Frontend loads correctly (10 models in dropdown)
+- [x] API generates images (FLUX.2 multipart tested)
+- [x] Docker image builds and runs
+- [x] Time duration displays correctly on frontend

@@ -2414,7 +2414,7 @@ var src_default = {
         const mcp = new MCPEndpoint(env);
         return mcp.handle(request);
       }
-      if (path === "/api/models") {
+      if (path === "/api/internal/models") {
         const models = listModels();
         return new Response(JSON.stringify(models), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -2565,7 +2565,7 @@ function wrapExportedHandler(worker) {
   for (const middleware of __INTERNAL_WRANGLER_MIDDLEWARE__) {
     __facade_register__(middleware);
   }
-  const fetchDispatcher = /* @__PURE__ */ __name(function(request, env, ctx) {
+  const fetchDispatcher = /* @__PURE__ */ __name(function (request, env, ctx) {
     if (worker.fetch === void 0) {
       throw new Error("Handler does not export a fetch() function.");
     }
@@ -2574,7 +2574,7 @@ function wrapExportedHandler(worker) {
   return {
     ...worker,
     fetch(request, env, ctx) {
-      const dispatcher = /* @__PURE__ */ __name(function(type, init) {
+      const dispatcher = /* @__PURE__ */ __name(function (type, init) {
         if (type === "scheduled" && worker.scheduled !== void 0) {
           const controller = new __Facade_ScheduledController__(
             Date.now(),

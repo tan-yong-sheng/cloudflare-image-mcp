@@ -56,7 +56,7 @@ export default {
       }
 
       // Route: API endpoints
-      if (path === '/api/models') {
+      if (path === '/api/internal/models') {
         const models = listModels();
         return new Response(JSON.stringify(models), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
