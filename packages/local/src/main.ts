@@ -7,7 +7,6 @@ import 'dotenv/config';
 import express, { Express, Request, Response } from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,8 +18,52 @@ import {
   createS3StorageProvider,
   getModelConfig,
   listModels,
+  parseEmbeddedParams,
+  mergeParams,
+  detectTask,
 } from '@cloudflare-image-mcp/core';
 import type { ServerConfig } from '@cloudflare-image-mcp/core';
+import { existsSync, readFileSync } from 'fs';
+
+// ============================================================================
+// Image Fetching Utility - Supports URL, base64, and file path
+// ============================================================================
+
+type InputType = 'url' | 'base64' | 'path';
+
+function detectInputType(input: string): InputType {
+  if (input.startsWith('data:')) return 'base64';
+  if (input.startsWith('http://') || input.startsWith('https://')) return 'url';
+  return 'path';
+}
+
+async function fetchImage(input: string): Promise<{ buffer: Buffer; base64: string }> {
+  const type = detectInputType(input);
+
+  switch (type) {
+    case 'url': {
+      const response = await fetch(input);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image from URL: ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return { buffer, base64: buffer.toString('base64') };
+    }
+    case 'base64': {
+      const base64Data = input.includes(',') ? input.split(',')[1] : input;
+      const buffer = Buffer.from(base64Data, 'base64');
+      return { buffer, base64: base64Data };
+    }
+    case 'path': {
+      if (!existsSync(input)) {
+        throw new Error(`File not found: ${input}`);
+      }
+      const buffer = readFileSync(input);
+      return { buffer, base64: buffer.toString('base64') };
+    }
+  }
+}
 
 // Load environment variables
 const defaultModelRaw = process.env.DEFAULT_MODEL || '';
@@ -160,30 +203,50 @@ app.post('/mcp', async (req: Request, res: Response) => {
       const tools = [
         {
           name: 'run_models',
-          description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". You must call "describe_model" first to obtain the params required to use this tool, UNLESS the user explicitly provides params.',
+          description: 'Execute image generation based on model capabilities. WORKFLOW: 1. Call list_models to get available models → 2. Call describe_model to understand parameters → 3. Call run_models to generate. Required: model_id (from list_models) and prompt. Optional: task (text-to-image/image-to-image/inpainting - auto-detected if not specified), image (URL/base64/path for img2img/inpainting), mask (URL/base64/path for inpainting), and other model-specific parameters.',
           inputSchema: {
             type: 'object',
             properties: {
-              prompt: { type: 'string', description: 'Text description of the image to generate' },
-              model_id: { type: 'string', description: 'Exact model_id from list_models output (e.g., @cf/black-forest-labs/flux-1-schnell)' },
+              task: {
+                type: 'string',
+                enum: ['text-to-image', 'image-to-image', 'inpainting'],
+                description: 'Task type. Auto-detected from model if not specified. Use this to explicitly choose task for models supporting multiple tasks.'
+              },
+              prompt: { type: 'string', description: 'Text description of the image to generate. Supports embedded params: "prompt ---steps=8 --seed=1234"' },
+              model_id: { type: 'string', description: 'Exact model_id from list_models output (required)' },
               n: { type: 'number', description: 'Number of images to generate (1-8)', minimum: 1, maximum: 8 },
               size: { type: 'string', description: 'Image size (e.g., 1024x1024)' },
-              steps: { type: 'number', description: 'Number of diffusion steps (model-dependent)' },
-              seed: { type: 'number', description: 'Random seed for reproducibility' },
-              guidance: { type: 'number', description: 'Guidance scale (1-30, model-dependent)' },
-              negative_prompt: { type: 'string', description: 'Elements to avoid in the image' },
+              image: {
+                type: 'string',
+                description: 'Input image for img2img/inpainting: URL (https://...), base64 data URI (data:image/...), or local file path.'
+              },
+              mask: {
+                type: 'string',
+                description: 'Mask for inpainting: URL, base64 data URI, or file path.'
+              },
+              params: {
+                type: 'object',
+                description: 'Task-specific parameters (steps, seed, guidance, negative_prompt, strength)',
+                properties: {
+                  steps: { type: 'number', description: 'Number of diffusion steps (model-dependent)' },
+                  seed: { type: 'number', description: 'Random seed for reproducibility' },
+                  guidance: { type: 'number', description: 'Guidance scale (1-30, model-dependent)' },
+                  negative_prompt: { type: 'string', description: 'Elements to avoid in the image' },
+                  strength: { type: 'number', description: 'Transformation strength for img2img (0-1)', minimum: 0, maximum: 1 },
+                },
+              },
             },
-            required: ['prompt', 'model_id'],
+            required: ['model_id', 'prompt'],
           },
         },
         {
           name: 'list_models',
-          description: 'List all available image generation models. Returns JSON object mapping model_id to supported task types.',
+          description: 'List all available image generation models with their supported task types. WORKFLOW STEP 1: Call this first to discover available models, then call describe_model to understand parameters, then call run_models to generate images.',
           inputSchema: { type: 'object', properties: {} },
         },
         {
           name: 'describe_model',
-          description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". Returns detailed OpenAPI schema documentation for a specific model including all parameters with type, min, max, default values.',
+          description: 'Get detailed parameter documentation for a specific model including all supported parameters, limits, and examples. WORKFLOW STEP 2: Call after list_models to understand how to use a specific model.',
           inputSchema: {
             type: 'object',
             properties: { model_id: { type: 'string', description: 'Exact model_id from list_models output' } },
@@ -207,12 +270,15 @@ app.post('/mcp', async (req: Request, res: Response) => {
         for (const model of models) {
           modelMap[model.id] = model.taskTypes;
         }
-        // Add next_step guidance
-        const userMentionedModel = '${user_mentioned_model_id}';
-        const nextStep = `call describe_model(model_id="${userMentionedModel}")`;
+        // Add next_step guidance with workflow
         const output = {
           ...modelMap,
-          next_step: nextStep,
+          _workflow: {
+            step1: 'list_models() - you are here',
+            step2: 'describe_model(model_id="<model_id>") - get parameters',
+            step3: 'run_models(model_id="<model_id>", prompt="...", ...) - generate',
+          },
+          _next_step: 'Call describe_model(model_id="<model_id_from_above>") to get parameter details, then call run_models(...) to generate images',
         };
         res.json({ jsonrpc: '2.0', id: requestId, result: { content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] } });
         return;
@@ -258,27 +324,67 @@ app.post('/mcp', async (req: Request, res: Response) => {
             supported_sizes: modelConfig.limits.supportedSizes,
           };
         }
-        // Build params string for next_step (exclude prompt since it's added separately)
-        const paramStrings: string[] = [];
+
+        // Add supported tasks
+        schema.supported_tasks = modelConfig.supportedTasks;
+
+        // Build all_optional_params for next_step
+        const allOptionalParams: Record<string, string> = {};
+
+        // Add task parameter
+        if (modelConfig.supportedTasks.length > 1) {
+          allOptionalParams.task = `string (${modelConfig.supportedTasks.join('|')}) - task type, auto-detected if not specified`;
+        }
+
+        // Add all model parameters as optional
         for (const [key, param] of Object.entries(modelConfig.parameters)) {
           const p = param as any;
-          // Skip prompt since it's added separately at the end
-          if (p.required && key !== 'prompt') {
-            const cfParam = p.cfParam || key;
-            paramStrings.push(`${cfParam}=value`);
+          const cfParam = p.cfParam || key;
+          let paramDesc = `${p.type}`;
+          if (p.default !== undefined) paramDesc += ` - default: ${p.default}`;
+          if (p.min !== undefined || p.max !== undefined) {
+            const min = p.min ?? 'N/A';
+            const max = p.max ?? 'N/A';
+            paramDesc += `, range: ${min}-${max}`;
+          }
+          if (key !== 'prompt') {
+            allOptionalParams[cfParam] = `${paramDesc}${p.required ? ' (required)' : ' (optional)'}`;
           }
         }
-        const paramsStr = paramStrings.join(' ');
-        const paramsPart = paramsStr ? ' ' + paramsStr : '';
-        const nextStep = `call run_models(model_id="${modelConfig.id}"${paramsPart} prompt="your prompt here")`;
-        schema.next_step = nextStep;
+
+        // Add common optional params
+        allOptionalParams.n = 'number (1-8) - number of images, default: 1';
+        allOptionalParams.size = `string - image size, see supported_sizes for valid options`;
+
+        // Build examples for different tasks
+        const examples: string[] = [];
+        const baseExample = `run_models(model_id="${modelConfig.id}"`;
+
+        if (modelConfig.supportedTasks.includes('text-to-image')) {
+          examples.push(`${baseExample}, task="text-to-image", prompt="your prompt here")`);
+        }
+        if (modelConfig.supportedTasks.includes('image-to-image')) {
+          examples.push(`${baseExample}, task="image-to-image", prompt="style description", image="URL_or_base64_or_path", strength=0.7)`);
+        }
+        if (modelConfig.supportedTasks.includes('inpainting')) {
+          examples.push(`${baseExample}, task="inpainting", prompt="what to add", image="URL", mask="URL")`);
+        }
+
+        // Build next_step with all information
+        schema.next_step = {
+          tool: 'run_models',
+          examples,
+          all_optional_params: allOptionalParams,
+          _note: 'Parameters marked as (required) must be provided, (optional) can be omitted',
+        };
+
         res.json({ jsonrpc: '2.0', id: requestId, result: { content: [{ type: 'text', text: JSON.stringify(schema, null, 2) }] } });
         return;
       }
 
       if (name === 'run_models') {
-        const prompt = params.prompt as string | undefined;
-        if (!prompt) {
+        const rawPrompt = params.prompt as string | undefined;
+        if (!rawPrompt) {
           res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: 'prompt is required' } });
           return;
         }
@@ -289,15 +395,83 @@ app.post('/mcp', async (req: Request, res: Response) => {
           return;
         }
 
+        // Parse embedded params from prompt (e.g., "city ---steps=8 --seed=1234")
+        const { cleanPrompt, embeddedParams } = parseEmbeddedParams(rawPrompt);
+
+        // Get params object (task-specific parameters)
+        const paramsObj = (params.params as Record<string, unknown>) || {};
+
+        // Merge explicit params with embedded params (embedded takes precedence)
+        const mergedParams = mergeParams(paramsObj, embeddedParams);
+
+        // Detect task type
+        const task = detectTask({
+          task: params.task as string | undefined,
+          image: params.image,
+          mask: params.mask,
+        });
+
+        // Get model config and check if model supports the task
+        const modelConfig = getModelConfig(model_id);
+        if (!modelConfig) {
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: `Unknown model: ${model_id}` } });
+          return;
+        }
+
+        if (!modelConfig.supportedTasks.includes(task as any)) {
+          res.json({
+            jsonrpc: '2.0',
+            id: requestId,
+            error: {
+              code: -32600,
+              message: `Model ${model_id} does not support "${task}". Supported tasks: ${modelConfig.supportedTasks.join(', ')}`
+            }
+          });
+          return;
+        }
+
+        // Validate task-specific requirements
+        const imageInput = params.image as string | undefined;
+        const maskInput = params.mask as string | undefined;
+
+        if (task === 'inpainting' && !maskInput) {
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: 'Task "inpainting" requires mask parameter' } });
+          return;
+        }
+
+        if ((task === 'image-to-image' || task === 'inpainting') && !imageInput) {
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: `Task "${task}" requires image parameter` } });
+          return;
+        }
+
+        // Fetch image(s) if provided
+        let imageBase64: string | undefined;
+        let maskBase64: string | undefined;
+
+        try {
+          if (imageInput) {
+            const { base64 } = await fetchImage(imageInput);
+            imageBase64 = base64;
+          }
+          if (maskInput) {
+            const { base64 } = await fetchImage(maskInput);
+            maskBase64 = base64;
+          }
+        } catch (error) {
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32603, message: `Failed to fetch image: ${error instanceof Error ? error.message : String(error)}` } });
+          return;
+        }
+
         const n = params.n as number | undefined;
         const size = params.size as string | undefined;
-        const steps = params.steps as number | undefined;
-        const seed = params.seed as number | undefined;
-        const guidance = params.guidance as number | undefined;
-        const negative_prompt = params.negative_prompt as string | undefined;
+        const steps = mergedParams.steps as number | undefined;
+        const seed = mergedParams.seed as number | undefined;
+        const guidance = mergedParams.guidance as number | undefined;
+        const negative_prompt = mergedParams.negative_prompt as string | undefined;
+        const strength = mergedParams.strength as number | undefined;
 
         const result = await aiClient.generateImage(model_id, {
-          prompt,
+          prompt: cleanPrompt,
           n: Math.min(Math.max(n || 1, 1), 8),
           steps,
           seed,
@@ -305,6 +479,9 @@ app.post('/mcp', async (req: Request, res: Response) => {
           negative_prompt,
           width: size ? parseInt(size.split('x')[0]) : undefined,
           height: size ? parseInt(size.split('x')[1]) : undefined,
+          image: imageBase64,
+          mask: maskBase64,
+          strength,
         });
 
         if (!result.success) {
@@ -312,7 +489,7 @@ app.post('/mcp', async (req: Request, res: Response) => {
           return;
         }
 
-        const uploadResult = await storage.uploadImage(result.data!, { model: model_id, prompt, size: size || '' });
+        const uploadResult = await storage.uploadImage(result.data!, { model: model_id, prompt: cleanPrompt, size: size || '' });
         if (!uploadResult.success) {
           res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32603, message: uploadResult.error } });
           return;
@@ -350,10 +527,18 @@ app.get('/', (_req: Request, res: Response) => {
 
 // Start HTTP server
 const PORT = parseInt(process.env.PORT || '3000', 10);
-app.listen(PORT, () => {
-  console.log(`\nCloudflare Image MCP - Local Server v0.1.0`);
-  console.log(`Server:  http://localhost:${PORT}`);
-  console.log(`API:     http://localhost:${PORT}/v1/images/generations`);
-  console.log(`MCP:     http://localhost:${PORT}/mcp`);
-  console.log(`\nPress Ctrl+C to stop\n`);
-});
+
+// Check for stdio mode
+if (process.argv.includes('--stdio')) {
+  // Run as stdio MCP server
+  const { createStdioMCPServer } = await import('./mcp/stdio.js');
+  await createStdioMCPServer(config, aiClient, storage);
+} else {
+  app.listen(PORT, () => {
+    console.log(`\nCloudflare Image MCP - Local Server v0.1.0`);
+    console.log(`Server:  http://localhost:${PORT}`);
+    console.log(`API:     http://localhost:${PORT}/v1/images/generations`);
+    console.log(`MCP:     http://localhost:${PORT}/mcp`);
+    console.log(`\nPress Ctrl+C to stop\n`);
+  });
+}

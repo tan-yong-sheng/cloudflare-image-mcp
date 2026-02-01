@@ -1,104 +1,282 @@
-# MCP Tools Modification Plan
+# MCP Tools Test Plan - Enhanced Image Generation
 
 ## Overview
-Modify MCP tools to use `model_id` instead of aliases, and update output formats.
+Redesign MCP tools with clear hierarchical workflow and standardized endpoints, aligned with REST API patterns (`/v1/images/generations` and `/v1/images/edits`).
 
-Then environment includes (1) Local environment at packages/ folder and (2) Cloudflare Workers environment at workers/ folder:
--  
+## Hierarchical Tool Workflow
 
-## (1) Local Environment
-
-**Pre-requisites**: You need to start local server at http://localhost:3000 first at packages/ folder ..
-
-...TO BE ADDED...
-
-## (2) Cloudflare Workers 
-
-### Changes Required
-
-#### 1. `list_models` Tool
-**Current:** Returns markdown table with model name, capabilities, task types
-**New:** Returns JSON with key-value pairs: `model_id` → `taskTypes[]`
-**New:** Append a new field called 'next_step' in json OUTPUT: {"next_step": "call describe_model(user_mentioned_model_id in llm chat(if get environment variable for DEFAULT_MODEL to be written in this sentence)),..."}
-
-
-```json
-{
-  "@cf/black-forest-labs/flux-1-schnell": ["text-to-image"],
-  "@cf/black-forest-labs/flux-2-klein-4b": ["text-to-image", "image-to-image"],
-  ...
-}
+```
+list_models (get available models with task types)
+    ↓
+describe_model (get model parameters and config)
+    ↓
+run_models (generate images with task specification)
 ```
 
-#### 2. `describe_model` Tool
-**Current:** Returns markdown formatted parameter help
-**New:** Returns OpenAPI schema format with type, min, max, default
-**New:** Append to tool description: "You must call 'list_models' first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id  in the format '@cf/black-forest-labs/flux-1-schnell'"
-**New:** Append a new field called 'next_step' in json OUTPUT: {"next_step": "call generate_models(user_mentioned_model_id in llm chat(if get environment variable for DEFAULT_MODEL to be written in this sentence) --param1=value1 --param2=value2 --param3=value3, )"} ... noted that you need to fill in the --param1=value1 --param2=value2 with the respective values you get in openapi result you get in this tool..."
+## Key Changes
 
+### 1. New Tool Schema for `run_models`
+
+Uses `params` object for task-specific parameters and supports embedded params in prompt.
 
 ```json
 {
-  "model_id": "@cf/black-forest-labs/flux-1-schnell",
-  "parameters": {
-    "prompt": {
-      "type": "string",
-      "required": true,
-      "description": "Text description of the image"
+  "name": "run_models",
+  "description": "Generate images using Cloudflare AI. WORKFLOW: Step 3 - after describe_model, call this with model_id, prompt, and optional parameters. Supports params object for task-specific settings and embedded params via '---' delimiter (e.g., prompt='city ---steps=8 --seed=1234').",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "model_id": {
+        "type": "string",
+        "description": "Exact model_id from list_models output (e.g., @cf/black-forest-labs/flux-1-schnell)"
+      },
+      "prompt": {
+        "type": "string",
+        "description": "Text description of the image to generate. Supports embedded params: 'prompt ---steps=8 --seed=1234'"
+      },
+      "task": {
+        "type": "string",
+        "enum": ["text-to-image", "image-to-image", "inpainting"],
+        "description": "Task type. Auto-detected if not specified based on image/mask parameters."
+      },
+      "n": {
+        "type": "number",
+        "description": "Number of images (1-8)",
+        "minimum": 1,
+        "maximum": 8
+      },
+      "size": {
+        "type": "string",
+        "description": "Image size (e.g., 1024x1024)"
+      },
+      "image": {
+        "type": "string",
+        "description": "Input image for img2img/inpainting: URL (https://...), base64 data URI (data:image/...), or local file path."
+      },
+      "mask": {
+        "type": "string",
+        "description": "Mask for inpainting: URL, base64 data URI, or file path."
+      },
+      "params": {
+        "type": "object",
+        "description": "Task-specific parameters (steps, seed, guidance, negative_prompt, strength)",
+        "properties": {
+          "steps": {
+            "type": "number",
+            "description": "Diffusion steps"
+          },
+          "seed": {
+            "type": "number",
+            "description": "Random seed"
+          },
+          "guidance": {
+            "type": "number",
+            "description": "Guidance scale (1-30)"
+          },
+          "negative_prompt": {
+            "type": "string",
+            "description": "Elements to avoid in the image"
+          },
+          "strength": {
+            "type": "number",
+            "description": "Transformation strength for img2img (0-1). Higher = more transformation.",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
     },
-    "steps": {
-      "type": "integer",
-      "default": 4,
-      "min": 1,
-      "max": 8
-    },
-    ...
+    "required": ["prompt", "model_id"]
   }
 }
 ```
 
-#### 3. `generate_image` → `run_models` Tool
-**Current:** Accepts `model` parameter with aliases allowed
-**New:** Accepts `model_id` parameter (no aliases), add detailed description
-**New:** Append to tool description: "You must call 'describe_models' first to obtain the params required to use this tool, UNLESS the user explicitly provides params in the openapi format'"
+### 2. Embedded Parameters in Prompt
 
-**New Description:**
+Cloudflare-specific parameters can be embedded in the prompt using `---` delimiter:
+
 ```
-You must provide the exact model_id from the list_models tool output.
-Available model_ids and their supported task types:
-- @cf/black-forest-labs/flux-1-schnell (text-to-image)
-- @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image)
-- @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image)
-...
+"A beautiful sunset ---steps=8 --seed=1234 --guidance=7.5"
 ```
 
-#### 4. Update Tool Definitions in MCPEndpoint
-Update `getToolDefinitions()` to reflect new parameter names and descriptions.
+This gets parsed into:
+- `prompt`: "A beautiful sunset"
+- `embeddedParams`: `{ steps: 8, seed: 1234, guidance: 7.5 }`
+
+### 3. Usage Examples
+
+**Text-to-Image:**
+```json
+{
+  "model_id": "@cf/black-forest-labs/flux-1-schnell",
+  "prompt": "A cyberpunk city at night"
+}
+```
+
+**With params object:**
+```json
+{
+  "model_id": "@cf/black-forest-labs/flux-1-schnell",
+  "prompt": "A cyberpunk city",
+  "params": {
+    "steps": 8,
+    "seed": 42
+  }
+}
+```
+
+**With embedded params:**
+```json
+{
+  "model_id": "@cf/black-forest-labs/flux-1-schnell",
+  "prompt": "A cyberpunk city ---steps=8 --seed=42"
+}
+```
+
+**Image-to-Image:**
+```json
+{
+  "model_id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+  "prompt": "Transform into a painting",
+  "image": "data:image/jpeg;base64,/9j/4AAQ...",
+  "params": {
+    "strength": 0.7
+  }
+}
+```
+
+**Inpainting:**
+```json
+{
+  "model_id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+  "prompt": "Add a dragon",
+  "image": "https://example.com/image.jpg",
+  "mask": "https://example.com/mask.png"
+}
+```
+
+### 4. Updated `describe_model` with Full next_step
+
+```json
+{
+  "model_id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+  "name": "Stable Diffusion XL Base 1.0",
+  "parameters": { ... },
+  "limits": { ... },
+  "supported_tasks": ["text-to-image", "image-to-image", "inpainting"],
+  "next_step": {
+    "tool": "run_models",
+    "examples": [
+      "run_models(model_id=\"@cf/stabilityai/stable-diffusion-xl-base-1.0\", prompt=\"a beautiful landscape\")",
+      "run_models(model_id=\"@cf/stabilityai/stable-diffusion-xl-base-1.0\", prompt=\"oil painting style\", image=\"URL\", params={\"strength\":0.7})",
+      "run_models(model_id=\"@cf/stabilityai/stable-diffusion-xl-base-1.0\", prompt=\"add a dragon\", image=\"URL\", mask=\"URL\")"
+    ],
+    "all_optional_params": {
+      "task": "string (text-to-image|image-to-image|inpainting) - auto-detected if not specified",
+      "n": "number (1-8) - default: 1",
+      "size": "string (e.g., 512x512, 1024x1024) - see supported_sizes",
+      "params": {
+        "steps": "number - default: ${defaultSteps}, range: ${minSteps}-${maxSteps}",
+        "seed": "number - for reproducibility",
+        "guidance": "number (${minGuidance}-${maxGuidance}) - default: ${defaultGuidance}",
+        "negative_prompt": "string - elements to avoid",
+        "strength": "number (0-1) - for image-to-image, default: 0.7"
+      },
+      "image": "string (URL|base64|path) - for image-to-image/inpainting tasks",
+      "mask": "string (URL|base64|path) - for inpainting only"
+    }
+  }
+}
+```
+
+### 3. Updated `list_models` with Workflow Guidance
+
+```json
+{
+  "@cf/black-forest-labs/flux-1-schnell": ["text-to-image"],
+  "@cf/stabilityai/stable-diffusion-xl-base-1.0": ["text-to-image", "image-to-image", "inpainting"],
+  "next_step": "call describe_model(model_id=\"@cf/stabilityai/stable-diffusion-xl-base-1.0\") to get parameter details, then call run_models(...) to generate images",
+  "workflow": "1. list_models() → 2. describe_model(model_id) → 3. run_models(model_id, prompt, ...)"
+}
+```
+
+## Standardized REST API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/image/generations` | POST | Text-to-image generation |
+| `/v1/image/edits` | POST | Image-to-image and inpainting |
+
+## Test Cases
+
+### Text-to-Image
+```json
+{
+  "task": "text-to-image",
+  "model_id": "@cf/black-forest-labs/flux-1-schnell",
+  "prompt": "a cyberpunk city"
+}
+```
+
+### Image-to-Image
+```json
+{
+  "task": "image-to-image",
+  "model_id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+  "prompt": "oil painting style",
+  "image": "https://example.com/photo.jpg",
+  "strength": 0.7
+}
+```
+
+### Inpainting
+```json
+{
+  "task": "inpainting",
+  "model_id": "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+  "prompt": "add a dragon",
+  "image": "https://example.com/photo.jpg",
+  "mask": "https://example.com/mask.png"
+}
+```
+
+### Auto-detect Task (without task param)
+```json
+{
+  "model_id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+  "prompt": "a landscape",
+  "image": "https://example.com/photo.jpg"
+  // task auto-detected as "image-to-image"
+}
+```
+
+## Error Messages
+
+| Scenario | Error |
+|----------|-------|
+| Model doesn't support specified task | "Model {model_id} does not support {task}. Supported: {supported_tasks}" |
+| Task requires image | "Task {task} requires image parameter" |
+| Inpainting requires mask | "Task inpainting requires mask parameter" |
+| Model doesn't support img2img | "Model {model_id} does not support image input. Use text-to-image task." |
+
+## Implementation Checklist
+
+- [ ] Add `task` parameter to run_models inputSchema
+- [ ] Update run_models description with workflow info
+- [ ] Update describe_model to include all_optional_params in next_step
+- [ ] Update list_models next_step with workflow guidance
+- [ ] Implement task auto-detection based on image/mask params
+- [ ] Add task validation for model capabilities
+- [ ] Update REST API endpoints to /v1/image/generations and /v1/image/edits
+- [ ] Write unit tests
+- [ ] Test all task types with various image inputs
+- [ ] Verify error handling
 
 ## Files to Modify
 
-1. `workers/src/endpoints/mcp-endpoint.ts`
-   - `handleListModels()` - Change output format
-   - `handleDescribeModel()` - Change to OpenAPI schema format
-   - `getToolDefinitions()` - Update tool definitions
-
-2. `workers/src/config/models.ts`
-   - May need helper functions to extract OpenAPI schema
-
-### Test Plan
-
-1. Start MCP inspector in background
-2. Test `tools/list` to see new tool definitions
-3. Test `list_models` with curl
-4. Test `describe_model` for multiple models
-5. Test `run_models` with model_id
-6. Verify all 10 models work
-
-### Progress
-
-- [x] Modify list_models output format
-- [x] Modify describe_model to OpenAPI schema
-- [x] Rename generate_image to run_models
-- [x] Update tool definitions
-- [x] Test with MCP inspector
-- [x] Write curl requests to docs/MCP_REQUEST_TEST.md
+| File | Changes |
+|------|---------|
+| `packages/local/src/main.ts` | Update MCP tools schema and handlers |
+| `packages/local/src/mcp/stdio.ts` | Same changes for stdio transport |
+| `packages/local/src/api/server.ts` | Update REST API endpoints |
+| `packages/core/src/types.ts` | Add task type definitions |

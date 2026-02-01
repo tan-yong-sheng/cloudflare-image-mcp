@@ -4,6 +4,8 @@
 dist/
 node_modules
 
+.claude/settings.local.json.bak
+
 test_images/
 
 # need to exclude account_id and cdn_url
@@ -11,3 +13,5 @@ workers/wrangler.toml
 workers/.wrangler
 # any way to move  account_id and cdn_url to here ...
 .dev.vars
+
+

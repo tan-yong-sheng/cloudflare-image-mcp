@@ -265,3 +265,95 @@ export function generateOpenAPISchema(modelId: string): Record<string, unknown> 
 
   return schema;
 }
+
+/**
+ * Parse embedded parameters from prompt using --- delimiter
+ * Example: "A sunset ---steps=8 --seed=1234"
+ * Returns: { cleanPrompt: "A sunset", embeddedParams: { steps: 8, seed: 1234 } }
+ * @param prompt - Prompt with optional embedded parameters
+ * @returns Object containing clean prompt and parsed parameters
+ */
+export function parseEmbeddedParams(prompt: string): {
+  cleanPrompt: string;
+  embeddedParams: Record<string, unknown>;
+} {
+  // Split on --- delimiter
+  const parts = prompt.split('---');
+  const cleanPrompt = parts[0].trim();
+
+  const embeddedParams: Record<string, unknown> = {};
+
+  if (parts.length > 1) {
+    // Parse each param: --key=value or -key=value or key=value
+    const paramString = parts.slice(1).join('---').trim();
+    // Match --key=value, -key=value, or key=value formats
+    const paramRegex = /--?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:'([^']*)'|"([^"]*)"|([^"'-\s][^-\s]*))/g;
+
+    let match;
+    // Reset regex lastIndex to ensure fresh matching
+    paramRegex.lastIndex = 0;
+
+    while ((match = paramRegex.exec(paramString)) !== null) {
+      const key = match[1];
+      const value = match[2] ?? match[3] ?? match[4];
+
+      // Try to parse as number or boolean
+      if (value !== undefined) {
+        if (value === '') {
+          embeddedParams[key] = true; // Flag format like --flag
+        } else if (!isNaN(Number(value)) && value.trim() !== '') {
+          embeddedParams[key] = Number(value);
+        } else if (value.toLowerCase() === 'true') {
+          embeddedParams[key] = true;
+        } else if (value.toLowerCase() === 'false') {
+          embeddedParams[key] = false;
+        } else {
+          embeddedParams[key] = value;
+        }
+      }
+    }
+  }
+
+  return { cleanPrompt, embeddedParams };
+}
+
+/**
+ * Merge parameters with embedded params taking precedence
+ * Embedded params override explicit params
+ * @param explicitParams - Explicitly provided parameters
+ * @param embeddedParams - Parameters parsed from prompt
+ * @returns Merged parameters with embedded taking precedence
+ */
+export function mergeParams(
+  explicitParams: Record<string, unknown>,
+  embeddedParams: Record<string, unknown>
+): Record<string, unknown> {
+  return { ...explicitParams, ...embeddedParams };
+}
+
+/**
+ * Detect task type from parameters
+ * @param params - Parameters including image and mask
+ * @returns Detected task type
+ */
+export function detectTask(
+  params: Partial<{
+    task: string;
+    image: unknown;
+    mask: unknown;
+  }>
+): 'text-to-image' | 'image-to-image' | 'inpainting' {
+  // If task is explicitly specified, use it
+  if (params.task) {
+    return params.task as 'text-to-image' | 'image-to-image' | 'inpainting';
+  }
+
+  // Auto-detect based on image and mask
+  if (params.mask) {
+    return 'inpainting';
+  }
+  if (params.image) {
+    return 'image-to-image';
+  }
+  return 'text-to-image';
+}
