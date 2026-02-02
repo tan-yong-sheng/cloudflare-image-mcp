@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  cloudflare-image-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/cloudflare-image-mcp:latest
+    container_name: cloudflare-image-mcp
+    ports:
+      - "3000:3000"
+    environment:
+      # Cloudflare Configuration
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}
+      
+      # R2/S3 Storage Configuration
+      - S3_BUCKET=${S3_BUCKET:-cloudflare-image-mcp-images}
+      - S3_REGION=${S3_REGION:-auto}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_CDN_URL=${S3_CDN_URL}
+      
+      # Server Configuration
+      - PORT=3000
+      - IMAGE_EXPIRY_HOURS=${IMAGE_EXPIRY_HOURS:-24}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-@cf/black-forest-labs/flux-1-schnell}
+      - NODE_ENV=production
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - cloudflare-mcp-network
+    
+    labels:
+      - "com.cloudflare-image-mcp.description=Cloudflare Image MCP Server"
+      - "com.cloudflare-image-mcp.version=0.1.0"
+
+networks:
+  cloudflare-mcp-network:
+    driver: bridge
+
+# For development with docker-compose
+# Usage:
+#   1. Copy .env.example to .env and fill in your credentials
+#   2. Run: docker-compose up -d
+#   3. Access: http://localhost:3000
+#
+# To rebuild after code changes:
+#   docker-compose up -d --build
+#
+# To view logs:
+#   docker-compose logs -f
+#
+# To stop:
+#   docker-compose down

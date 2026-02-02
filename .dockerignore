@@ -1,0 +1,69 @@
+# Node modules
+node_modules/
+*/node_modules/
+**/node_modules/
+
+# Build artifacts
+dist/
+*/dist/
+**/dist/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+
+# Documentation (not needed in container)
+docs/
+*.md
+!README.md
+
+# Workers (not needed for local deployment)
+workers/
+
+# Static test files
+static/
+test_images/
+test_*.sh
+test_*.mjs
+test_*.js
+
+# CI/CD
+.github/
+
+# Claude/AI configs
+.claude/
+AGENTS.md
+CLAUDE.md
+
+# Temporary files
+tmp/
+temp/
+*.tmp

@@ -1,17 +1,24 @@
+# Environment files
 .env
-.env.dev
+.env.*
+!.env.example
 
+# Build artifacts
 dist/
 node_modules
 
+# Claude settings
 .claude/settings.local.json.bak
 
+# Test files
 test_images/
 
-# need to exclude account_id and cdn_url
+# Cloudflare Workers
 workers/wrangler.toml
 workers/.wrangler
-# any way to move  account_id and cdn_url to here ...
 .dev.vars
+
+# Docker
+*.log
 
 

@@ -1,0 +1,93 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'workers/**'
+      - '.github/workflows/deploy-workers.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  deploy:
+    name: Deploy Workers to Cloudflare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: workers/package-lock.json
+
+      - name: Install dependencies
+        working-directory: workers
+        run: npm ci
+
+      - name: Type check
+        working-directory: workers
+        run: npm run check
+
+      - name: Create wrangler.toml from template
+        working-directory: workers
+        run: |
+          # Copy template and inject secrets
+          cp wrangler.toml.example wrangler.toml
+          
+          # Update account_id in wrangler.toml
+          sed -i "s/account_id = \"\"/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/" wrangler.toml
+          sed -i "s/account_id = \"\"  # under [ai]/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/" wrangler.toml || true
+          
+          # Update CDN URL if provided
+          if [ -n "${{ secrets.CDN_URL }}" ]; then
+            sed -i "s|CDN_URL = \"\"|CDN_URL = \"${{ secrets.CDN_URL }}\"|" wrangler.toml
+          fi
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers
+          command: deploy
+
+      - name: Deployment summary
+        run: |
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Worker Name:** cloudflare-image-workers" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Endpoints Available" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: https://cloudflare-image-workers.*.workers.dev/" >> $GITHUB_STEP_SUMMARY
+          echo "- OpenAI API: https://cloudflare-image-workers.*.workers.dev/v1/images/generations" >> $GITHUB_STEP_SUMMARY
+          echo "- MCP HTTP: https://cloudflare-image-workers.*.workers.dev/mcp" >> $GITHUB_STEP_SUMMARY
+          echo "- MCP SSE: https://cloudflare-image-workers.*.workers.dev/mcp?transport=sse" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for error details." >> $GITHUB_STEP_SUMMARY
