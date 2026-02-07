@@ -198,8 +198,9 @@ test.describe('MCP SDK Integration', () => {
 
       if (content.length > 0) {
         const textContent = content[0];
-        expect(textContent).toHaveProperty('isError', true);
+        // Server returns error as text content (not with isError flag)
         expect(textContent.text).toContain('Error:');
+        expect(textContent.text).toContain('required');
 
         console.log('✅ MCP error handling works:', textContent.text);
       }
