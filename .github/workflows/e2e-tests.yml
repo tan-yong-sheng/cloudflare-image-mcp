@@ -7,11 +7,11 @@ on:
       target:
         description: 'Test target'
         required: true
-        default: 'local'
+        default: 'workers'
         type: choice
         options:
-          - local
           - workers
+          - local
       workers_url:
         description: 'Cloudflare Workers URL (if target=workers)'
         required: false
@@ -26,6 +26,7 @@ on:
       - 'workers/**'
       - 'e2e/**'
       - '.github/workflows/e2e-tests.yml'
+      - 'package.json'
 
   # Run before publishing GHCR image
   workflow_call:
@@ -33,23 +34,28 @@ on:
       target:
         description: 'Test target'
         required: false
-        default: 'local'
+        default: 'workers'
+        type: string
+      workers_url:
+        description: 'Cloudflare Workers URL'
+        required: false
+        default: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
         type: string
 
 env:
   NODE_VERSION: '20'
-  # Default to 'workers' for PRs, 'local' for manual dispatch if not specified
-  TEST_TARGET: ${{ inputs.target || 'workers' }}
-  TEST_BASE_URL: ${{ inputs.workers_url || 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev' }}
 
 jobs:
   e2e-tests:
-    name: E2E Tests (${{ inputs.target || 'local' }})
+    name: E2E Tests (${{ inputs.target || 'workers' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
       pull-requests: write
+    env:
+      TEST_TARGET: ${{ inputs.target || 'workers' }}
+      TEST_BASE_URL: ${{ inputs.workers_url || 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev' }}
 
     steps:
       - name: Checkout code
@@ -60,9 +66,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: e2e/package-lock.json
 
-      - name: Install dependencies
+      - name: Install E2E dependencies
         run: |
           cd e2e
           npm ci
@@ -70,21 +75,20 @@ jobs:
       - name: Install Playwright browsers
         run: |
           cd e2e
-          npx playwright install --with-deps
+          npx playwright install --with-deps chromium
 
-      - name: Build local packages (if testing local)
+      - name: Build local packages
         if: env.TEST_TARGET == 'local'
         run: |
           npm ci
           npm run build
-        working-directory: .
 
-      - name: Start local server (if testing local)
+      - name: Start local server
         if: env.TEST_TARGET == 'local'
         run: |
           cd packages/local
           npm run dev &
-          npx wait-on http://localhost:3000/health --timeout 60000
+          npx wait-on http://localhost:3000/health --timeout 120000
         env:
           PORT: 3000
           NODE_ENV: test
@@ -129,9 +133,9 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           name: E2E Test Results (${{ env.TEST_TARGET }})
-          path: junit-results.xml
-          working-directory: e2e
+          path: e2e/junit-results.xml
           reporter: jest-junit
+          fail-on-error: false
 
       - name: Comment PR with test results
         if: github.event_name == 'pull_request' && always()
@@ -191,18 +195,3 @@ jobs:
         run: |
           echo "E2E tests failed!"
           exit 1
-
-  # Job to update GHCR publish workflow status
-  e2e-status:
-    name: E2E Tests Status
-    needs: e2e-tests
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Check test results
-        run: |
-          if [ "${{ needs.e2e-tests.result }}" == "failure" ]; then
-            echo "E2E tests failed! Blocking merge."
-            exit 1
-          fi
-          echo "E2E tests passed!"

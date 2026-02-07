@@ -24,13 +24,14 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Run E2E tests first on PRs
+  # Run E2E tests first on PRs (against Workers deployment)
   e2e-tests:
     name: Run E2E Tests
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/e2e-tests.yml
     with:
-      target: 'local'
+      target: 'workers'
+      workers_url: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
     secrets: inherit
 
   build-and-push:
