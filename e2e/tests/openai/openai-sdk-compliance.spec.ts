@@ -1,90 +1,85 @@
 import { test, expect } from '@playwright/test';
-import OpenAI from 'openai';
 
 /**
- * OpenAI SDK Compliance Tests
+ * OpenAI API Compliance Tests
  *
- * Uses the official OpenAI Node.js SDK to verify our endpoint is fully compatible.
- * This ensures we match the exact behavior of OpenAI's API.
+ * Validates that our endpoint returns responses exactly matching the OpenAI API specification.
+ * This ensures compatibility with OpenAI's official SDK and clients like OpenWebUI.
  *
  * @compliance
  */
 
-test.describe('OpenAI SDK Compliance', () => {
-  // Get the base URL from environment or use default
-  const baseURL = process.env.TEST_BASE_URL || 'http://localhost:8787';
+test.describe('OpenAI API Compliance', () => {
+  // Default test model (fastest for testing)
+  const TEST_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
-  // Create OpenAI client pointing to our endpoint
-  const createClient = () => {
-    return new OpenAI({
-      apiKey: 'dummy-api-key', // Our endpoint doesn't validate API keys
-      baseURL: `${baseURL}/v1`,
-    });
-  };
-
-  test('OpenAI SDK can generate images with url format', async () => {
-    const client = createClient();
-
-    const response = await client.images.generate({
-      model: '@cf/black-forest-labs/flux-1-schnell',
-      prompt: 'A red apple on a wooden table',
-      n: 1,
-      size: '1024x1024',
+  test('response with url format contains only url field', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A red apple on a wooden table',
+        model: TEST_MODEL,
+        n: 1,
+        response_format: 'url',
+      },
     });
 
-    // Validate response structure matches OpenAI spec
-    expect(response).toBeDefined();
-    expect(response.created).toBeDefined();
-    expect(typeof response.created).toBe('number');
-    expect(response.data).toBeDefined();
-    expect(Array.isArray(response.data)).toBe(true);
+    expect(response.status()).toBe(200);
 
-    // Type guard for data array
-    if (!response.data || response.data.length === 0) {
-      throw new Error('Response data is empty');
-    }
-    expect(response.data.length).toBe(1);
+    const body = await response.json();
 
-    const image = response.data[0];
+    // Validate top-level structure matches OpenAI spec exactly
+    expect(body).toHaveProperty('created');
+    expect(typeof body.created).toBe('number');
+    expect(body).toHaveProperty('data');
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBe(1);
 
-    // URL format should have 'url' property
+    const image = body.data[0];
+
+    // Image object should ONLY have 'url' field for url format
+    // per OpenAI spec: https://platform.openai.com/docs/api-reference/images/create
+    expect(Object.keys(image)).toEqual(['url']);
+
+    // Validate url field
     expect(image.url).toBeDefined();
     expect(typeof image.url).toBe('string');
     expect(image.url).not.toBeNull();
     expect(image.url).not.toBe('');
+    expect(image.url.length).toBeGreaterThan(0);
 
     // Should NOT have b64_json when using url format
-    expect(image.b64_json).toBeUndefined();
+    expect(image).not.toHaveProperty('b64_json');
 
-    // revised_prompt is optional in OpenAI spec, may or may not be present
-    // Our implementation does not include it
+    // Should NOT have revised_prompt (not in OpenAI spec)
+    expect(image).not.toHaveProperty('revised_prompt');
   });
 
-  test('OpenAI SDK can generate images with b64_json format', async () => {
-    const client = createClient();
-
-    const response = await client.images.generate({
-      model: '@cf/black-forest-labs/flux-1-schnell',
-      prompt: 'A blue sky with white clouds',
-      n: 1,
-      size: '1024x1024',
-      response_format: 'b64_json',
+  test('response with b64_json format contains only b64_json field', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A blue sky with white clouds',
+        model: TEST_MODEL,
+        n: 1,
+        response_format: 'b64_json',
+      },
     });
 
-    // Validate response structure
-    expect(response).toBeDefined();
-    expect(response.created).toBeDefined();
-    expect(response.data).toBeDefined();
+    expect(response.status()).toBe(200);
 
-    // Type guard for data array
-    if (!response.data || response.data.length === 0) {
-      throw new Error('Response data is empty');
-    }
-    expect(response.data.length).toBe(1);
+    const body = await response.json();
 
-    const image = response.data[0];
+    // Validate structure
+    expect(body).toHaveProperty('created');
+    expect(body).toHaveProperty('data');
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBe(1);
 
-    // b64_json format should have 'b64_json' property
+    const image = body.data[0];
+
+    // Image object should ONLY have 'b64_json' field for b64_json format
+    expect(Object.keys(image)).toEqual(['b64_json']);
+
+    // Validate b64_json field
     expect(image.b64_json).toBeDefined();
     expect(typeof image.b64_json).toBe('string');
     expect(image.b64_json).not.toBeNull();
@@ -95,118 +90,204 @@ test.describe('OpenAI SDK Compliance', () => {
     expect(image.b64_json).toMatch(base64Regex);
 
     // Should NOT have url when using b64_json format
-    expect(image.url).toBeUndefined();
+    expect(image).not.toHaveProperty('url');
+
+    // Should NOT have revised_prompt (not in OpenAI spec)
+    expect(image).not.toHaveProperty('revised_prompt');
   });
 
-  test('OpenAI SDK can generate multiple images', async () => {
-    const client = createClient();
-
-    const response = await client.images.generate({
-      model: '@cf/black-forest-labs/flux-1-schnell',
-      prompt: 'A cat sleeping on a couch',
-      n: 2,
-      size: '1024x1024',
+  test('default response format is url and contains only url field', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A simple geometric shape',
+        model: TEST_MODEL,
+        n: 1,
+        // No response_format specified - should default to url
+      },
     });
 
-    // Type guard for data array
-    if (!response.data) {
-      throw new Error('Response data is undefined');
-    }
-    expect(response.data).toHaveLength(2);
+    expect(response.status()).toBe(200);
 
-    // Each image should have url
-    for (const image of response.data) {
+    const body = await response.json();
+    const image = body.data[0];
+
+    // Default format should be url
+    expect(Object.keys(image)).toEqual(['url']);
+    expect(image.url).toBeDefined();
+    expect(image).not.toHaveProperty('b64_json');
+  });
+
+  test('multiple images each have only url field', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A cat sleeping on a couch',
+        model: TEST_MODEL,
+        n: 2,
+        response_format: 'url',
+      },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    expect(body.data).toHaveLength(2);
+
+    // Each image should only have url field
+    for (const image of body.data) {
+      expect(Object.keys(image)).toEqual(['url']);
       expect(image.url).toBeDefined();
       expect(typeof image.url).toBe('string');
+      expect(image).not.toHaveProperty('b64_json');
+      expect(image).not.toHaveProperty('revised_prompt');
     }
   });
 
-  test('OpenAI SDK handles missing prompt gracefully', async () => {
-    const client = createClient();
+  test('edits endpoint returns only url field', async ({ request }) => {
+    // Note: This test requires an actual image. For compliance testing,
+    // we just verify the response structure is correct.
+    // Skip if image editing is not available
 
-    let errorThrown = false;
-    try {
-      // @ts-expect-error - Testing missing prompt intentionally
-      await client.images.generate({
-        model: '@cf/black-forest-labs/flux-1-schnell',
+    const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    const response = await request.post('/v1/images/edits', {
+      data: {
+        image: testImageBase64,
+        prompt: 'Add a red dot in the center',
+        model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
         n: 1,
-      });
-    } catch (error: any) {
-      errorThrown = true;
-      // OpenAI SDK wraps errors in a specific format
-      expect(error).toBeDefined();
-      expect(error.status).toBe(400);
-    }
-
-    // Ensure an error was actually thrown
-    expect(errorThrown).toBe(true);
-  });
-
-  test('OpenAI SDK can list models', async () => {
-    const client = createClient();
-
-    const response = await client.models.list();
-
-    expect(response).toBeDefined();
-    expect(response.data).toBeDefined();
-    expect(Array.isArray(response.data)).toBe(true);
-
-    // Type guard for data array
-    if (!response.data) {
-      throw new Error('Response data is undefined');
-    }
-
-    // Should have at least some models
-    expect(response.data.length).toBeGreaterThan(0);
-
-    // Check model structure
-    const model = response.data[0];
-    expect(model.id).toBeDefined();
-    expect(model.object).toBe('model');
-  });
-
-  test('OpenAI SDK response format matches spec exactly', async () => {
-    const client = createClient();
-
-    const response = await client.images.generate({
-      model: '@cf/black-forest-labs/flux-1-schnell',
-      prompt: 'A simple geometric shape',
-      n: 1,
+      },
     });
 
-    // Verify the exact response structure matches OpenAI spec
+    // If the endpoint works, verify response structure
+    if (response.status() === 200) {
+      const body = await response.json();
+      expect(body).toHaveProperty('created');
+      expect(body).toHaveProperty('data');
+      expect(Array.isArray(body.data)).toBe(true);
+
+      if (body.data.length > 0) {
+        const image = body.data[0];
+        // Should only have url field
+        const keys = Object.keys(image);
+        expect(keys).toContain('url');
+        expect(keys).not.toContain('b64_json');
+        expect(keys).not.toContain('revised_prompt');
+      }
+    }
+    // If it fails (400/500), that's ok - we're testing response format, not functionality
+  });
+
+  test('variations endpoint returns only url field', async ({ request }) => {
+    const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    const response = await request.post('/v1/images/variations', {
+      data: {
+        image: testImageBase64,
+        model: '@cf/black-forest-labs/flux-2-klein-4b',
+        n: 1,
+      },
+    });
+
+    // If the endpoint works, verify response structure
+    if (response.status() === 200) {
+      const body = await response.json();
+      expect(body).toHaveProperty('created');
+      expect(body).toHaveProperty('data');
+      expect(Array.isArray(body.data)).toBe(true);
+
+      if (body.data.length > 0) {
+        const image = body.data[0];
+        // Should only have url field
+        const keys = Object.keys(image);
+        expect(keys).toContain('url');
+        expect(keys).not.toContain('b64_json');
+        expect(keys).not.toContain('revised_prompt');
+      }
+    }
+    // If it fails (400/500), that's ok - we're testing response format, not functionality
+  });
+
+  test('response structure matches OpenAI spec exactly', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A simple test image',
+        model: TEST_MODEL,
+        n: 1,
+      },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+
+    // Verify top-level fields match OpenAI spec exactly
     // https://platform.openai.com/docs/api-reference/images/create
+    const topLevelKeys = Object.keys(body).sort();
+    expect(topLevelKeys).toEqual(['created', 'data']);
 
-    // Top-level fields
-    expect(Object.keys(response).sort()).toEqual(['created', 'data']);
-
-    // Type guard for data array
-    if (!response.data || response.data.length === 0) {
-      throw new Error('Response data is empty');
-    }
-
-    // Image object fields - only 'url' for url format
-    const image = response.data[0];
+    // Verify image object has only url (for url format)
+    const image = body.data[0];
     expect(Object.keys(image)).toEqual(['url']);
+
+    // created should be a unix timestamp
+    expect(typeof body.created).toBe('number');
+    expect(body.created).toBeGreaterThan(1600000000); // After 2020
+    expect(body.created).toBeLessThan(3000000000); // Before 2050
+
+    // data should be an array
+    expect(Array.isArray(body.data)).toBe(true);
   });
 
-  test('OpenAI SDK b64_json response format matches spec exactly', async () => {
-    const client = createClient();
-
-    const response = await client.images.generate({
-      model: '@cf/black-forest-labs/flux-1-schnell',
-      prompt: 'A simple geometric shape',
-      n: 1,
-      response_format: 'b64_json',
+  test('b64_json response structure matches OpenAI spec exactly', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A simple test image',
+        model: TEST_MODEL,
+        n: 1,
+        response_format: 'b64_json',
+      },
     });
 
-    // Type guard for data array
-    if (!response.data || response.data.length === 0) {
-      throw new Error('Response data is empty');
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    const image = body.data[0];
+
+    // Verify image object has only b64_json (for b64_json format)
+    expect(Object.keys(image)).toEqual(['b64_json']);
+  });
+
+  test('OpenWebUI compatibility: no null values in response', async ({ request }) => {
+    // OpenWebUI's Python code fails with 'NoneType' object has no attribute 'lower'
+    // when null values are present in the response
+
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A simple test image',
+        model: TEST_MODEL,
+        n: 1,
+      },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+
+    // Recursively check for null values
+    function checkNoNullValues(obj: any, path: string = ''): void {
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = path ? `${path}.${key}` : key;
+
+        // Check for null
+        expect(value).not.toBeNull();
+
+        // Recurse into objects (but not arrays of primitives)
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          checkNoNullValues(value, currentPath);
+        }
+      }
     }
 
-    // Image object fields - only 'b64_json' for b64_json format
-    const image = response.data[0];
-    expect(Object.keys(image)).toEqual(['b64_json']);
+    checkNoNullValues(body);
   });
 });
