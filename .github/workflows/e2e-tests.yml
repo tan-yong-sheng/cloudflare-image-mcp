@@ -128,15 +128,6 @@ jobs:
           path: e2e/test-results/**/*.png
           retention-days: 7
 
-      - name: Publish JUnit test results
-        if: always()
-        uses: dorny/test-reporter@v1
-        with:
-          name: E2E Test Results (${{ env.TEST_TARGET }})
-          path: junit-results.xml
-          reporter: jest-junit
-          fail-on-error: false
-
       - name: Comment PR with test results
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
