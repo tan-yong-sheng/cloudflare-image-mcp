@@ -38,7 +38,8 @@ on:
 
 env:
   NODE_VERSION: '20'
-  TEST_TARGET: ${{ inputs.target || 'local' }}
+  # Default to 'workers' for PRs, 'local' for manual dispatch if not specified
+  TEST_TARGET: ${{ inputs.target || 'workers' }}
   TEST_BASE_URL: ${{ inputs.workers_url || 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev' }}
 
 jobs:
