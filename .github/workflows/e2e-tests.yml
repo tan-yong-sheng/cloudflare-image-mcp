@@ -129,7 +129,8 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           name: E2E Test Results (${{ env.TEST_TARGET }})
-          path: e2e/junit-results.xml
+          path: junit-results.xml
+          working-directory: e2e
           reporter: jest-junit
 
       - name: Comment PR with test results
