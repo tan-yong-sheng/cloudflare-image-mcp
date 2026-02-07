@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - copilot/add-mcp-for-text-to-image
     paths:
       - 'workers/**'
       - '.github/workflows/deploy-workers.yml'
