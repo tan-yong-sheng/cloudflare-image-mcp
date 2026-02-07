@@ -4,7 +4,7 @@
  * Uses the official @modelcontextprotocol/sdk to test the MCP server.
  * This provides deeper protocol-level validation than raw HTTP tests.
  *
- * Run with: TEST_TARGET=workers npx playwright test tests/mcp/mcp-sdk.spec.ts
+ * Run with: TEST_TARGET=workers npx playwright test tests/api/mcp/mcp-sdk.spec.ts
  */
 
 import { test, expect } from '@playwright/test';

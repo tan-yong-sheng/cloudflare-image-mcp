@@ -43,3 +43,20 @@ variable "image_expiry_hours" {
   type        = number
   default     = 24
 }
+
+variable "environment" {
+  description = "Deployment environment (staging or production)"
+  type        = string
+  default     = "production"
+
+  validation {
+    condition     = contains(["staging", "production"], var.environment)
+    error_message = "Environment must be 'staging' or 'production'."
+  }
+}
+
+variable "workers_subdomain" {
+  description = "Subdomain for the Workers deployment (used for output)"
+  type        = string
+  default     = "cloudflare-image-workers"
+}

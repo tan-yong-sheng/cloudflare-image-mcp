@@ -4,20 +4,17 @@ on:
   # Manual trigger for testing specific deployments
   workflow_dispatch:
     inputs:
-      target:
-        description: 'Test target'
+      environment:
+        description: 'Test environment'
         required: true
-        default: 'workers'
+        default: 'staging'
         type: choice
         options:
-          - workers
+          - staging
+          - production
           - local
-      workers_url:
-        description: 'Cloudflare Workers URL (if target=workers)'
-        required: false
-        default: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
       test_pattern:
-        description: 'Test file pattern (e.g., tests/mcp/mcp-sdk.spec.ts)'
+        description: 'Test file pattern (e.g., tests/api/mcp/mcp-sdk.spec.ts)'
         required: false
         default: ''
         type: string
@@ -36,15 +33,10 @@ on:
   # Run before publishing GHCR image
   workflow_call:
     inputs:
-      target:
-        description: 'Test target'
+      environment:
+        description: 'Test environment'
         required: false
-        default: 'workers'
-        type: string
-      workers_url:
-        description: 'Cloudflare Workers URL'
-        required: false
-        default: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
+        default: 'staging'
         type: string
       test_pattern:
         description: 'Test file pattern'
@@ -57,19 +49,33 @@ env:
 
 jobs:
   e2e-tests:
-    name: E2E Tests (${{ inputs.target || 'workers' }})
+    name: E2E Tests (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'staging' }}
     permissions:
       contents: read
       checks: write
       pull-requests: write
     env:
-      TEST_TARGET: ${{ inputs.target || 'workers' }}
-      TEST_BASE_URL: ${{ inputs.workers_url || 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev' }}
+      TEST_TARGET: ${{ inputs.environment || 'staging' }}
+      TEST_BASE_URL: ${{ secrets.WORKERS_URL }}
+      API_KEY: ${{ secrets.API_KEY }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Verify environment configuration
+        run: |
+          echo "Environment: ${{ env.TEST_TARGET }}"
+          echo "Workers URL: ${{ secrets.WORKERS_URL != '' && '✅ Configured' || '❌ Missing - run infrastructure deployment first' }}"
+          echo "API Key: ${{ secrets.API_KEY != '' && '✅ Configured' || '⚠️ Not configured (tests may fail if auth required)' }}"
+
+          if [ "${{ env.TEST_TARGET }}" != "local" ] && [ -z "${{ secrets.WORKERS_URL }}" ]; then
+            echo "❌ ERROR: WORKERS_URL secret is not set for ${{ env.TEST_TARGET }} environment"
+            echo "Please run the infrastructure deployment workflow first."
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -109,6 +115,7 @@ jobs:
           S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
           S3_CDN_URL: ${{ secrets.S3_CDN_URL }}
+          API_KEYS: ${{ secrets.API_KEY }}  # For local server auth
 
       - name: Run E2E tests
         run: |
@@ -123,6 +130,7 @@ jobs:
         env:
           TEST_TARGET: ${{ env.TEST_TARGET }}
           TEST_BASE_URL: ${{ env.TEST_BASE_URL }}
+          API_KEY: ${{ env.API_KEY }}
           CI: true
 
       - name: Upload test results
@@ -172,7 +180,7 @@ jobs:
 
             const body = `## E2E Test Results ${status}
 
-            **Target:** ${process.env.TEST_TARGET}
+            **Environment:** ${process.env.TEST_TARGET}
 
             | Metric | Count |
             |--------|-------|

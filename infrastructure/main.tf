@@ -53,6 +53,29 @@ variable "image_expiry_hours" {
   default     = 24
 }
 
+variable "environment" {
+  description = "Deployment environment (staging or production)"
+  type        = string
+  default     = "production"
+}
+
+variable "workers_subdomain" {
+  description = "Subdomain for the Workers deployment"
+  type        = string
+  default     = "cloudflare-image-workers"
+}
+
+# ============================================================================
+# Local Values
+# ============================================================================
+
+locals {
+  # Add environment suffix for non-production environments
+  resource_suffix = var.environment == "production" ? "" : "-${var.environment}"
+  bucket_name     = "${var.bucket_name}${local.resource_suffix}"
+  workers_name    = "${var.workers_subdomain}${local.resource_suffix}"
+}
+
 # ============================================================================
 # Provider Configuration
 # ============================================================================
@@ -67,7 +90,7 @@ provider "cloudflare" {
 
 resource "cloudflare_r2_bucket" "images" {
   account_id = var.cloudflare_account_id
-  name       = var.bucket_name
+  name       = local.bucket_name
   location   = var.bucket_location
 }
 
@@ -78,7 +101,7 @@ resource "cloudflare_r2_bucket" "images" {
 
 resource "cloudflare_r2_managed_domain" "public" {
   account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.images.name
+  bucket_name = local.bucket_name
   enabled     = true
 
   depends_on = [cloudflare_r2_bucket.images]
@@ -90,7 +113,7 @@ resource "cloudflare_r2_managed_domain" "public" {
 
 resource "cloudflare_r2_bucket_lifecycle" "cleanup" {
   account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.images.name
+  bucket_name = local.bucket_name
 
   rules = [{
     id      = "delete-after-${var.image_expiry_hours}h"
@@ -115,7 +138,7 @@ resource "cloudflare_r2_bucket_lifecycle" "cleanup" {
 
 resource "cloudflare_r2_bucket_cors" "web_access" {
   account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.images.name
+  bucket_name = local.bucket_name
 
   cors_rules = [{
     allowed_origins = ["*"] # Allow all origins (adjust for production)
@@ -149,4 +172,19 @@ output "s3_endpoint" {
 output "image_expiry_hours" {
   description = "Configured image expiration time"
   value       = var.image_expiry_hours
+}
+
+output "workers_url" {
+  description = "URL for the Cloudflare Workers deployment"
+  value       = "https://${local.workers_name}.${var.cloudflare_account_id}.workers.dev"
+}
+
+output "workers_name" {
+  description = "Name of the Workers script"
+  value       = local.workers_name
+}
+
+output "environment" {
+  description = "Deployment environment"
+  value       = var.environment
 }

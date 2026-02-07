@@ -1,24 +1,34 @@
 import { defineConfig, devices } from '@playwright/test';
+import { getBaseURL, getAuthHeaders, getTargetConfig } from './lib/target.js';
 
 /**
  * E2E Test Configuration for Cloudflare Image MCP
  *
- * Supports testing both:
+ * Supports testing:
  * - Local deployment (packages/local): http://localhost:3000
- * - Cloudflare Workers (workers): https://cloudflare-image-workers.tanyongsheng-net.workers.dev
+ * - Staging Workers: URL from secrets or environment
+ * - Production Workers: URL from secrets or environment
+ *
+ * Configuration via environment variables:
+ * - TEST_TARGET: 'local' | 'staging' | 'production' (default: 'local')
+ * - TEST_BASE_URL: Override the base URL
+ * - API_KEY: API key for authenticated endpoints
+ * - TEST_TIMEOUT: Test timeout in milliseconds (default: 60000)
  */
 
-// Determine test target from environment
-const testTarget = process.env.TEST_TARGET || 'local';
-const isWorkers = testTarget === 'workers';
-
-// Base URL configuration
-const baseURL = isWorkers
-  ? 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
-  : process.env.TEST_BASE_URL || 'http://localhost:3000';
+// Get target configuration
+const targetConfig = getTargetConfig();
+const baseURL = getBaseURL();
+const authHeaders = getAuthHeaders();
 
 // Timeout configuration
 const timeout = parseInt(process.env.TEST_TIMEOUT || '60000');
+
+console.log(`🎯 E2E Test Configuration:`);
+console.log(`   Target: ${targetConfig.name}`);
+console.log(`   Base URL: ${baseURL}`);
+console.log(`   Auth Required: ${targetConfig.requiresAuth}`);
+console.log(`   Auth Headers Present: ${Object.keys(authHeaders).length > 0}`);
 
 export default defineConfig({
   testDir: './tests',
@@ -47,6 +57,9 @@ export default defineConfig({
     // Base URL for all tests
     baseURL,
 
+    // Auth headers for authenticated endpoints
+    extraHTTPHeaders: authHeaders,
+
     // Collect trace when retrying failed test
     trace: 'on-first-retry',
 
@@ -64,6 +77,7 @@ export default defineConfig({
 
     // Custom test metadata
     testIdAttribute: 'data-testid',
+
   },
 
   // Configure projects for different browsers/environments
@@ -88,9 +102,8 @@ export default defineConfig({
   ],
 
   // Local dev server configuration (only for local tests)
-  webServer: isWorkers
-    ? undefined
-    : {
+  webServer: targetConfig.name === 'local'
+    ? {
         command: 'cd ../packages/local && npm run dev',
         url: 'http://localhost:3000/health',
         reuseExistingServer: !process.env.CI,
@@ -99,7 +112,8 @@ export default defineConfig({
           PORT: '3000',
           NODE_ENV: 'test',
         },
-      },
+      }
+    : undefined,
 
   // Global setup/teardown
   globalSetup: './global-setup.ts',
