@@ -311,13 +311,25 @@ export class MCPEndpoint {
     const textParts: string[] = [];
     const fullUrl = (path: string) => path.startsWith('http') ? path : `${this.cdnUrl}${path}`;
 
+    // Helper to check if image has url (not b64_json)
+    const hasUrl = (img: { url?: string; b64_json?: string }): img is { url: string } => 'url' in img && !!img.url;
+
     if (result.images.length === 1) {
+      const img = result.images[0];
       textParts.push(`Image generated successfully!\n`);
-      textParts.push(`![Generated Image](${fullUrl(result.images[0].url)})`);
+      if (hasUrl(img)) {
+        textParts.push(`![Generated Image](${fullUrl(img.url)})`);
+      } else {
+        textParts.push(`Image generated (base64 data available)`);
+      }
     } else {
       textParts.push(`Generated ${result.images.length} images:\n\n`);
       result.images.forEach((img, i) => {
-        textParts.push(`Image ${i + 1}: ![Generated Image ${i + 1}](${fullUrl(img.url)})\n`);
+        if (hasUrl(img)) {
+          textParts.push(`Image ${i + 1}: ![Generated Image ${i + 1}](${fullUrl(img.url)})\n`);
+        } else {
+          textParts.push(`Image ${i + 1}: (base64 data available)\n`);
+        }
       });
     }
 
