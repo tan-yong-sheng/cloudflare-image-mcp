@@ -234,4 +234,41 @@ test.describe('OpenAI Image Generations API', () => {
       expect(image.url).toMatch(urlPattern);
     }
   });
+
+  test('POST /v1/images/generations returns OpenWebUI-compatible response', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A simple test image',
+        model: TEST_MODEL,
+        n: 1,
+      },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+
+    // Response should have required fields for OpenWebUI compatibility
+    expect(body).toHaveProperty('created');
+    expect(body).toHaveProperty('data');
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBeGreaterThan(0);
+
+    const image = body.data[0];
+
+    // Must have url (not null/undefined)
+    expect(image).toHaveProperty('url');
+    expect(typeof image.url).toBe('string');
+    expect(image.url).not.toBeNull();
+
+    // Should have revised_prompt (OpenWebUI expects this)
+    expect(image).toHaveProperty('revised_prompt');
+    expect(typeof image.revised_prompt).toBe('string');
+
+    // b64_json should NOT be present when response_format is url (default)
+    // This was causing 'NoneType' object has no attribute 'lower' error in OpenWebUI
+    if (image.b64_json !== undefined) {
+      expect(image.b64_json).not.toBeNull();
+    }
+  });
 });

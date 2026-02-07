@@ -109,22 +109,24 @@ export class OpenAIEndpoint {
       });
     }
 
-    // Build response
-    const response: OpenAIImageResponse = {
-      created: Math.floor(Date.now() / 1000),
-      data: result.images.map((img) => ({
-        url: img.url,
-        b64_json: undefined,
-      })),
-    };
-
-    // Handle response_format
+    // Build response based on response_format
+    let responseData;
     if (req.response_format === 'b64_json') {
-      response.data = result.images.map((img) => ({
+      responseData = result.images.map((img) => ({
         b64_json: img.url.split(',').pop() || '', // Extract base64 from data URI
-        url: undefined,
+        revised_prompt: req.prompt,
+      }));
+    } else {
+      responseData = result.images.map((img) => ({
+        url: img.url,
+        revised_prompt: req.prompt,
       }));
     }
+
+    const response: OpenAIImageResponse = {
+      created: Math.floor(Date.now() / 1000),
+      data: responseData,
+    };
 
     return new Response(JSON.stringify(response), {
       headers: { ...this.corsHeaders, 'Content-Type': 'application/json' },
@@ -208,6 +210,7 @@ export class OpenAIEndpoint {
       created: Math.floor(Date.now() / 1000),
       data: [{
         url: result.imageUrl,
+        revised_prompt: prompt,
       }],
     };
 
@@ -274,6 +277,7 @@ export class OpenAIEndpoint {
       created: Math.floor(Date.now() / 1000),
       data: [{
         url: result.imageUrl,
+        revised_prompt: '',
       }],
     };
 
