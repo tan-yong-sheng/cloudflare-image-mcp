@@ -38,6 +38,11 @@ test.describe('OpenAI SDK Compliance', () => {
     expect(typeof response.created).toBe('number');
     expect(response.data).toBeDefined();
     expect(Array.isArray(response.data)).toBe(true);
+
+    // Type guard for data array
+    if (!response.data || response.data.length === 0) {
+      throw new Error('Response data is empty');
+    }
     expect(response.data.length).toBe(1);
 
     const image = response.data[0];
@@ -70,6 +75,11 @@ test.describe('OpenAI SDK Compliance', () => {
     expect(response).toBeDefined();
     expect(response.created).toBeDefined();
     expect(response.data).toBeDefined();
+
+    // Type guard for data array
+    if (!response.data || response.data.length === 0) {
+      throw new Error('Response data is empty');
+    }
     expect(response.data.length).toBe(1);
 
     const image = response.data[0];
@@ -98,6 +108,10 @@ test.describe('OpenAI SDK Compliance', () => {
       size: '1024x1024',
     });
 
+    // Type guard for data array
+    if (!response.data) {
+      throw new Error('Response data is undefined');
+    }
     expect(response.data).toHaveLength(2);
 
     // Each image should have url
@@ -110,20 +124,22 @@ test.describe('OpenAI SDK Compliance', () => {
   test('OpenAI SDK handles missing prompt gracefully', async () => {
     const client = createClient();
 
+    let errorThrown = false;
     try {
-      // @ts-expect-error - Testing missing prompt
+      // @ts-expect-error - Testing missing prompt intentionally
       await client.images.generate({
         model: '@cf/black-forest-labs/flux-1-schnell',
         n: 1,
       });
-
-      // Should have thrown an error
-      expect.fail('Expected an error for missing prompt');
     } catch (error: any) {
+      errorThrown = true;
       // OpenAI SDK wraps errors in a specific format
       expect(error).toBeDefined();
       expect(error.status).toBe(400);
     }
+
+    // Ensure an error was actually thrown
+    expect(errorThrown).toBe(true);
   });
 
   test('OpenAI SDK can list models', async () => {
@@ -134,6 +150,11 @@ test.describe('OpenAI SDK Compliance', () => {
     expect(response).toBeDefined();
     expect(response.data).toBeDefined();
     expect(Array.isArray(response.data)).toBe(true);
+
+    // Type guard for data array
+    if (!response.data) {
+      throw new Error('Response data is undefined');
+    }
 
     // Should have at least some models
     expect(response.data.length).toBeGreaterThan(0);
@@ -159,6 +180,11 @@ test.describe('OpenAI SDK Compliance', () => {
     // Top-level fields
     expect(Object.keys(response).sort()).toEqual(['created', 'data']);
 
+    // Type guard for data array
+    if (!response.data || response.data.length === 0) {
+      throw new Error('Response data is empty');
+    }
+
     // Image object fields - only 'url' for url format
     const image = response.data[0];
     expect(Object.keys(image)).toEqual(['url']);
@@ -173,6 +199,11 @@ test.describe('OpenAI SDK Compliance', () => {
       n: 1,
       response_format: 'b64_json',
     });
+
+    // Type guard for data array
+    if (!response.data || response.data.length === 0) {
+      throw new Error('Response data is empty');
+    }
 
     // Image object fields - only 'b64_json' for b64_json format
     const image = response.data[0];
