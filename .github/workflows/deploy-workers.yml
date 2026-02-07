@@ -20,7 +20,7 @@ on:
           - staging
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
 
 jobs:
   deploy:
@@ -48,6 +48,18 @@ jobs:
       - name: Type check
         working-directory: workers
         run: npm run check
+
+      - name: Verify secrets are configured
+        run: |
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "❌ ERROR: CLOUDFLARE_API_TOKEN secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+            echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
+            exit 1
+          fi
+          echo "✅ Required secrets are configured"
 
       - name: Create wrangler.toml from template
         working-directory: workers
