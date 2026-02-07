@@ -1,0 +1,205 @@
+name: E2E Tests
+
+on:
+  # Manual trigger for testing specific deployments
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Test target'
+        required: true
+        default: 'local'
+        type: choice
+        options:
+          - local
+          - workers
+      workers_url:
+        description: 'Cloudflare Workers URL (if target=workers)'
+        required: false
+        default: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
+
+  # Run on PRs that modify packages/ or workers/
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+      - 'workers/**'
+      - 'e2e/**'
+      - '.github/workflows/e2e-tests.yml'
+
+  # Run before publishing GHCR image
+  workflow_call:
+    inputs:
+      target:
+        description: 'Test target'
+        required: false
+        default: 'local'
+        type: string
+
+env:
+  NODE_VERSION: '20'
+  TEST_TARGET: ${{ inputs.target || 'local' }}
+  TEST_BASE_URL: ${{ inputs.workers_url || 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev' }}
+
+jobs:
+  e2e-tests:
+    name: E2E Tests (${{ inputs.target || 'local' }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd e2e
+          npm ci
+
+      - name: Install Playwright browsers
+        run: |
+          cd e2e
+          npx playwright install --with-deps
+
+      - name: Build local packages (if testing local)
+        if: env.TEST_TARGET == 'local'
+        run: |
+          npm ci
+          npm run build
+        working-directory: .
+
+      - name: Start local server (if testing local)
+        if: env.TEST_TARGET == 'local'
+        run: |
+          cd packages/local
+          npm run dev &
+          npx wait-on http://localhost:3000/health --timeout 60000
+        env:
+          PORT: 3000
+          NODE_ENV: test
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_CDN_URL: ${{ secrets.CDN_URL }}
+
+      - name: Run E2E tests
+        run: |
+          cd e2e
+          npx playwright test --reporter=list,junit,html
+        env:
+          TEST_TARGET: ${{ env.TEST_TARGET }}
+          TEST_BASE_URL: ${{ env.TEST_BASE_URL }}
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ env.TEST_TARGET }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            e2e/junit-results.xml
+          retention-days: 30
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ env.TEST_TARGET }}-${{ github.run_id }}
+          path: e2e/test-results/**/*.png
+          retention-days: 7
+
+      - name: Publish JUnit test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: E2E Test Results (${{ env.TEST_TARGET }})
+          path: e2e/junit-results.xml
+          reporter: jest-junit
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'e2e/junit-results.xml';
+
+            if (!fs.existsSync(path)) {
+              console.log('No JUnit results found');
+              return;
+            }
+
+            // Parse basic stats from JUnit XML
+            const content = fs.readFileSync(path, 'utf8');
+            const testsMatch = content.match(/tests="(\d+)"/);
+            const failuresMatch = content.match(/failures="(\d+)"/);
+            const errorsMatch = content.match(/errors="(\d+)"/);
+
+            const tests = testsMatch ? parseInt(testsMatch[1]) : 0;
+            const failures = failuresMatch ? parseInt(failuresMatch[1]) : 0;
+            const errors = errorsMatch ? parseInt(errorsMatch[1]) : 0;
+            const passed = tests - failures - errors;
+
+            const status = failures === 0 && errors === 0 ? '✅ PASSED' : '❌ FAILED';
+
+            const body = `## E2E Test Results ${status}
+
+            **Target:** ${process.env.TEST_TARGET}
+
+            | Metric | Count |
+            |--------|-------|
+            | Total Tests | ${tests} |
+            | Passed | ${passed} |
+            | Failures | ${failures} |
+            | Errors | ${errors} |
+
+            <details>
+            <summary>View Details</summary>
+
+            - [View Playwright Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - Download artifacts from the Actions summary
+
+            </details>
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail workflow if tests failed
+        if: failure()
+        run: |
+          echo "E2E tests failed!"
+          exit 1
+
+  # Job to update GHCR publish workflow status
+  e2e-status:
+    name: E2E Tests Status
+    needs: e2e-tests
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.e2e-tests.result }}" == "failure" ]; then
+            echo "E2E tests failed! Blocking merge."
+            exit 1
+          fi
+          echo "E2E tests passed!"

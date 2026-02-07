@@ -1,0 +1,24 @@
+{
+  "name": "@cloudflare-image-mcp/e2e-tests",
+  "version": "0.1.0",
+  "description": "End-to-end tests for Cloudflare Image MCP",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:openai": "playwright test tests/openai",
+    "test:mcp": "playwright test tests/mcp",
+    "test:workers": "TEST_TARGET=workers playwright test",
+    "test:local": "TEST_TARGET=local playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "install:browsers": "playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.0",
+    "@types/node": "^20.10.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

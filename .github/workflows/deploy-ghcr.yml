@@ -24,13 +24,25 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Run E2E tests first on PRs
+  e2e-tests:
+    name: Run E2E Tests
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/e2e-tests.yml
+    with:
+      target: 'local'
+    secrets: inherit
+
   build-and-push:
     name: Build and Push Docker Image
+    needs: e2e-tests
+    # Continue even if e2e-tests is skipped (on non-PR events)
+    if: always() && (github.event_name != 'pull_request' || needs.e2e-tests.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-      
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
