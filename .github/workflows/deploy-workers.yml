@@ -28,7 +28,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,16 +52,33 @@ jobs:
         working-directory: workers
         run: |
           # Copy template and inject secrets
-          cp wrangler.toml.example wrangler.toml
-          
+          if [ -f wrangler.toml.example ]; then
+            cp wrangler.toml.example wrangler.toml
+          else
+            echo "Error: wrangler.toml.example not found"
+            exit 1
+          fi
+
           # Update account_id in wrangler.toml
           sed -i "s/account_id = \"\"/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/" wrangler.toml
-          sed -i "s/account_id = \"\"  # under [ai]/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/" wrangler.toml || true
-          
+
+          # Update account_id under [ai] section if it exists
+          if grep -q "\[ai\]" wrangler.toml; then
+            sed -i "/\[ai\]/,/\[/{s/account_id = \"\"/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/}" wrangler.toml || true
+          fi
+
           # Update CDN URL if provided
           if [ -n "${{ secrets.CDN_URL }}" ]; then
             sed -i "s|CDN_URL = \"\"|CDN_URL = \"${{ secrets.CDN_URL }}\"|" wrangler.toml
           fi
+
+          # Verify wrangler.toml was created
+          if [ ! -f wrangler.toml ]; then
+            echo "Error: Failed to create wrangler.toml"
+            exit 1
+          fi
+
+          echo "✅ wrangler.toml created successfully"
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
@@ -72,6 +89,7 @@ jobs:
           command: deploy
 
       - name: Deployment summary
+        if: success()
         run: |
           echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
