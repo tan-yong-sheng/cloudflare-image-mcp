@@ -90,6 +90,13 @@ jobs:
 
           echo "✅ wrangler.toml created successfully"
 
+      - name: Set deployment metadata
+        working-directory: workers
+        run: |
+          # Set deployment timestamp and commit SHA
+          echo "DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
@@ -97,6 +104,20 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers
           command: deploy
+          secrets: |
+            S3_CDN_URL
+        env:
+          S3_CDN_URL: ${{ secrets.S3_CDN_URL }}
+
+      - name: Set deployment metadata secrets
+        working-directory: workers
+        run: |
+          # Set deployment metadata as secrets for visibility
+          echo "${{ env.DEPLOYED_AT }}" | npx wrangler secret put DEPLOYED_AT --name cloudflare-image-workers
+          echo "${{ github.sha }}" | npx wrangler secret put COMMIT_SHA --name cloudflare-image-workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deployment summary
         if: success()

@@ -38,6 +38,8 @@ export default {
           status: 'healthy',
           timestamp: Date.now(),
           version: '0.1.0',
+          deployedAt: env.DEPLOYED_AT || 'unknown',
+          commitSha: env.COMMIT_SHA || 'unknown',
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

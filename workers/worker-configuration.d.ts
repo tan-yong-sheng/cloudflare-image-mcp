@@ -6,4 +6,6 @@ interface Env {
 	S3_CDN_URL: string;
 	IMAGE_BUCKET: R2Bucket;
 	AI: Ai;
+	DEPLOYED_AT?: string;
+	COMMIT_SHA?: string;
 }

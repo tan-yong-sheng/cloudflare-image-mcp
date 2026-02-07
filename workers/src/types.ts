@@ -127,6 +127,8 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID: string;
   IMAGE_EXPIRY_HOURS: string;
   S3_CDN_URL: string;
+  DEPLOYED_AT?: string;
+  COMMIT_SHA?: string;
 }
 
 // MCP message types
