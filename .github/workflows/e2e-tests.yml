@@ -16,6 +16,11 @@ on:
         description: 'Cloudflare Workers URL (if target=workers)'
         required: false
         default: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
+      test_pattern:
+        description: 'Test file pattern (e.g., tests/mcp/mcp-sdk.spec.ts)'
+        required: false
+        default: ''
+        type: string
 
   # Run on PRs that modify packages/ or workers/
   pull_request:
@@ -40,6 +45,11 @@ on:
         description: 'Cloudflare Workers URL'
         required: false
         default: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
+        type: string
+      test_pattern:
+        description: 'Test file pattern'
+        required: false
+        default: ''
         type: string
 
 env:
@@ -103,7 +113,13 @@ jobs:
       - name: Run E2E tests
         run: |
           cd e2e
-          npx playwright test --reporter=list,junit,html
+          if [ -n "${{ inputs.test_pattern }}" ]; then
+            echo "Running specific test pattern: ${{ inputs.test_pattern }}"
+            npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
+          else
+            echo "Running all E2E tests"
+            npx playwright test --reporter=list,junit,html
+          fi
         env:
           TEST_TARGET: ${{ env.TEST_TARGET }}
           TEST_BASE_URL: ${{ env.TEST_BASE_URL }}
