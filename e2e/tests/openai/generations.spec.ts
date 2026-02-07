@@ -235,7 +235,7 @@ test.describe('OpenAI Image Generations API', () => {
     }
   });
 
-  test('POST /v1/images/generations returns OpenWebUI-compatible response', async ({ request }) => {
+  test('POST /v1/images/generations returns clean response without b64_json when format=url', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A simple test image',
@@ -248,7 +248,7 @@ test.describe('OpenAI Image Generations API', () => {
 
     const body = await response.json();
 
-    // Response should have required fields for OpenWebUI compatibility
+    // Response should have required fields
     expect(body).toHaveProperty('created');
     expect(body).toHaveProperty('data');
     expect(Array.isArray(body.data)).toBe(true);
@@ -261,14 +261,11 @@ test.describe('OpenAI Image Generations API', () => {
     expect(typeof image.url).toBe('string');
     expect(image.url).not.toBeNull();
 
-    // Should have revised_prompt (OpenWebUI expects this)
-    expect(image).toHaveProperty('revised_prompt');
-    expect(typeof image.revised_prompt).toBe('string');
-
     // b64_json should NOT be present when response_format is url (default)
     // This was causing 'NoneType' object has no attribute 'lower' error in OpenWebUI
-    if (image.b64_json !== undefined) {
-      expect(image.b64_json).not.toBeNull();
-    }
+    expect(image).not.toHaveProperty('b64_json');
+
+    // revised_prompt is not part of OpenAI spec
+    expect(image).not.toHaveProperty('revised_prompt');
   });
 });

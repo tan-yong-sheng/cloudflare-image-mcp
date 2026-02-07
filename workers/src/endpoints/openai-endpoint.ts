@@ -3,7 +3,7 @@
 // Implements /v1/images/generations, /v1/images/edits, /v1/images/variations
 // ============================================================================
 
-import type { Env, OpenAIGenerationRequest, OpenAIEditRequest, OpenAIVariationRequest, OpenAIImageResponse } from '../types.js';
+import type { Env, OpenAIGenerationRequest, OpenAIVariationRequest, OpenAIImageResponse } from '../types.js';
 import { ImageGeneratorService } from '../services/image-generator.js';
 
 export class OpenAIEndpoint {
@@ -110,16 +110,15 @@ export class OpenAIEndpoint {
     }
 
     // Build response based on response_format
+    // OpenAI spec: return only the requested format field (url OR b64_json), no revised_prompt
     let responseData;
     if (req.response_format === 'b64_json') {
       responseData = result.images.map((img) => ({
         b64_json: img.url.split(',').pop() || '', // Extract base64 from data URI
-        revised_prompt: req.prompt,
       }));
     } else {
       responseData = result.images.map((img) => ({
         url: img.url,
-        revised_prompt: req.prompt,
       }));
     }
 
@@ -210,7 +209,6 @@ export class OpenAIEndpoint {
       created: Math.floor(Date.now() / 1000),
       data: [{
         url: result.imageUrl,
-        revised_prompt: prompt,
       }],
     };
 
@@ -277,7 +275,6 @@ export class OpenAIEndpoint {
       created: Math.floor(Date.now() / 1000),
       data: [{
         url: result.imageUrl,
-        revised_prompt: '',
       }],
     };
 
