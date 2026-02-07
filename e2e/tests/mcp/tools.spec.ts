@@ -179,7 +179,7 @@ test.describe('MCP Tools', () => {
         params: {
           name: 'run_models',
           arguments: {
-            prompt: 'A simple test image of a red circle',
+            prompt: 'A bright red apple on a wooden table',
             model_id: '@cf/black-forest-labs/flux-1-schnell',
             n: 1,
           },

@@ -45,8 +45,8 @@ export class OpenAIEndpoint {
       if (path === '/v1/models' && request.method === 'GET') {
         return this.handleListModels();
       }
-      if (path === '/v1/models/:model' && request.method === 'GET') {
-        const modelId = url.pathname.split('/').pop() || '';
+      if (path.startsWith('/v1/models/') && request.method === 'GET') {
+        const modelId = decodeURIComponent(path.substring('/v1/models/'.length));
         return this.handleDescribeModel(modelId);
       }
 
