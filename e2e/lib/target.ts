@@ -52,19 +52,41 @@ export function getTargetConfig(): TargetConfig {
 
 /**
  * Get the appropriate base URL for the current target
+ *
+ * URL Construction:
+ * - Local: http://localhost:3000 (or TEST_BASE_URL override)
+ * - Staging: https://cloudflare-image-workers-staging.<account_id>.workers.dev
+ * - Production: https://cloudflare-image-workers.<account_id>.workers.dev
+ *
+ * The Workers URL is constructed from CLOUDFLARE_ACCOUNT_ID rather than stored as a secret.
  */
 export function getBaseURL(): string {
   const config = getTargetConfig();
 
+  // If TEST_BASE_URL is explicitly set, use it
   if (config.baseURL) {
     return config.baseURL;
   }
 
-  // Fallback defaults for backward compatibility
-  if (config.name === 'production') {
-    return 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev';
+  // For staging/production, construct URL from account ID
+  if (config.name === 'staging' || config.name === 'production') {
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!accountId) {
+      throw new Error(
+        `CLOUDFLARE_ACCOUNT_ID environment variable is required for ${config.name} target. ` +
+        `The Workers URL is constructed as: https://cloudflare-image-workers` +
+        `${config.name === 'staging' ? '-staging' : ''}.<account_id>.workers.dev`
+      );
+    }
+
+    const workerName = config.name === 'staging'
+      ? 'cloudflare-image-workers-staging'
+      : 'cloudflare-image-workers';
+
+    return `https://${workerName}.${accountId}.workers.dev`;
   }
 
+  // Default for local
   return 'http://localhost:3000';
 }
 

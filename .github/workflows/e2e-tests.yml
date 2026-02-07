@@ -58,7 +58,8 @@ jobs:
       pull-requests: write
     env:
       TEST_TARGET: ${{ inputs.environment || 'staging' }}
-      TEST_BASE_URL: ${{ secrets.WORKERS_URL }}
+      # Construct Workers URL from account ID (no need for separate secret)
+      TEST_BASE_URL: ${{ inputs.environment == 'local' && 'http://localhost:3000' || format('https://cloudflare-image-workers{0}.{1}.workers.dev', inputs.environment == 'staging' && '-staging' || '', secrets.CLOUDFLARE_ACCOUNT_ID) }}
       API_KEY: ${{ secrets.API_KEY }}
 
     steps:
@@ -68,13 +69,17 @@ jobs:
       - name: Verify environment configuration
         run: |
           echo "Environment: ${{ env.TEST_TARGET }}"
-          echo "Workers URL: ${{ secrets.WORKERS_URL != '' && '✅ Configured' || '❌ Missing - run infrastructure deployment first' }}"
+          echo "Workers URL: ${{ env.TEST_BASE_URL }}"
           echo "API Key: ${{ secrets.API_KEY != '' && '✅ Configured' || '⚠️ Not configured (tests may fail if auth required)' }}"
 
-          if [ "${{ env.TEST_TARGET }}" != "local" ] && [ -z "${{ secrets.WORKERS_URL }}" ]; then
-            echo "❌ ERROR: WORKERS_URL secret is not set for ${{ env.TEST_TARGET }} environment"
-            echo "Please run the infrastructure deployment workflow first."
-            exit 1
+          # For non-local environments, verify CLOUDFLARE_ACCOUNT_ID is set
+          if [ "${{ env.TEST_TARGET }}" != "local" ]; then
+            if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+              echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
+              echo "This is needed to construct the Workers URL."
+              exit 1
+            fi
+            echo "✅ Workers URL constructed from account ID"
           fi
 
       - name: Setup Node.js
