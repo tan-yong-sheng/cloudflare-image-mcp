@@ -86,6 +86,9 @@ export class OpenAIEndpoint {
     const modelId = req.model || '@cf/black-forest-labs/flux-1-schnell';
     const n = req.n || 1;
 
+    // Determine if we should return base64 or url
+    const returnBase64 = req.response_format === 'b64_json';
+
     // Generate images
     const result = await this.generator.generateImages(
       modelId,
@@ -97,7 +100,8 @@ export class OpenAIEndpoint {
         seed: (req as any).seed,
         guidance: (req as any).guidance,
         negative_prompt: (req as any).negative_prompt,
-      }
+      },
+      returnBase64
     );
 
     if (!result.success) {
@@ -114,11 +118,11 @@ export class OpenAIEndpoint {
     let responseData;
     if (req.response_format === 'b64_json') {
       responseData = result.images.map((img) => ({
-        b64_json: img.url.split(',').pop() || '', // Extract base64 from data URI
+        b64_json: 'b64_json' in img ? img.b64_json : '',
       }));
     } else {
       responseData = result.images.map((img) => ({
-        url: img.url,
+        url: 'url' in img ? img.url : '',
       }));
     }
 

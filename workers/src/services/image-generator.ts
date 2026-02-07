@@ -31,11 +31,13 @@ export class ImageGeneratorService {
   async generateImage(
     modelId: string,
     prompt: string | Record<string, any>,
-    explicitParams: Record<string, any> = {}
+    explicitParams: Record<string, any> = {},
+    returnBase64: boolean = false
   ): Promise<{
     success: boolean;
     imageUrl?: string;
     imageId?: string;
+    base64Data?: string;
     revisedPrompt?: string;
     error?: string;
   }> {
@@ -100,9 +102,20 @@ export class ImageGeneratorService {
       }
 
       // Extract image from response
-      const base64Image = typeof result === 'string' ? result : (result?.image || result);
+      let base64Image = typeof result === 'string' ? result : (result?.image || result);
       if (!base64Image) {
         return { success: false, error: 'No image in model response' };
+      }
+
+      // Clean up base64 data (remove data URI prefix if present)
+      base64Image = base64Image.replace(/^data:image\/\w+;base64,/, '');
+
+      // If base64 format requested, return directly without uploading
+      if (returnBase64) {
+        return {
+          success: true,
+          base64Data: base64Image,
+        };
       }
 
       // Upload to R2 storage
@@ -137,23 +150,30 @@ export class ImageGeneratorService {
     modelId: string,
     prompt: string | Record<string, any>,
     n: number = 1,
-    explicitParams: Record<string, any> = {}
+    explicitParams: Record<string, any> = {},
+    returnBase64: boolean = false
   ): Promise<{
     success: boolean;
-    images: Array<{ url: string; id: string }>;
+    images: Array<{ url: string; id: string } | { b64_json: string }>;
     error?: string;
   }> {
-    const results: Array<{ url: string; id: string }> = [];
+    const results: Array<{ url: string; id: string } | { b64_json: string }> = [];
 
     for (let i = 0; i < n; i++) {
       const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
       const result = await this.generateImage(modelId, prompt, {
         ...explicitParams,
         seed,
-      });
+      }, returnBase64);
 
-      if (result.success && result.imageUrl) {
-        results.push({ url: result.imageUrl, id: result.imageId! });
+      if (result.success) {
+        if (returnBase64 && result.base64Data) {
+          results.push({ b64_json: result.base64Data });
+        } else if (result.imageUrl) {
+          results.push({ url: result.imageUrl, id: result.imageId! });
+        } else {
+          return { success: false, images: results, error: 'No image data returned' };
+        }
       } else {
         return { success: false, images: results, error: result.error };
       }
