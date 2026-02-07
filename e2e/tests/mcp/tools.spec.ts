@@ -198,6 +198,17 @@ test.describe('MCP Tools', () => {
       const content = body.result.content[0];
       expect(content).toHaveProperty('type', 'text');
       expect(content.text).toContain('!['); // Markdown image syntax
+
+      // Extract URL from markdown: ![text](url)
+      const urlMatch = content.text.match(/!\[.*?\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/);
+      expect(urlMatch).not.toBeNull();
+
+      const imageUrl = urlMatch[1];
+      if (imageUrl.startsWith('http')) {
+        console.log('✅ MCP returns full CDN URL:', imageUrl);
+      } else {
+        console.log('⚠️  MCP returns relative URL (set CDN_URL for full URLs):', imageUrl);
+      }
     }
   });
 

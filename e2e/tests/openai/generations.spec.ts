@@ -35,10 +35,15 @@ test.describe('OpenAI Image Generations API', () => {
     const image = body.data[0];
     expect(image).toHaveProperty('url');
     expect(typeof image.url).toBe('string');
-    // URL can be absolute (https://) or relative (/images/...)
+    // URL should be absolute (https://) when CDN_URL is configured, or relative (/images/...)
     expect(image.url).toMatch(/^(https?:\/\/|\/images\/)/);
 
-    console.log('Generated image URL:', image.url);
+    // Log URL type for debugging
+    if (image.url.startsWith('http')) {
+      console.log('✅ Full CDN URL:', image.url);
+    } else {
+      console.log('⚠️  Relative URL (set CDN_URL for full URLs):', image.url);
+    }
   });
 
   test('POST /v1/images/generations with all parameters', async ({ request }) => {
@@ -195,5 +200,38 @@ test.describe('OpenAI Image Generations API', () => {
     });
 
     expect(response.headers()['access-control-allow-origin']).toBe('*');
+  });
+
+  test('POST /v1/images/generations returns valid image URL format', async ({ request }) => {
+    const response = await request.post('/v1/images/generations', {
+      data: {
+        prompt: 'A beautiful sunset over mountains',
+        model: TEST_MODEL,
+        n: 1,
+      },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    const image = body.data[0];
+
+    // URL must be a valid string
+    expect(typeof image.url).toBe('string');
+    expect(image.url.length).toBeGreaterThan(0);
+
+    // URL should either be:
+    // 1. Full HTTPS URL (when CDN_URL is configured): https://cdn.example.com/images/...
+    // 2. Relative URL (when CDN_URL is not set): /images/...
+    const isFullUrl = image.url.startsWith('https://');
+    const isRelativeUrl = image.url.startsWith('/images/');
+
+    expect(isFullUrl || isRelativeUrl).toBe(true);
+
+    if (isFullUrl) {
+      // Validate full URL format
+      const urlPattern = /^https:\/\/[^\/]+\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/;
+      expect(image.url).toMatch(urlPattern);
+    }
   });
 });

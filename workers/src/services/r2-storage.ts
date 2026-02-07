@@ -68,9 +68,9 @@ export class R2StorageService {
       },
     });
 
-    // Generate URL - use worker proxy to avoid CORS/CORB issues
+    // Generate URL - use CDN URL if configured, otherwise fall back to worker proxy
     // The worker proxy serves images at /images/{key} path
-    const url = `/${key}`;
+    const url = this.cdnUrl ? `${this.cdnUrl}/${key}` : `/${key}`;
 
     return { id, url, expiresAt };
   }
@@ -176,9 +176,12 @@ export class R2StorageService {
       const custom = obj.customMetadata || {};
       const id = this.extractIdFromKey(obj.key);
 
+      // Generate URL - use CDN URL if configured, otherwise fall back to worker proxy
+      const url = this.cdnUrl ? `${this.cdnUrl}/${obj.key}` : `/${obj.key}`;
+
       return {
         id,
-        url: `/${obj.key}`, // Use worker proxy for CORS compatibility
+        url,
         createdAt: parseInt(custom.createdAt, 10),
         expiresAt: parseInt(custom.expiresAt, 10),
       };
