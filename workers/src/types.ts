@@ -127,6 +127,7 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID: string;
   IMAGE_EXPIRY_HOURS: string;
   S3_CDN_URL: string;
+  API_KEYS?: string; // Comma-separated list of valid API keys
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
 }

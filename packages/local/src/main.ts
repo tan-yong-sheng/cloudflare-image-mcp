@@ -135,9 +135,51 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
+// API Key Authentication Middleware
+const API_KEYS = process.env.API_KEYS?.split(',').map(k => k.trim()).filter(Boolean) || [];
+const AUTH_ENABLED = API_KEYS.length > 0;
+
+if (AUTH_ENABLED) {
+  console.log(`🔐 API Key authentication enabled (${API_KEYS.length} keys)`);
+}
+
+function requiresAuth(path: string): boolean {
+  // Public endpoints that don't require authentication
+  const publicPaths = ['/health', '/api', '/api/internal/models'];
+  if (publicPaths.includes(path)) return false;
+  if (path.startsWith('/images/')) return false; // Images are public
+  if (path === '/' || path === '/index.html') return false; // Frontend is public
+  return true;
+}
+
+app.use((req: Request, res: Response, next) => {
+  if (!AUTH_ENABLED) return next();
+  if (!requiresAuth(req.path)) return next();
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Missing Authorization header' });
+  }
+
+  const [scheme, token] = authHeader.split(' ');
+  if (scheme !== 'Bearer' || !token) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid Authorization format. Expected: Bearer <api-key>' });
+  }
+
+  if (!API_KEYS.includes(token)) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid API key' });
+  }
+
+  next();
+});
+
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'healthy', timestamp: Date.now() });
+  res.json({
+    status: 'healthy',
+    timestamp: Date.now(),
+    authEnabled: AUTH_ENABLED,
+  });
 });
 
 // List all models with detailed info

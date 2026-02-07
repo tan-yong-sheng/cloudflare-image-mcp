@@ -8,6 +8,7 @@ import { OpenAIEndpoint } from './endpoints/openai-endpoint.js';
 import { MCPEndpoint } from './endpoints/mcp-endpoint.js';
 import { serveFrontend } from './endpoints/frontend.js';
 import { listModels } from './config/models.js';
+import { authenticateRequest, requiresAuth, createUnauthorizedResponse } from './middleware/auth.js';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -27,6 +28,14 @@ export default {
     }
 
     try {
+      // Check authentication for protected routes
+      if (requiresAuth(path, request.method)) {
+        const authResult = authenticateRequest(request, env);
+        if (!authResult.authenticated) {
+          return createUnauthorizedResponse(authResult.error);
+        }
+      }
+
       // Route: Frontend
       if (path === '/' || path === '/index.html') {
         return serveFrontend();
@@ -40,6 +49,7 @@ export default {
           version: '0.1.0',
           deployedAt: env.DEPLOYED_AT || 'unknown',
           commitSha: env.COMMIT_SHA || 'unknown',
+          authEnabled: !!env.API_KEYS,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
