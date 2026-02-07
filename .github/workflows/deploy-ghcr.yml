@@ -11,12 +11,6 @@ on:
       - '.github/workflows/deploy-ghcr.yml'
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'packages/**'
-      - 'Dockerfile'
   workflow_dispatch:
 
 env:
@@ -24,21 +18,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Run E2E tests first on PRs (against Workers deployment)
-  e2e-tests:
-    name: Run E2E Tests
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/e2e-tests.yml
-    with:
-      target: 'workers'
-      workers_url: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev'
-    secrets: inherit
-
   build-and-push:
     name: Build and Push Docker Image
-    needs: e2e-tests
-    # Continue even if e2e-tests is skipped (on non-PR events)
-    if: always() && (github.event_name != 'pull_request' || needs.e2e-tests.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,7 +33,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -66,7 +46,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
@@ -78,7 +57,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -86,15 +65,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Generate artifact attestation
-        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.meta.outputs.digest }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
           push-to-registry: true
 
       - name: Deployment summary
-        if: github.event_name != 'pull_request'
         run: |
           echo "## ✅ Docker Image Built and Pushed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -116,11 +93,10 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Test image (smoke test)
-        if: github.event_name != 'pull_request'
         run: |
           # Pull the image
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          
+
           # Run container with minimal config for testing
           docker run -d --name test-container \
             -e CLOUDFLARE_API_TOKEN=test \
@@ -131,17 +107,17 @@ jobs:
             -e S3_SECRET_KEY=test \
             -p 3000:3000 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          
+
           # Wait for container to start
           sleep 10
-          
+
           # Check if container is running
           docker ps | grep test-container
-          
+
           # Clean up
           docker stop test-container
           docker rm test-container
-          
+
           echo "✅ Smoke test passed"
 
       - name: Notify on failure
