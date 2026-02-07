@@ -14,7 +14,7 @@ export class R2StorageService {
   constructor(env: Env) {
     this.bucket = env.IMAGE_BUCKET;
     this.expiryHours = parseInt(env.IMAGE_EXPIRY_HOURS || '24', 10);
-    this.cdnUrl = env.CDN_URL || '';
+    this.cdnUrl = env.S3_CDN_URL || '';
     this.accountId = env.CLOUDFLARE_ACCOUNT_ID;
   }
 

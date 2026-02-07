@@ -13,7 +13,7 @@ export class MCPEndpoint {
 
   constructor(env: Env) {
     this.generator = new ImageGeneratorService(env);
-    this.cdnUrl = env.CDN_URL || '';
+    this.cdnUrl = env.S3_CDN_URL || '';
     this.corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',

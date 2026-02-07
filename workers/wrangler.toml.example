@@ -19,4 +19,5 @@ account_id = ""
 # Environment variables
 [vars]
 IMAGE_EXPIRY_HOURS = 24
-CDN_URL = ""
+# S3_CDN_URL - Set this via wrangler secret or Terraform output
+# Example: S3_CDN_URL = "https://pub-xxx.r2.dev"

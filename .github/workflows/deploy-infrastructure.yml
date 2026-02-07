@@ -1,0 +1,75 @@
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform Action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+env:
+  TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        working-directory: infrastructure
+        run: terraform init
+
+      - name: Terraform Format Check
+        working-directory: infrastructure
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        working-directory: infrastructure
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+        working-directory: infrastructure
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        working-directory: infrastructure
+        run: terraform apply -auto-approve -no-color
+
+      - name: Output S3_CDN_URL
+        if: github.event.inputs.action == 'apply'
+        working-directory: infrastructure
+        run: |
+          echo "## Infrastructure Deployed Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**S3_CDN_URL:** $(terraform output -raw s3_cdn_url)" >> $GITHUB_STEP_SUMMARY
+          echo "**Bucket Name:** $(terraform output -raw bucket_name)" >> $GITHUB_STEP_SUMMARY
+          echo "**S3 Endpoint:** $(terraform output -raw s3_endpoint)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Set the S3_CDN_URL as a secret in your repository" >> $GITHUB_STEP_SUMMARY
+          echo "2. Deploy the Workers with the updated secret" >> $GITHUB_STEP_SUMMARY
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        working-directory: infrastructure
+        run: terraform destroy -auto-approve -no-color

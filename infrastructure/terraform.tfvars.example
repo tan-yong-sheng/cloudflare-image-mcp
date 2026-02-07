@@ -1,0 +1,24 @@
+# ============================================================================
+# Terraform Variables - Copy to terraform.tfvars and fill in your values
+# ============================================================================
+
+# Your Cloudflare Account ID (found in the right sidebar of Cloudflare dashboard)
+cloudflare_account_id = "your-account-id-here"
+
+# Cloudflare API Token with R2 permissions
+# Create at: https://dash.cloudflare.com/profile/api-tokens
+# Required permissions:
+#   - Account:Read
+#   - R2 Bucket:Edit
+#   - R2 Bucket Lifecycle:Edit
+#   - R2 Custom Domain:Edit
+cloudflare_api_token = "your-api-token-here"
+
+# Optional: Customize bucket name
+# bucket_name = "cloudflare-image-mcp-images"
+
+# Optional: Choose bucket location (APAC, WNAM, ENAM, WEUR, EEUR, OC)
+# bucket_location = "APAC"
+
+# Optional: Image expiration time in hours
+# image_expiry_hours = 24

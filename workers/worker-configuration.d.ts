@@ -3,7 +3,7 @@
 interface Env {
 	IMAGE_EXPIRY_HOURS: 24;
 	CLOUDFLARE_ACCOUNT_ID: string;
-	CDN_URL: string;
+	S3_CDN_URL: string;
 	IMAGE_BUCKET: R2Bucket;
 	AI: Ai;
 }

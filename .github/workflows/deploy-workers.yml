@@ -79,10 +79,8 @@ jobs:
             sed -i "/\[ai\]/,/\[/{s/account_id = \"\"/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/}" wrangler.toml || true
           fi
 
-          # Update CDN URL if provided
-          if [ -n "${{ secrets.CDN_URL }}" ]; then
-            sed -i "s|CDN_URL = \"\"|CDN_URL = \"${{ secrets.CDN_URL }}\"|" wrangler.toml
-          fi
+          # Note: S3_CDN_URL should be set as a secret via wrangler secret put
+          # Terraform will output the S3_CDN_URL after infrastructure deployment
 
           # Verify wrangler.toml was created
           if [ ! -f wrangler.toml ]; then
