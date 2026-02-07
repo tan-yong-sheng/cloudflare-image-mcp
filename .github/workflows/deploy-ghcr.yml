@@ -97,8 +97,12 @@ jobs:
 
       - name: Test image (smoke test)
         run: |
+          # Get the first tag from metadata
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -1)
+          echo "Testing image: $IMAGE_TAG"
+
           # Pull the image
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker pull $IMAGE_TAG
 
           # Run container with minimal config for testing
           docker run -d --name test-container \
@@ -109,7 +113,7 @@ jobs:
             -e S3_ACCESS_KEY=test \
             -e S3_SECRET_KEY=test \
             -p 3000:3000 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            $IMAGE_TAG
 
           # Wait for container to start
           sleep 10
