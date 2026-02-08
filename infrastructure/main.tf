@@ -88,24 +88,6 @@ resource "cloudflare_r2_bucket_lifecycle" "cleanup" {
 }
 
 # ============================================================================
-# CORS Configuration for Web Access
-# ============================================================================
-
-resource "cloudflare_r2_bucket_cors" "web_access" {
-  account_id  = var.cloudflare_account_id
-  bucket_name = local.bucket_name
-
-  cors_rules = [{
-    allowed_origins = ["*"] # Allow all origins (adjust for production)
-    allowed_methods = ["GET", "HEAD"]
-    allowed_headers = ["*"]
-    max_age_seconds = 3600
-  }]
-
-  depends_on = [cloudflare_r2_bucket.images]
-}
-
-# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -116,7 +98,7 @@ output "bucket_name" {
 
 output "s3_cdn_url" {
   description = "Public R2 URL (S3_CDN_URL) - Use this in your Workers environment"
-  value       = "https://${cloudflare_r2_managed_domain.public.domain_name}"
+  value       = "https://pub-${var.cloudflare_account_id}.r2.dev"
 }
 
 output "s3_endpoint" {
