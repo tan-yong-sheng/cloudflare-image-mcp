@@ -21,51 +21,6 @@ terraform {
 }
 
 # ============================================================================
-# Variables
-# ============================================================================
-
-variable "cloudflare_api_token" {
-  description = "Cloudflare API Token with R2 and Workers permissions"
-  type        = string
-  sensitive   = true
-}
-
-variable "cloudflare_account_id" {
-  description = "Cloudflare Account ID"
-  type        = string
-}
-
-variable "bucket_name" {
-  description = "Name of the R2 bucket for image storage"
-  type        = string
-  default     = "cloudflare-image-mcp-images"
-}
-
-variable "bucket_location" {
-  description = "Location hint for R2 bucket (APAC, WNAM, ENAM, WEUR, EEUR)"
-  type        = string
-  default     = "APAC"
-}
-
-variable "image_expiry_hours" {
-  description = "Hours after which images are auto-deleted"
-  type        = number
-  default     = 24
-}
-
-variable "environment" {
-  description = "Deployment environment (staging or production)"
-  type        = string
-  default     = "production"
-}
-
-variable "workers_subdomain" {
-  description = "Subdomain for the Workers deployment"
-  type        = string
-  default     = "cloudflare-image-workers"
-}
-
-# ============================================================================
 # Local Values
 # ============================================================================
 
