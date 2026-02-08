@@ -180,6 +180,15 @@ jobs:
           echo "- S3_CDN_URL: ${{ secrets.S3_CDN_URL != '' && '✅ Configured' || '❌ Missing' }}" >> $GITHUB_STEP_SUMMARY
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured' || '❌ Missing' }}" >> $GITHUB_STEP_SUMMARY
 
+      - name: Cleanup sensitive files
+        if: always()
+        working-directory: workers
+        run: |
+          # Explicitly remove wrangler.toml to ensure no credential leakage
+          # Note: account_id is not secret (it's in the public URL), but we clean up anyway
+          rm -f wrangler.toml
+          echo "✅ Cleaned up wrangler.toml"
+
       - name: Notify on failure
         if: failure()
         run: |

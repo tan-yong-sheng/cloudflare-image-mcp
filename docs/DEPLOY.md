@@ -280,6 +280,39 @@ The deployment workflow automatically configures:
 
 ---
 
+## Security Notes
+
+### Is `account_id` a Secret?
+
+**No** - `CLOUDFLARE_ACCOUNT_ID` is **NOT a secret**. It's already public in your Workers URL:
+
+```
+https://your-worker.<ACCOUNT_ID>.workers.dev
+```
+
+Anyone can see your account ID by visiting your Workers URL. It's safe to include in `wrangler.toml` and workflow logs.
+
+### Where is `wrangler.toml` Created?
+
+1. **Generated in GitHub Actions runner** (ephemeral/temporary)
+2. **Never committed to git** (in `.gitignore`)
+3. **Explicitly deleted after deployment** (cleanup step)
+4. **Not in your project directory** (only exists during CI/CD)
+
+### What About Credentials?
+
+| Credential | Location | Protection |
+|------------|----------|------------|
+| `CLOUDFLARE_API_TOKEN` | GitHub Secret | Encrypted |
+| `S3_ACCESS_KEY` | Wrangler Secret | Encrypted by Cloudflare |
+| `S3_SECRET_KEY` | Wrangler Secret | Encrypted by Cloudflare |
+| `account_id` | wrangler.toml | Public info anyway |
+| `bucket_name` | wrangler.toml | Not sensitive |
+
+**No credentials are leaked** - sensitive values are never written to files or logs.
+
+---
+
 ## Troubleshooting
 
 ### Deployment Fails
