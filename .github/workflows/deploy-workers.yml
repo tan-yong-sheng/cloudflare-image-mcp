@@ -75,40 +75,34 @@ jobs:
 
           echo "Deploying to $ENVIRONMENT as ${{ env.WORKERS_NAME }}"
 
-      - name: Create wrangler.toml from template
+      - name: Generate wrangler.toml
         working-directory: workers
         run: |
-          # Copy template and inject secrets
-          if [ -f wrangler.toml.example ]; then
-            cp wrangler.toml.example wrangler.toml
-          else
-            echo "Error: wrangler.toml.example not found"
-            exit 1
-          fi
+          # Generate wrangler.toml dynamically from GitHub secrets
+          # This ensures single source of truth (GitHub Secrets/Terraform)
+          cat > wrangler.toml << EOF
+          name = "${{ env.WORKERS_NAME }}"
+          account_id = "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          compatibility_date = "2025-01-01"
+          main = "src/index.ts"
 
-          # Update account_id in wrangler.toml
-          sed -i "s/account_id = \"\"/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/" wrangler.toml
+          # R2 Bucket binding - uses bucket from Terraform/GitHub Secrets
+          [[r2_buckets]]
+          binding = "IMAGE_BUCKET"
+          bucket_name = "${{ secrets.S3_BUCKET }}"
 
-          # Update account_id under [ai] section if it exists
-          if grep -q "\[ai\]" wrangler.toml; then
-            sed -i "/\[ai\]/,/\[/{s/account_id = \"\"/account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"/}" wrangler.toml || true
-          fi
+          # Workers AI binding
+          [ai]
+          binding = "AI"
+          account_id = "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
 
-          # Update worker name based on environment
-          if [ "${{ env.ENVIRONMENT }}" == "staging" ]; then
-            sed -i "s/name = \"cloudflare-image-workers\"/name = \"cloudflare-image-workers-staging\"/" wrangler.toml
-          fi
+          # Environment variables
+          [vars]
+          IMAGE_EXPIRY_HOURS = "24"
+          # S3_CDN_URL and API_KEYS are set as secrets via wrangler secret put
+          EOF
 
-          # Note: S3_CDN_URL should be set as a secret via wrangler secret put
-          # Terraform will output the S3_CDN_URL after infrastructure deployment
-
-          # Verify wrangler.toml was created
-          if [ ! -f wrangler.toml ]; then
-            echo "Error: Failed to create wrangler.toml"
-            exit 1
-          fi
-
-          echo "✅ wrangler.toml created successfully"
+          echo "✅ wrangler.toml generated successfully"
           cat wrangler.toml
 
       - name: Set deployment metadata

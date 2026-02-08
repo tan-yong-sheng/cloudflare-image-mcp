@@ -243,17 +243,13 @@ TEST_TARGET=local npm test
 
 ### Workers Environments
 
-The `wrangler.toml` supports multiple environments:
+The `wrangler.toml` is generated dynamically during deployment from GitHub Secrets. This ensures a single source of truth (Terraform/GitHub Secrets) rather than maintaining separate configuration files.
 
-```toml
-# Production (default)
-name = "cloudflare-image-workers"
-
-# Staging
-[env.staging]
-name = "cloudflare-image-workers-staging"
-vars = { ENVIRONMENT = "staging" }
-```
+The deployment workflow automatically configures:
+- Worker name (based on environment)
+- Account ID (from `CLOUDFLARE_ACCOUNT_ID` secret)
+- R2 bucket binding (from `S3_BUCKET` secret)
+- Workers AI binding
 
 ### Environment Variables
 
@@ -322,10 +318,12 @@ If you previously used a custom subdomain (e.g., `tanyongsheng-net.workers.dev`)
    # New: cloudflare-image-workers.<account_id>.workers.dev
    ```
 
-2. **Update wrangler.toml** (if needed):
-   ```toml
-   # If you want to keep old name, override in wrangler.toml
-   name = "cloudflare-image-workers-tanyongsheng-net"
+2. **Use custom URL in tests**:
+   ```bash
+   # When running E2E tests, use custom_url parameter
+   gh workflow run e2e-tests.yml \
+     -f environment=production \
+     -f custom_url="https://cloudflare-image-workers.your-subdomain.workers.dev"
    ```
 
 3. **Redeploy**:
