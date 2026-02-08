@@ -115,13 +115,26 @@ jobs:
           echo "DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
 
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.S3_BUCKET }}" ]; then
+            echo "❌ ERROR: S3_BUCKET secret is not set"
+            echo "Please run the infrastructure deployment workflow first, or set S3_BUCKET manually."
+            exit 1
+          fi
+          if [ -z "${{ secrets.S3_ACCESS_KEY }}" ] || [ -z "${{ secrets.S3_SECRET_KEY }}" ]; then
+            echo "⚠️ WARNING: S3_ACCESS_KEY or S3_SECRET_KEY not set"
+            echo "R2 operations may fail. Create R2 API tokens in Cloudflare Dashboard."
+          fi
+          echo "✅ Required secrets check passed"
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers
-          command: deploy --env ${{ env.ENVIRONMENT }}
+          command: deploy
         env:
           S3_CDN_URL: ${{ secrets.S3_CDN_URL }}
           API_KEYS: ${{ secrets.API_KEYS }}
