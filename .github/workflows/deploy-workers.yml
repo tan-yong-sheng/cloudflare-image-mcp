@@ -103,7 +103,10 @@ jobs:
           EOF
 
           echo "✅ wrangler.toml generated successfully"
-          cat wrangler.toml
+          # Only show non-sensitive parts
+          echo "Worker name: ${{ env.WORKERS_NAME }}"
+          echo "Bucket: ${{ secrets.S3_BUCKET }}"
+          echo "(wrangler.toml content hidden for security)"
 
       - name: Set deployment metadata
         working-directory: workers

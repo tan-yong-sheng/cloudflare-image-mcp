@@ -25,23 +25,42 @@ The project supports two deployment targets:
 
 ### Required Secrets (Repository Level)
 
+| Secret | Description | How to Get | Auto-Generated? |
+|--------|-------------|------------|-----------------|
+| `CLOUDFLARE_API_TOKEN` | API token with Workers and R2 permissions | [Create here](https://dash.cloudflare.com/profile/api-tokens) | ❌ Manual |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID | Dashboard right sidebar | ❌ Manual |
+
+### R2 Credentials (Must Create Manually)
+
+**Important**: Terraform CANNOT create R2 API tokens. You must create these manually:
+
 | Secret | Description | How to Get |
 |--------|-------------|------------|
-| `CLOUDFLARE_API_TOKEN` | API token with Workers and R2 permissions | [Create here](https://dash.cloudflare.com/profile/api-tokens) |
-| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID | Dashboard right sidebar |
+| `S3_ACCESS_KEY` | R2 access key ID | Dashboard > R2 > Manage API Tokens > Create Token |
+| `S3_SECRET_KEY` | R2 secret access key | Created with the token above |
 
-### Token Permissions Needed
-
-Create a token with these permissions:
-- **Account**: Cloudflare Workers:Edit, Account:Read
-- **Zone** (if using custom domain): Zone:Read, Workers Routes:Edit
-- **R2**: R2 Bucket:Edit, R2 Bucket Lifecycle:Edit
+**Steps to create:**
+1. Go to Cloudflare Dashboard > R2
+2. Click "Manage API Tokens"
+3. Create a token with "Object Read & Write" permission
+4. Copy Access Key ID → `S3_ACCESS_KEY`
+5. Copy Secret Access Key → `S3_SECRET_KEY`
 
 ### Optional Secrets (For Authentication)
 
 | Secret | Environment | Description |
 |--------|-------------|-------------|
 | `API_KEYS` | Repository | Comma-separated list of valid API keys (e.g., `key1,key2,key3`) |
+
+### Terraform-Generated Secrets
+
+These are automatically set by the infrastructure deployment workflow:
+
+| Secret | Description |
+|--------|-------------|
+| `S3_BUCKET` | R2 bucket name |
+| `S3_CDN_URL` | Public CDN URL for images |
+| `S3_ENDPOINT` | S3-compatible endpoint |
 
 ---
 
