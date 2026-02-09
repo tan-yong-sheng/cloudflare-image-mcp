@@ -10,7 +10,10 @@ Cloudflare Image MCP implements the Model Context Protocol (MCP), allowing AI as
 
 The MCP server supports streamable HTTP transport:
 
-- **Endpoint**: `POST /mcp` or `POST /mcp/message`
+- **Endpoints**:
+  - Multi-model (default): `POST /mcp` or `POST /mcp/message`
+  - Multi-model (explicit): `POST /mcp/smart` or `POST /mcp/smart/message`
+  - Single-model (simple): `POST /mcp/simple` or `POST /mcp/simple/message`
 - **Protocol**: JSON-RPC 2.0
 - **Content-Type**: `application/json`
 
@@ -18,18 +21,20 @@ The MCP server supports streamable HTTP transport:
 
 For real-time updates:
 
-- **Endpoint**: `GET /mcp?transport=sse`
+- **Endpoint**: `GET /mcp?transport=sse` (or `/mcp/smart?transport=sse`, `/mcp/simple?transport=sse`)
 - **Content-Type**: `text/event-stream`
 
 ## MCP Endpoints
 
-### Discovery Endpoint
+### Discovery Endpoints
 
 ```http
 GET /mcp
+GET /mcp/smart
+GET /mcp/simple
 ```
 
-Returns MCP server information:
+Each returns MCP server information (tools differ by endpoint):
 
 ```json
 {
@@ -39,10 +44,22 @@ Returns MCP server information:
   "transport": "streamable-http",
   "endpoints": {
     "message": "/mcp/message",
-    "sse": "/mcp?transport=sse"
+    "sse": "/mcp?transport=sse",
+    "smart": {
+      "message": "/mcp/smart/message",
+      "sse": "/mcp/smart?transport=sse"
+    },
+    "simple": {
+      "message": "/mcp/simple/message",
+      "sse": "/mcp/simple?transport=sse",
+      "query": {
+        "model": "Required. /mcp/simple uses this as the model_id."
+      }
+    }
   },
   "tools": ["run_models", "list_models", "describe_model"],
-  "description": "Image generation using Cloudflare Workers AI"
+  "mode": "multi-model",
+  "defaultModel": null
 }
 ```
 
@@ -207,7 +224,7 @@ Invokes a tool.
 
 Generates images using Cloudflare Workers AI models.
 
-**Parameters:**
+**Parameters (multi-model endpoints: `/mcp`, `/mcp/smart`):**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -219,6 +236,23 @@ Generates images using Cloudflare Workers AI models.
 | `seed` | number | No | Random seed |
 | `guidance` | number | No | Guidance scale (1-30) |
 | `negative_prompt` | string | No | Elements to avoid |
+
+**Parameters (simple endpoint: `/mcp/simple`):**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | Yes | Image description |
+| `model_id` | string | No | Not allowed to differ from the default model. Omit it. |
+| `n` | number | No | Number of images (1-8) |
+| `size` | string | No | Image size |
+| `steps` | number | No | Diffusion steps |
+| `seed` | number | No | Random seed |
+| `guidance` | number | No | Guidance scale |
+| `negative_prompt` | string | No | Elements to avoid |
+
+**How the model is chosen for `/mcp/simple`:**
+- `?model=@cf/...` query param (required)
+- otherwise: error
 
 **Returns:**
 - Markdown-formatted text with image URL(s)
@@ -458,35 +492,9 @@ Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Transport
 ```
 
-## Stdio Transport - Two-Mode Workflow
+## Stdio Transport
 
-The stdio MCP server (for Claude Desktop and other local MCP clients) supports two operational modes based on the `DEFAULT_MODEL` environment variable.
-
-### Mode 1: Default Model (Simplified Workflow)
-
-When `DEFAULT_MODEL` is set, the server skips model selection and uses the default directly.
-
-**Available Tools:**
-- `describe_model` - Get parameters for the default model
-- `run_models` - Generate images
-
-**Workflow:**
-```
-Step 1: describe_model()
-  → Returns parameter schema for DEFAULT_MODEL
-
-Step 2: run_models(prompt="...", params={...})
-  → Generates image using DEFAULT_MODEL
-```
-
-**Configuration:**
-```bash
-DEFAULT_MODEL=@cf/black-forest-labs/flux-1-schnell
-```
-
-### Mode 2: Model Selection (Full Workflow)
-
-When `DEFAULT_MODEL` is not set, the server provides enhanced model selection.
+The stdio MCP server (for Claude Desktop and other local MCP clients) always runs in multi-model mode.
 
 **Available Tools:**
 - `list_models` - List all models with pricing, performance, and selection guide
@@ -546,43 +554,6 @@ Step 3: run_models(model_id="...", prompt="...", params={...})
 
 ### Claude Desktop Configuration
 
-**Mode 1 (with default model):**
-```json
-{
-  "mcpServers": {
-    "cloudflare-image": {
-      "command": "npx",
-      "args": ["-y", "@cloudflare-image-mcp/local"],
-      "env": {
-        "CLOUDFLARE_API_TOKEN": "your_token",
-        "CLOUDFLARE_ACCOUNT_ID": "your_account",
-        "S3_BUCKET": "your_bucket",
-        "S3_ENDPOINT": "https://...",
-        "S3_ACCESS_KEY": "your_key",
-        "S3_SECRET_KEY": "your_secret",
-        "DEFAULT_MODEL": "@cf/black-forest-labs/flux-1-schnell"
-      }
-    }
-  }
-}
-```
+Use the **remote MCP URL** (HTTP) and include an API key if you enabled `API_KEYS` on the Worker.
 
-**Mode 2 (with model selection):**
-```json
-{
-  "mcpServers": {
-    "cloudflare-image": {
-      "command": "npx",
-      "args": ["-y", "@cloudflare-image-mcp/local"],
-      "env": {
-        "CLOUDFLARE_API_TOKEN": "your_token",
-        "CLOUDFLARE_ACCOUNT_ID": "your_account",
-        "S3_BUCKET": "your_bucket",
-        "S3_ENDPOINT": "https://...",
-        "S3_ACCESS_KEY": "your_key",
-        "S3_SECRET_KEY": "your_secret"
-      }
-    }
-  }
-}
-```
+(Exact configuration depends on the client version; the key point is that the server is available at your Worker URL under `/mcp`.)

@@ -42,20 +42,6 @@ npm install
 npx playwright install --with-deps
 ```
 
-### Local Testing
-
-```bash
-# Start local server first
-cd packages/local && npm run dev
-
-# Run tests
-cd e2e
-npm test
-
-# Or with environment variable
-TEST_TARGET=local npm test
-```
-
 ### Workers Testing
 
 ```bash
@@ -63,7 +49,7 @@ TEST_TARGET=local npm test
 cd workers && npm run deploy
 
 # Run tests against Workers
-TEST_TARGET=workers npm test
+TEST_TARGET=staging npm test
 ```
 
 ### Specific Test Files
@@ -101,8 +87,8 @@ npx playwright show-report
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TEST_TARGET` | Target environment: `local` or `workers` | `local` |
-| `TEST_BASE_URL` | Base URL for testing | `http://localhost:3000` |
+| `TEST_TARGET` | Target environment: `staging` or `production` | `staging` |
+| `TEST_BASE_URL` | Base URL for testing | (auto-constructed) |
 | `TEST_TIMEOUT` | Test timeout in ms | `60000` |
 | `CI` | Running in CI environment | `false` |
 
@@ -170,7 +156,6 @@ The E2E workflow (`.github/workflows/e2e-tests.yml`) runs on:
 
 1. **Pull Requests** - Tests local changes
 2. **Manual Dispatch** - Test specific deployments
-3. **Pre-GHCR Publish** - Block publish if tests fail
 
 ### Workflow Triggers
 
@@ -180,8 +165,7 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      target: { local, workers }
-  workflow_call:  # Called by GHCR workflow
+      environment: { staging, production }
 ```
 
 ### Test Artifacts
@@ -223,12 +207,12 @@ Increase timeout:
 TEST_TIMEOUT=120000 npm test
 ```
 
-### Local Server Not Starting
+### Worker Not Responding
 
-Check ports and health endpoint:
+Check health endpoint:
 
 ```bash
-curl http://localhost:3000/health
+curl https://cloudflare-image-workers.<account_id>.workers.dev/health
 ```
 
 ### Workers Tests Failing

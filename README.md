@@ -1,20 +1,17 @@
 # Cloudflare Image MCP
 
 [![Deploy to Cloudflare Workers](https://github.com/tan-yong-sheng/cloudflare-image-mcp/actions/workflows/deploy-workers.yml/badge.svg)](https://github.com/tan-yong-sheng/cloudflare-image-mcp/actions/workflows/deploy-workers.yml)
-[![Build and Push to GHCR](https://github.com/tan-yong-sheng/cloudflare-image-mcp/actions/workflows/deploy-ghcr.yml/badge.svg)](https://github.com/tan-yong-sheng/cloudflare-image-mcp/actions/workflows/deploy-ghcr.yml)
-[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/tan-yong-sheng/cloudflare-image-mcp/pkgs/container/cloudflare-image-mcp)
 
 OpenAI-compatible image generation API + MCP server powered by Cloudflare Workers AI.
 
 ## 🌟 Features
 
 - **OpenAI-Compatible API**: `/v1/images/generations` endpoint
-- **MCP Protocol Support**: 
-  - Stdio transport (local CLI)
+- **MCP Protocol Support**:
   - HTTP transport with SSE (streamable)
 - **10 Image Generation Models**: FLUX, SDXL, Stable Diffusion, and more
 - **Multiple Tasks**: Text-to-image, image-to-image, inpainting
-- **Dual Deployment**: Local server or Cloudflare Workers
+- **Deployment**: Cloudflare Workers
 - **Web Frontend**: Interactive UI for image generation
 - **R2 Storage**: Auto-expiring image storage with CDN
 
@@ -22,10 +19,8 @@ OpenAI-compatible image generation API + MCP server powered by Cloudflare Worker
 
 ```
 cloudflare-image-mcp/
-├── packages/
-│   ├── core/          # Shared library (models, AI client, storage)
-│   └── local/         # Local deployment (stdio MCP + HTTP server + UI)
-└── workers/           # Cloudflare Workers deployment (HTTP MCP + API + UI)
+├── workers/           # Cloudflare Workers deployment (HTTP MCP + API + UI)
+└── e2e/               # Playwright E2E tests (staging/production)
 ```
 
 ## 🚀 Quick Start
@@ -38,71 +33,24 @@ cloudflare-image-mcp/
 
 ### Local Development
 
-1. **Install dependencies**
-
 ```bash
-# Install all packages
-cd packages/core && npm install && npm run build
-cd ../local && npm install && npm run build
-cd ../..
+cd workers
+npm ci
+npx wrangler dev --remote
 ```
 
-2. **Configure environment**
+Then open:
+- Web UI: http://localhost:8787/
+
+### Deploy
 
 ```bash
-cd packages/local
-cp .env.example .env
-# Edit .env with your credentials
+cd workers
+npm ci
+npx wrangler deploy
 ```
 
-3. **Start the server**
-
-```bash
-npm run dev
-```
-
-The server will start on `http://localhost:3000` with:
-- **Web UI**: http://localhost:3000/
-- **OpenAI API**: http://localhost:3000/v1/images/generations
-- **HTTP MCP**: http://localhost:3000/mcp
-- **Stdio MCP**: `node dist/main.js --stdio`
-
-### Docker Deployment
-
-**Option 1: Docker Compose (Recommended)**
-
-```bash
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your credentials
-
-# Start with Docker Compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Access at http://localhost:3000
-```
-
-**Option 2: Pre-built Image from GHCR**
-
-```bash
-docker pull ghcr.io/tan-yong-sheng/cloudflare-image-mcp:latest
-
-docker run -d \
-  --name cloudflare-image-mcp \
-  -p 3000:3000 \
-  -e CLOUDFLARE_API_TOKEN=your_token \
-  -e CLOUDFLARE_ACCOUNT_ID=your_account_id \
-  -e S3_BUCKET=your_bucket \
-  -e S3_ENDPOINT=https://your_account.r2.cloudflarestorage.com \
-  -e S3_ACCESS_KEY=your_access_key \
-  -e S3_SECRET_KEY=your_secret_key \
-  ghcr.io/tan-yong-sheng/cloudflare-image-mcp:latest
-```
-
-### Cloudflare Workers Deployment
+### Cloudflare Workers Deployment (CI/CD)
 
 **Option 1: Manual Deployment**
 
@@ -126,7 +74,7 @@ The repository includes automated deployment via GitHub Actions:
 
 3. Workers automatically deployed to: `https://cloudflare-image-workers.*.workers.dev/`
 
-See [CICD_DEPLOYMENT.md](CICD_DEPLOYMENT.md) for detailed setup instructions.
+See `docs/` for detailed setup instructions.
 
 ## 📖 Usage
 
@@ -176,19 +124,13 @@ Open http://localhost:3000/ in your browser for an interactive UI.
 
 ## 🧪 Testing
 
-Run the verification script:
+E2E tests run against Workers deployments (staging/production).
 
 ```bash
-./test-verification.sh
+npm run test:e2e:staging
+# or
+npm run test:e2e:production
 ```
-
-This tests:
-- Package builds
-- File structure
-- Core exports
-- MCP tool definitions
-- Model configurations
-- Documentation
 
 ## 📚 Documentation
 
@@ -199,42 +141,31 @@ This tests:
 
 ## 🔧 Development
 
-### Build all packages
+### Type check Workers
 
 ```bash
-# Core
-cd packages/core && npm run build
-
-# Local
-cd packages/local && npm run build
-
-# Workers (type check only)
-cd workers && npm run check
+npm run build
 ```
 
-### Run tests
+### Run E2E tests
 
 ```bash
-./test-verification.sh
+npm run test:e2e:staging
+# or
+npm run test:e2e:production
 ```
 
-## 🌐 Deployment Options
+## 🌐 Deployment
 
-| Option | Transport | Best For |
-|--------|-----------|----------|
-| **Local Server** | HTTP | Development, self-hosted |
-| **Local CLI** | stdio | MCP clients (Claude Desktop) |
-| **Docker** | HTTP | Production, containerized |
-| **Cloudflare Workers** | HTTP + SSE | Production, serverless, global CDN |
+This project deploys to **Cloudflare Workers**.
 
 ### Automated Deployments
 
 This repository includes CI/CD pipelines for automated deployments:
 
 - **Cloudflare Workers** - Auto-deploys on push to main
-- **GitHub Container Registry** - Builds and publishes Docker images
 
-See [CICD_DEPLOYMENT.md](CICD_DEPLOYMENT.md) for setup instructions.
+See `docs/` for deployment instructions.
 
 ## 📝 License
 

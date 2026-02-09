@@ -10,18 +10,27 @@ export class MCPEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
   private cdnUrl: string;
+
+  // Per-request mode (derived from path)
+  // - smart/multi: list_models, describe_model, run_models
+  // - simple/single: run_models only (model comes from ?model=...)
+  private mode: 'multi-model' | 'single-model';
   private defaultModel: string | null;
   private isMode1: boolean;
+
   private workerBaseUrl: string; // Store worker's base URL
 
   constructor(env: Env) {
     this.generator = new ImageGeneratorService(env);
     this.cdnUrl = env.S3_CDN_URL || '';
     this.workerBaseUrl = ''; // Will be set from first request
-    // Mode 1: DEFAULT_MODEL set - only run_models available
-    // Mode 2: DEFAULT_MODEL not set - list_models, describe_model, run_models available
-    this.defaultModel = env.DEFAULT_MODEL || null;
-    this.isMode1 = !!this.defaultModel;
+
+
+    // Default request mode is multi-model; request path can switch this.
+    this.mode = 'multi-model';
+    this.defaultModel = null;
+    this.isMode1 = false;
+
     this.corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -41,14 +50,28 @@ export class MCPEndpoint {
       this.workerBaseUrl = `${url.protocol}//${url.host}`;
     }
 
+    // Derive mode from path
+    // - /mcp (default) and /mcp/smart => multi-model
+    // - /mcp/simple => single-model (run_models only; model is required via ?model=)
+    if (pathname === '/mcp/simple' || pathname === '/mcp/simple/message') {
+      this.mode = 'single-model';
+      const modelFromQuery = url.searchParams.get('model');
+      this.defaultModel = modelFromQuery;
+      this.isMode1 = true;
+    } else {
+      this.mode = 'multi-model';
+      this.defaultModel = null;
+      this.isMode1 = false;
+    }
+
     // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: this.corsHeaders });
     }
 
-    // GET /mcp - Return endpoint info (for human-readable API discovery)
-    if (request.method === 'GET' && pathname === '/mcp') {
-      return this.handleInfo();
+    // GET /mcp* - Return endpoint info (for human-readable API discovery)
+    if (request.method === 'GET' && (pathname === '/mcp' || pathname === '/mcp/smart' || pathname === '/mcp/simple')) {
+      return this.handleInfo(pathname);
     }
 
     // GET for SSE transport connection (?transport=sse)
@@ -56,8 +79,18 @@ export class MCPEndpoint {
       return this.handleSSE(request);
     }
 
-    // POST for MCP messages (handles both /mcp and /mcp/message for Streamable HTTP)
-    if (request.method === 'POST' && (pathname === '/mcp' || pathname === '/mcp/message')) {
+    // POST for MCP messages (handles both /mcp* and /mcp*/message for Streamable HTTP)
+    if (
+      request.method === 'POST' &&
+      (
+        pathname === '/mcp' ||
+        pathname === '/mcp/message' ||
+        pathname === '/mcp/smart' ||
+        pathname === '/mcp/smart/message' ||
+        pathname === '/mcp/simple' ||
+        pathname === '/mcp/simple/message'
+      )
+    ) {
       return this.handleMessage(request);
     }
 
@@ -70,20 +103,38 @@ export class MCPEndpoint {
   /**
    * Handle info request for /mcp endpoint
    */
-  private handleInfo(): Response {
+  private handleInfo(pathname: string): Response {
+    const isSimpleEndpoint = pathname === '/mcp/simple';
+
     const info = {
       name: 'cloudflare-image-mcp',
       version: '0.1.0',
       protocol: 'MCP',
       transport: 'streamable-http',
       endpoints: {
+        // Default endpoint (multi-model)
         message: '/mcp/message',
         sse: '/mcp?transport=sse',
+
+        // Explicit endpoints
+        smart: {
+          message: '/mcp/smart/message',
+          sse: '/mcp/smart?transport=sse',
+        },
+        simple: {
+          message: '/mcp/simple/message',
+          sse: '/mcp/simple?transport=sse',
+          query: {
+            model: 'Required. /mcp/simple uses this as the model_id.',
+          },
+        },
       },
       tools: this.isMode1 ? ['run_models'] : ['run_models', 'list_models', 'describe_model'],
-      mode: this.isMode1 ? 'single-model' : 'multi-model',
+      mode: this.mode,
       defaultModel: this.defaultModel,
-      description: 'Image generation using Cloudflare Workers AI',
+      description: isSimpleEndpoint
+        ? 'Single-model image generation (run_models only). Requires ?model='
+        : 'Multi-model image generation using Cloudflare Workers AI',
     };
 
     return new Response(JSON.stringify(info, null, 2), {
@@ -281,16 +332,37 @@ export class MCPEndpoint {
       }];
     }
 
-    // Mode 1: Use default model if model_id not provided
-    // Mode 2: model_id is required
-    const model_id = requestedModelId || this.defaultModel;
+    // Single-model endpoint (/mcp/simple): do not allow arbitrary model selection.
+    // Multi-model endpoints (/mcp, /mcp/smart): model_id is required.
+    let model_id: string | null = null;
 
-    if (!model_id) {
-      return [{
-        type: 'text',
-        text: 'Error: model_id is required. Use list_models to get available model_ids.',
-        isError: true,
-      }];
+    if (this.isMode1) {
+      if (!this.defaultModel) {
+        return [{
+          type: 'text',
+          text: 'Error: /mcp/simple requires ?model=. Example: /mcp/simple?model=@cf/black-forest-labs/flux-2-klein-4b',
+          isError: true,
+        }];
+      }
+
+      if (requestedModelId && requestedModelId !== this.defaultModel) {
+        return [{
+          type: 'text',
+          text: `Error: /mcp/simple does not allow selecting model_id. Remove model_id or use model_id="${this.defaultModel}".`,
+          isError: true,
+        }];
+      }
+
+      model_id = this.defaultModel;
+    } else {
+      model_id = requestedModelId || null;
+      if (!model_id) {
+        return [{
+          type: 'text',
+          text: 'Error: model_id is required. Use list_models to get available model_ids.',
+          isError: true,
+        }];
+      }
     }
 
     // Validate model_id exists
@@ -363,11 +435,11 @@ export class MCPEndpoint {
    * Handle list_models tool call
    */
   private async handleListModels(_args: any): Promise<any[]> {
-    // Mode 1: list_models is not available
+    // Single-model endpoint: list_models is not available
     if (this.isMode1) {
       return [{
         type: 'text',
-        text: `Error: list_models is not available when DEFAULT_MODEL is set (${this.defaultModel}). Use run_models(prompt="...") directly.`,
+        text: 'Error: list_models is not available on /mcp/simple. Use /mcp or /mcp/smart for multi-model discovery, or call run_models(prompt="...") directly.',
         isError: true,
       }];
     }
@@ -399,11 +471,11 @@ export class MCPEndpoint {
    * Handle describe_model tool call
    */
   private async handleDescribeModel(args: any): Promise<any[]> {
-    // Mode 1: describe_model is not available
+    // Single-model endpoint: describe_model is not available
     if (this.isMode1) {
       return [{
         type: 'text',
-        text: `Error: describe_model is not available when DEFAULT_MODEL is set (${this.defaultModel}). Use run_models(prompt="...") directly.`,
+        text: 'Error: describe_model is not available on /mcp/simple. Use /mcp or /mcp/smart for multi-model discovery, or call run_models(prompt="...") directly.',
         isError: true,
       }];
     }
@@ -504,25 +576,23 @@ export class MCPEndpoint {
 
   /**
    * Get tool definitions for MCP
-   * Mode 1 (DEFAULT_MODEL set): Only run_models available
-   * Mode 2 (DEFAULT_MODEL not set): list_models, describe_model, run_models available
+   * Single-model endpoint (/mcp/simple): Only run_models available
+   * Multi-model endpoints (/mcp, /mcp/smart): list_models, describe_model, run_models available
    */
   private getToolDefinitions(): any[] {
-    // Mode 1: Only run_models with optional model_id
+    // Single-model endpoint: only run_models (no model selection)
     const mode1Tools = [
       {
         name: 'run_models',
-        description: `Generate images using the default model (${this.defaultModel}). Uses optimal parameters automatically.`,
+        description: this.defaultModel
+          ? `Generate images using the default model (${this.defaultModel}).`
+          : 'Generate images using the model specified via ?model= on /mcp/simple.',
         inputSchema: {
           type: 'object',
           properties: {
             prompt: {
               type: 'string',
               description: 'Text description of the image to generate',
-            },
-            model_id: {
-              type: 'string',
-              description: `Optional - defaults to "${this.defaultModel}"`,
             },
             n: {
               type: 'number',

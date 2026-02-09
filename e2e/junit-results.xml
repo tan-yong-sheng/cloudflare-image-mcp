@@ -1,0 +1,1667 @@
+<testsuites id="" name="" tests="73" failures="72" skipped="0" errors="0" time="69.75182000000001">
+<testsuite name="api/health.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="4" failures="4" skipped="0" time="0.187" errors="0">
+<testcase name="Health Check › GET /health returns healthy status" classname="api/health.spec.ts" time="0.043">
+<failure message="health.spec.ts:11:3 GET /health returns healthy status" type="FAILURE">
+<![CDATA[  [chromium] › api/health.spec.ts:11:3 › Health Check › GET /health returns healthy status ─────────
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/health
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      10 | test.describe('Health Check', () => {
+      11 |   test('GET /health returns healthy status', async ({ request }) => {
+    > 12 |     const response = await request.get('/health');
+         |                                    ^
+      13 |
+      14 |     // Health endpoint should return 200
+      15 |     expect(response.status()).toBe(200);
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/health.spec.ts:12:36
+]]>
+</failure>
+</testcase>
+<testcase name="Health Check › GET / returns frontend or API info" classname="api/health.spec.ts" time="0.059">
+<failure message="health.spec.ts:24:3 GET / returns frontend or API info" type="FAILURE">
+<![CDATA[  [chromium] › api/health.spec.ts:24:3 › Health Check › GET / returns frontend or API info ─────────
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      23 |
+      24 |   test('GET / returns frontend or API info', async ({ request }) => {
+    > 25 |     const response = await request.get('/');
+         |                                    ^
+      26 |
+      27 |     // Root endpoint should return something (frontend HTML or API info)
+      28 |     expect(response.status()).toBe(200);
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/health.spec.ts:25:36
+]]>
+</failure>
+</testcase>
+<testcase name="Health Check › Unknown endpoints return 404" classname="api/health.spec.ts" time="0.037">
+<failure message="health.spec.ts:36:3 Unknown endpoints return 404" type="FAILURE">
+<![CDATA[  [chromium] › api/health.spec.ts:36:3 › Health Check › Unknown endpoints return 404 ───────────────
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/unknown-endpoint-that-does-not-exist
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      35 |
+      36 |   test('Unknown endpoints return 404', async ({ request }) => {
+    > 37 |     const response = await request.get('/unknown-endpoint-that-does-not-exist');
+         |                                    ^
+      38 |
+      39 |     expect(response.status()).toBe(404);
+      40 |   });
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/health.spec.ts:37:36
+]]>
+</failure>
+</testcase>
+<testcase name="Health Check › CORS headers are present on all endpoints" classname="api/health.spec.ts" time="0.048">
+<failure message="health.spec.ts:42:3 CORS headers are present on all endpoints" type="FAILURE">
+<![CDATA[  [chromium] › api/health.spec.ts:42:3 › Health Check › CORS headers are present on all endpoints ──
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/health
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      44 |
+      45 |     for (const endpoint of endpoints) {
+    > 46 |       const response = await request.get(endpoint);
+         |                                      ^
+      47 |
+      48 |       // Check CORS headers
+      49 |       expect(response.headers()['access-control-allow-origin']).toBe('*');
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/health.spec.ts:46:38
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/mcp/initialize.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="4" failures="4" skipped="0" time="0.186" errors="0">
+<testcase name="MCP Initialize › POST /mcp/message with initialize method returns server info" classname="api/mcp/initialize.spec.ts" time="0.047">
+<failure message="initialize.spec.ts:11:3 POST /mcp/message with initialize method returns server info" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/initialize.spec.ts:11:3 › MCP Initialize › POST /mcp/message with initialize method returns server info 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 174
+
+
+      10 | test.describe('MCP Initialize', () => {
+      11 |   test('POST /mcp/message with initialize method returns server info', async ({ request }) => {
+    > 12 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      13 |       data: {
+      14 |         jsonrpc: '2.0',
+      15 |         id: 1,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/initialize.spec.ts:12:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Initialize › POST /mcp/message with invalid JSON returns error" classname="api/mcp/initialize.spec.ts" time="0.038">
+<failure message="initialize.spec.ts:50:3 POST /mcp/message with invalid JSON returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/initialize.spec.ts:50:3 › MCP Initialize › POST /mcp/message with invalid JSON returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - Content-Type: application/json
+        - content-length: 14
+
+
+      49 |
+      50 |   test('POST /mcp/message with invalid JSON returns error', async ({ request }) => {
+    > 51 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      52 |       data: 'invalid json',
+      53 |       headers: {
+      54 |         'Content-Type': 'application/json',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/initialize.spec.ts:51:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Initialize › POST /mcp/message without jsonrpc version returns success (lenient)" classname="api/mcp/initialize.spec.ts" time="0.057">
+<failure message="initialize.spec.ts:68:3 POST /mcp/message without jsonrpc version returns success (lenient)" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/initialize.spec.ts:68:3 › MCP Initialize › POST /mcp/message without jsonrpc version returns success (lenient) 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 30
+
+
+      67 |
+      68 |   test('POST /mcp/message without jsonrpc version returns success (lenient)', async ({ request }) => {
+    > 69 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      70 |       data: {
+      71 |         id: 1,
+      72 |         method: 'initialize',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/initialize.spec.ts:69:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Initialize › POST /mcp/message with unknown method returns error" classname="api/mcp/initialize.spec.ts" time="0.044">
+<failure message="initialize.spec.ts:84:3 POST /mcp/message with unknown method returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/initialize.spec.ts:84:3 › MCP Initialize › POST /mcp/message with unknown method returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 50
+
+
+      83 |
+      84 |   test('POST /mcp/message with unknown method returns error', async ({ request }) => {
+    > 85 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      86 |       data: {
+      87 |         jsonrpc: '2.0',
+      88 |         id: 1,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/initialize.spec.ts:85:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/mcp/mcp-sdk.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="7" failures="7" skipped="0" time="0.719" errors="0">
+<testcase name="MCP SDK Integration › MCP SDK can initialize connection" classname="api/mcp/mcp-sdk.spec.ts" time="0.086">
+<failure message="mcp-sdk.spec.ts:36:3 MCP SDK can initialize connection" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:36:3 › MCP SDK Integration › MCP SDK can initialize connection 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SDK Integration › MCP SDK can list tools with proper schema" classname="api/mcp/mcp-sdk.spec.ts" time="0.134">
+<failure message="mcp-sdk.spec.ts:55:3 MCP SDK can list tools with proper schema" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:55:3 › MCP SDK Integration › MCP SDK can list tools with proper schema 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SDK Integration › MCP SDK can call list_models tool" classname="api/mcp/mcp-sdk.spec.ts" time="0.098">
+<failure message="mcp-sdk.spec.ts:83:3 MCP SDK can call list_models tool" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:83:3 › MCP SDK Integration › MCP SDK can call list_models tool 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SDK Integration › MCP SDK can call describe_model tool" classname="api/mcp/mcp-sdk.spec.ts" time="0.113">
+<failure message="mcp-sdk.spec.ts:114:3 MCP SDK can call describe_model tool" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:114:3 › MCP SDK Integration › MCP SDK can call describe_model tool 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SDK Integration › MCP SDK can call run_models tool" classname="api/mcp/mcp-sdk.spec.ts" time="0.098">
+<failure message="mcp-sdk.spec.ts:146:3 MCP SDK can call run_models tool" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:146:3 › MCP SDK Integration › MCP SDK can call run_models tool 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SDK Integration › MCP SDK handles errors gracefully" classname="api/mcp/mcp-sdk.spec.ts" time="0.106">
+<failure message="mcp-sdk.spec.ts:182:3 MCP SDK handles errors gracefully" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:182:3 › MCP SDK Integration › MCP SDK handles errors gracefully 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SDK Integration › MCP SDK can generate multiple images" classname="api/mcp/mcp-sdk.spec.ts" time="0.084">
+<failure message="mcp-sdk.spec.ts:212:3 MCP SDK can generate multiple images" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/mcp-sdk.spec.ts:212:3 › MCP SDK Integration › MCP SDK can generate multiple images 
+
+    TypeError: fetch failed
+        at StreamableHTTPClientTransport.send (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/@modelcontextprotocol/sdk/src/client/streamableHttp.ts:478:30)
+    [cause]: Error: getaddrinfo EAI_AGAIN example.invalid
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/mcp/sse.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="4" failures="4" skipped="0" time="0.212" errors="0">
+<testcase name="MCP SSE Transport › GET /mcp?transport=sse behavior" classname="api/mcp/sse.spec.ts" time="0.044">
+<failure message="sse.spec.ts:11:3 GET /mcp?transport=sse behavior" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/sse.spec.ts:11:3 › MCP SSE Transport › GET /mcp?transport=sse behavior ──────
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/mcp?transport=sse
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      10 | test.describe('MCP SSE Transport', () => {
+      11 |   test('GET /mcp?transport=sse behavior', async ({ request }) => {
+    > 12 |     const response = await request.get('/mcp?transport=sse');
+         |                                    ^
+      13 |
+      14 |     // SSE endpoint may not be available in all implementations
+      15 |     if (response.status() === 404) {
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/sse.spec.ts:12:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SSE Transport › GET /mcp (without transport param) returns endpoint info" classname="api/mcp/sse.spec.ts" time="0.046">
+<failure message="sse.spec.ts:32:3 GET /mcp (without transport param) returns endpoint info" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/sse.spec.ts:32:3 › MCP SSE Transport › GET /mcp (without transport param) returns endpoint info 
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/mcp
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      31 |
+      32 |   test('GET /mcp (without transport param) returns endpoint info', async ({ request }) => {
+    > 33 |     const response = await request.get('/mcp');
+         |                                    ^
+      34 |
+      35 |     expect(response.status()).toBe(200);
+      36 |     expect(response.headers()['content-type']).toContain('application/json');
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/sse.spec.ts:33:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SSE Transport › GET /mcp returns CORS headers" classname="api/mcp/sse.spec.ts" time="0.046">
+<failure message="sse.spec.ts:57:3 GET /mcp returns CORS headers" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/sse.spec.ts:57:3 › MCP SSE Transport › GET /mcp returns CORS headers ────────
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/mcp
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      56 |
+      57 |   test('GET /mcp returns CORS headers', async ({ request }) => {
+    > 58 |     const response = await request.get('/mcp');
+         |                                    ^
+      59 |
+      60 |     expect(response.headers()['access-control-allow-origin']).toBe('*');
+      61 |   });
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/sse.spec.ts:58:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP SSE Transport › OPTIONS /mcp returns CORS preflight headers" classname="api/mcp/sse.spec.ts" time="0.076">
+<failure message="sse.spec.ts:63:3 OPTIONS /mcp returns CORS preflight headers" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/sse.spec.ts:63:3 › MCP SSE Transport › OPTIONS /mcp returns CORS preflight headers 
+
+    Error: apiRequestContext.fetch: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → OPTIONS https://example.invalid/mcp
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      62 |
+      63 |   test('OPTIONS /mcp returns CORS preflight headers', async ({ request }) => {
+    > 64 |     const response = await request.fetch('/mcp', {
+         |                                    ^
+      65 |       method: 'OPTIONS',
+      66 |     });
+      67 |
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/sse.spec.ts:64:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/mcp/tools.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="12" failures="12" skipped="0" time="0.651" errors="0">
+<testcase name="MCP Tools › POST /mcp/message with tools/list returns available tools" classname="api/mcp/tools.spec.ts" time="0.042">
+<failure message="tools.spec.ts:11:3 POST /mcp/message with tools/list returns available tools" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:11:3 › MCP Tools › POST /mcp/message with tools/list returns available tools 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 46
+
+
+      10 | test.describe('MCP Tools', () => {
+      11 |   test('POST /mcp/message with tools/list returns available tools', async ({ request }) => {
+    > 12 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      13 |       data: {
+      14 |         jsonrpc: '2.0',
+      15 |         id: 2,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:12:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/list includes run_models tool" classname="api/mcp/tools.spec.ts" time="0.068">
+<failure message="tools.spec.ts:42:3 tools/list includes run_models tool" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:42:3 › MCP Tools › tools/list includes run_models tool ────────
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 46
+
+
+      41 |
+      42 |   test('tools/list includes run_models tool', async ({ request }) => {
+    > 43 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      44 |       data: {
+      45 |         jsonrpc: '2.0',
+      46 |         id: 3,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:43:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/list includes list_models tool" classname="api/mcp/tools.spec.ts" time="0.07">
+<failure message="tools.spec.ts:57:3 tools/list includes list_models tool" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:57:3 › MCP Tools › tools/list includes list_models tool ───────
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 46
+
+
+      56 |
+      57 |   test('tools/list includes list_models tool', async ({ request }) => {
+    > 58 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      59 |       data: {
+      60 |         jsonrpc: '2.0',
+      61 |         id: 4,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:58:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/list includes describe_model tool" classname="api/mcp/tools.spec.ts" time="0.059">
+<failure message="tools.spec.ts:72:3 tools/list includes describe_model tool" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:72:3 › MCP Tools › tools/list includes describe_model tool ────
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 46
+
+
+      71 |
+      72 |   test('tools/list includes describe_model tool', async ({ request }) => {
+    > 73 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      74 |       data: {
+      75 |         jsonrpc: '2.0',
+      76 |         id: 5,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:73:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call list_models returns model list" classname="api/mcp/tools.spec.ts" time="0.043">
+<failure message="tools.spec.ts:87:3 tools/call list_models returns model list" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:87:3 › MCP Tools › tools/call list_models returns model list ──
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 93
+
+
+      86 |
+      87 |   test('tools/call list_models returns model list', async ({ request }) => {
+    > 88 |     const response = await request.post('/mcp/message', {
+         |                                    ^
+      89 |       data: {
+      90 |         jsonrpc: '2.0',
+      91 |         id: 6,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:88:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call describe_model with valid model_id returns schema" classname="api/mcp/tools.spec.ts" time="0.068">
+<failure message="tools.spec.ts:116:3 tools/call describe_model with valid model_id returns schema" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:116:3 › MCP Tools › tools/call describe_model with valid model_id returns schema 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 145
+
+
+      117 |     const modelId = '@cf/black-forest-labs/flux-1-schnell';
+      118 |
+    > 119 |     const response = await request.post('/mcp/message', {
+          |                                    ^
+      120 |       data: {
+      121 |         jsonrpc: '2.0',
+      122 |         id: 7,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:119:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call describe_model without model_id returns error" classname="api/mcp/tools.spec.ts" time="0.047">
+<failure message="tools.spec.ts:150:3 tools/call describe_model without model_id returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:150:3 › MCP Tools › tools/call describe_model without model_id returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 96
+
+
+      149 |
+      150 |   test('tools/call describe_model without model_id returns error', async ({ request }) => {
+    > 151 |     const response = await request.post('/mcp/message', {
+          |                                    ^
+      152 |       data: {
+      153 |         jsonrpc: '2.0',
+      154 |         id: 8,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:151:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call run_models generates image" classname="api/mcp/tools.spec.ts" time="0.043">
+<failure message="tools.spec.ts:173:3 tools/call run_models generates image" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:173:3 › MCP Tools › tools/call run_models generates image ─────
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 195
+
+
+      172 |
+      173 |   test('tools/call run_models generates image', async ({ request }) => {
+    > 174 |     const response = await request.post('/mcp/message', {
+          |                                    ^
+      175 |       data: {
+      176 |         jsonrpc: '2.0',
+      177 |         id: 9,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:174:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call run_models without prompt returns error" classname="api/mcp/tools.spec.ts" time="0.048">
+<failure message="tools.spec.ts:215:3 tools/call run_models without prompt returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:215:3 › MCP Tools › tools/call run_models without prompt returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 142
+
+
+      214 |
+      215 |   test('tools/call run_models without prompt returns error', async ({ request }) => {
+    > 216 |     const response = await request.post('/mcp/message', {
+          |                                    ^
+      217 |       data: {
+      218 |         jsonrpc: '2.0',
+      219 |         id: 10,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:216:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call run_models without model_id returns error" classname="api/mcp/tools.spec.ts" time="0.042">
+<failure message="tools.spec.ts:240:3 tools/call run_models without model_id returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:240:3 › MCP Tools › tools/call run_models without model_id returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 115
+
+
+      239 |
+      240 |   test('tools/call run_models without model_id returns error', async ({ request }) => {
+    > 241 |     const response = await request.post('/mcp/message', {
+          |                                    ^
+      242 |       data: {
+      243 |         jsonrpc: '2.0',
+      244 |         id: 11,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:241:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › tools/call unknown tool returns error" classname="api/mcp/tools.spec.ts" time="0.054">
+<failure message="tools.spec.ts:265:3 tools/call unknown tool returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:265:3 › MCP Tools › tools/call unknown tool returns error ─────
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp/message
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 95
+
+
+      264 |
+      265 |   test('tools/call unknown tool returns error', async ({ request }) => {
+    > 266 |     const response = await request.post('/mcp/message', {
+          |                                    ^
+      267 |       data: {
+      268 |         jsonrpc: '2.0',
+      269 |         id: 12,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:266:36
+]]>
+</failure>
+</testcase>
+<testcase name="MCP Tools › POST /mcp (alternate endpoint) also works" classname="api/mcp/tools.spec.ts" time="0.067">
+<failure message="tools.spec.ts:285:3 POST /mcp (alternate endpoint) also works" type="FAILURE">
+<![CDATA[  [chromium] › api/mcp/tools.spec.ts:285:3 › MCP Tools › POST /mcp (alternate endpoint) also works ─
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/mcp
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 47
+
+
+      284 |
+      285 |   test('POST /mcp (alternate endpoint) also works', async ({ request }) => {
+    > 286 |     const response = await request.post('/mcp', {
+          |                                    ^
+      287 |       data: {
+      288 |         jsonrpc: '2.0',
+      289 |         id: 13,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/mcp/tools.spec.ts:286:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/openai/edits.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="7" failures="7" skipped="0" time="0.36" errors="0">
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits with image for image-to-image transformation" classname="api/openai/edits.spec.ts" time="0.044">
+<failure message="edits.spec.ts:29:3 POST /v1/images/edits with image for image-to-image transformation" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:29:3 › OpenAI Image Edits API › POST /v1/images/edits with image for image-to-image transformation 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 220
+
+
+      30 |     const model = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
+      31 |
+    > 32 |     const response = await request.post('/v1/images/edits', {
+         |                                    ^
+      33 |       data: {
+      34 |         image: TEST_IMAGE_BASE64,
+      35 |         prompt: 'Make this image blue',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:32:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits with image and mask for inpainting" classname="api/openai/edits.spec.ts" time="0.043">
+<failure message="edits.spec.ts:58:3 POST /v1/images/edits with image and mask for inpainting" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:58:3 › OpenAI Image Edits API › POST /v1/images/edits with image and mask for inpainting 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 331
+
+
+      59 |     const model = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
+      60 |
+    > 61 |     const response = await request.post('/v1/images/edits', {
+         |                                    ^
+      62 |       data: {
+      63 |         image: TEST_IMAGE_BASE64,
+      64 |         mask: TEST_MASK_BASE64,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:61:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits without image returns 400" classname="api/openai/edits.spec.ts" time="0.039">
+<failure message="edits.spec.ts:82:3 POST /v1/images/edits without image returns 400" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:82:3 › OpenAI Image Edits API › POST /v1/images/edits without image returns 400 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 83
+
+
+      81 |
+      82 |   test('POST /v1/images/edits without image returns 400', async ({ request }) => {
+    > 83 |     const response = await request.post('/v1/images/edits', {
+         |                                    ^
+      84 |       data: {
+      85 |         prompt: 'Edit this image',
+      86 |         model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:83:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits without prompt returns 400" classname="api/openai/edits.spec.ts" time="0.042">
+<failure message="edits.spec.ts:97:3 POST /v1/images/edits without prompt returns 400" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:97:3 › OpenAI Image Edits API › POST /v1/images/edits without prompt returns 400 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 163
+
+
+       96 |
+       97 |   test('POST /v1/images/edits without prompt returns 400', async ({ request }) => {
+    >  98 |     const response = await request.post('/v1/images/edits', {
+          |                                    ^
+       99 |       data: {
+      100 |         image: TEST_IMAGE_BASE64,
+      101 |         model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:98:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits accepts multipart/form-data" classname="api/openai/edits.spec.ts" time="0.047">
+<failure message="edits.spec.ts:108:3 POST /v1/images/edits accepts multipart/form-data" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:108:3 › OpenAI Image Edits API › POST /v1/images/edits accepts multipart/form-data 
+
+    Error: apiRequestContext.fetch: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - Content-Type: multipart/form-data; boundary=--------TestBoundaryuq0qjrc3pv9
+        - content-length: 487
+
+
+      127 |     ].join('\r\n');
+      128 |
+    > 129 |     const response = await request.fetch('/v1/images/edits', {
+          |                                    ^
+      130 |       method: 'POST',
+      131 |       headers: {
+      132 |         'Content-Type': `multipart/form-data; boundary=----${boundary}`,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:129:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits with invalid model returns error" classname="api/openai/edits.spec.ts" time="0.065">
+<failure message="edits.spec.ts:141:3 POST /v1/images/edits with invalid model returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:141:3 › OpenAI Image Edits API › POST /v1/images/edits with invalid model returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 152
+
+
+      140 |
+      141 |   test('POST /v1/images/edits with invalid model returns error', async ({ request }) => {
+    > 142 |     const response = await request.post('/v1/images/edits', {
+          |                                    ^
+      143 |       data: {
+      144 |         image: TEST_IMAGE_BASE64,
+      145 |         prompt: 'Test',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:142:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Edits API › POST /v1/images/edits respects size parameter" classname="api/openai/edits.spec.ts" time="0.08">
+<failure message="edits.spec.ts:153:3 POST /v1/images/edits respects size parameter" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/edits.spec.ts:153:3 › OpenAI Image Edits API › POST /v1/images/edits respects size parameter 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 196
+
+
+      155 |
+      156 |     for (const size of sizes) {
+    > 157 |       const response = await request.post('/v1/images/edits', {
+          |                                      ^
+      158 |         data: {
+      159 |           image: TEST_IMAGE_BASE64,
+      160 |           prompt: 'Test',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/edits.spec.ts:157:38
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/openai/generations.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="12" failures="12" skipped="0" time="0.647" errors="0">
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with minimal parameters" classname="api/openai/generations.spec.ts" time="0.044">
+<failure message="generations.spec.ts:14:3 POST /v1/images/generations with minimal parameters" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:14:3 › OpenAI Image Generations API › POST /v1/images/generations with minimal parameters 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 116
+
+
+      13 |
+      14 |   test('POST /v1/images/generations with minimal parameters', async ({ request }) => {
+    > 15 |     const response = await request.post('/v1/images/generations', {
+         |                                    ^
+      16 |       data: {
+      17 |         prompt: 'A sunny day at the beach with palm trees and ocean waves',
+      18 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:15:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with all parameters" classname="api/openai/generations.spec.ts" time="0.067">
+<failure message="generations.spec.ts:49:3 POST /v1/images/generations with all parameters" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:49:3 › OpenAI Image Generations API › POST /v1/images/generations with all parameters 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 162
+
+
+      48 |
+      49 |   test('POST /v1/images/generations with all parameters', async ({ request }) => {
+    > 50 |     const response = await request.post('/v1/images/generations', {
+         |                                    ^
+      51 |       data: {
+      52 |         prompt: 'A blue square on white background',
+      53 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:50:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with b64_json response format" classname="api/openai/generations.spec.ts" time="0.039">
+<failure message="generations.spec.ts:74:3 POST /v1/images/generations with b64_json response format" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:74:3 › OpenAI Image Generations API › POST /v1/images/generations with b64_json response format 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 131
+
+
+      73 |
+      74 |   test('POST /v1/images/generations with b64_json response format', async ({ request }) => {
+    > 75 |     const response = await request.post('/v1/images/generations', {
+         |                                    ^
+      76 |       data: {
+      77 |         prompt: 'A green triangle on white background',
+      78 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:75:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations without prompt returns 400" classname="api/openai/generations.spec.ts" time="0.068">
+<failure message="generations.spec.ts:103:3 POST /v1/images/generations without prompt returns 400" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:103:3 › OpenAI Image Generations API › POST /v1/images/generations without prompt returns 400 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 48
+
+
+      102 |
+      103 |   test('POST /v1/images/generations without prompt returns 400', async ({ request }) => {
+    > 104 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      105 |       data: {
+      106 |         model: TEST_MODEL,
+      107 |       },
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:104:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with empty prompt returns 400" classname="api/openai/generations.spec.ts" time="0.049">
+<failure message="generations.spec.ts:118:3 POST /v1/images/generations with empty prompt returns 400" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:118:3 › OpenAI Image Generations API › POST /v1/images/generations with empty prompt returns 400 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 60
+
+
+      117 |
+      118 |   test('POST /v1/images/generations with empty prompt returns 400', async ({ request }) => {
+    > 119 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      120 |       data: {
+      121 |         prompt: '',
+      122 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:119:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with invalid model returns error" classname="api/openai/generations.spec.ts" time="0.048">
+<failure message="generations.spec.ts:129:3 POST /v1/images/generations with invalid model returns error" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:129:3 › OpenAI Image Generations API › POST /v1/images/generations with invalid model returns error 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 57
+
+
+      128 |
+      129 |   test('POST /v1/images/generations with invalid model returns error', async ({ request }) => {
+    > 130 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      131 |       data: {
+      132 |         prompt: 'Test prompt',
+      133 |         model: '@cf/invalid/model-name',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:130:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations respects n parameter limit" classname="api/openai/generations.spec.ts" time="0.081">
+<failure message="generations.spec.ts:141:3 POST /v1/images/generations respects n parameter limit" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:141:3 › OpenAI Image Generations API › POST /v1/images/generations respects n parameter limit 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 121
+
+
+      140 |
+      141 |   test('POST /v1/images/generations respects n parameter limit', async ({ request }) => {
+    > 142 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      143 |       data: {
+      144 |         prompt: 'A mountain landscape with snow peaks and green forests',
+      145 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:142:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with guidance parameter" classname="api/openai/generations.spec.ts" time="0.048">
+<failure message="generations.spec.ts:157:3 POST /v1/images/generations with guidance parameter" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:157:3 › OpenAI Image Generations API › POST /v1/images/generations with guidance parameter 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 124
+
+
+      158 |     const modelWithGuidance = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
+      159 |
+    > 160 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      161 |       data: {
+      162 |         prompt: 'A star on black background',
+      163 |         model: modelWithGuidance,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:160:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations with negative prompt" classname="api/openai/generations.spec.ts" time="0.041">
+<failure message="generations.spec.ts:176:3 POST /v1/images/generations with negative prompt" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:176:3 › OpenAI Image Generations API › POST /v1/images/generations with negative prompt 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 144
+
+
+      177 |     const modelWithNegPrompt = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
+      178 |
+    > 179 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      180 |       data: {
+      181 |         prompt: 'A beautiful landscape',
+      182 |         model: modelWithNegPrompt,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:179:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations returns CORS headers" classname="api/openai/generations.spec.ts" time="0.067">
+<failure message="generations.spec.ts:194:3 POST /v1/images/generations returns CORS headers" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:194:3 › OpenAI Image Generations API › POST /v1/images/generations returns CORS headers 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 64
+
+
+      193 |
+      194 |   test('POST /v1/images/generations returns CORS headers', async ({ request }) => {
+    > 195 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      196 |       data: {
+      197 |         prompt: 'Test',
+      198 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:195:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations returns valid image URL format" classname="api/openai/generations.spec.ts" time="0.051">
+<failure message="generations.spec.ts:205:3 POST /v1/images/generations returns valid image URL format" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:205:3 › OpenAI Image Generations API › POST /v1/images/generations returns valid image URL format 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 99
+
+
+      204 |
+      205 |   test('POST /v1/images/generations returns valid image URL format', async ({ request }) => {
+    > 206 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      207 |       data: {
+      208 |         prompt: 'A beautiful sunset over mountains',
+      209 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:206:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Generations API › POST /v1/images/generations returns clean response without b64_json when format=url" classname="api/openai/generations.spec.ts" time="0.044">
+<failure message="generations.spec.ts:238:3 POST /v1/images/generations returns clean response without b64_json when format=url" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/generations.spec.ts:238:3 › OpenAI Image Generations API › POST /v1/images/generations returns clean response without b64_json when format=url 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 85
+
+
+      237 |
+      238 |   test('POST /v1/images/generations returns clean response without b64_json when format=url', async ({ request }) => {
+    > 239 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      240 |       data: {
+      241 |         prompt: 'A simple test image',
+      242 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/generations.spec.ts:239:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/openai/models.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="4" failures="4" skipped="0" time="0.232" errors="0">
+<testcase name="OpenAI Models API › GET /v1/models returns list of available models" classname="api/openai/models.spec.ts" time="0.081">
+<failure message="models.spec.ts:11:3 GET /v1/models returns list of available models" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/models.spec.ts:11:3 › OpenAI Models API › GET /v1/models returns list of available models 
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/v1/models
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      10 | test.describe('OpenAI Models API', () => {
+      11 |   test('GET /v1/models returns list of available models', async ({ request }) => {
+    > 12 |     const response = await request.get('/v1/models');
+         |                                    ^
+      13 |
+      14 |     expect(response.status()).toBe(200);
+      15 |     expect(response.headers()['content-type']).toContain('application/json');
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/models.spec.ts:12:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Models API › GET /v1/models/:model returns model details" classname="api/openai/models.spec.ts" time="0.046">
+<failure message="models.spec.ts:40:3 GET /v1/models/:model returns model details" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/models.spec.ts:40:3 › OpenAI Models API › GET /v1/models/:model returns model details 
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/v1/models
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      40 |   test('GET /v1/models/:model returns model details', async ({ request }) => {
+      41 |     // First get a list of models
+    > 42 |     const listResponse = await request.get('/v1/models');
+         |                                        ^
+      43 |     const listBody = await listResponse.json();
+      44 |
+      45 |     test.skip(listBody.data.length === 0, 'No models available to test');
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/models.spec.ts:42:40
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Models API › GET /v1/models returns CORS headers" classname="api/openai/models.spec.ts" time="0.049">
+<failure message="models.spec.ts:65:3 GET /v1/models returns CORS headers" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/models.spec.ts:65:3 › OpenAI Models API › GET /v1/models returns CORS headers 
+
+    Error: apiRequestContext.get: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → GET https://example.invalid/v1/models
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      64 |
+      65 |   test('GET /v1/models returns CORS headers', async ({ request }) => {
+    > 66 |     const response = await request.get('/v1/models');
+         |                                    ^
+      67 |
+      68 |     expect(response.headers()['access-control-allow-origin']).toBe('*');
+      69 |     expect(response.headers()['access-control-allow-methods']).toContain('GET');
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/models.spec.ts:66:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Models API › OPTIONS /v1/models returns CORS preflight headers" classname="api/openai/models.spec.ts" time="0.056">
+<failure message="models.spec.ts:72:3 OPTIONS /v1/models returns CORS preflight headers" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/models.spec.ts:72:3 › OpenAI Models API › OPTIONS /v1/models returns CORS preflight headers 
+
+    Error: apiRequestContext.fetch: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → OPTIONS https://example.invalid/v1/models
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      71 |
+      72 |   test('OPTIONS /v1/models returns CORS preflight headers', async ({ request }) => {
+    > 73 |     const response = await request.fetch('/v1/models', {
+         |                                    ^
+      74 |       method: 'OPTIONS',
+      75 |     });
+      76 |
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/models.spec.ts:73:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/openai/openai-sdk-compliance.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="9" failures="9" skipped="0" time="0.416" errors="0">
+<testcase name="OpenAI API Compliance › response with url format contains only url field" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.043">
+<failure message="openai-sdk-compliance.spec.ts:16:3 response with url format contains only url field" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:16:3 › OpenAI API Compliance › response with url format contains only url field 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 119
+
+
+      15 |
+      16 |   test('response with url format contains only url field', async ({ request }) => {
+    > 17 |     const response = await request.post('/v1/images/generations', {
+         |                                    ^
+      18 |       data: {
+      19 |         prompt: 'A red apple on a wooden table',
+      20 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:17:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › response with b64_json format contains only b64_json field" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.051">
+<failure message="openai-sdk-compliance.spec.ts:57:3 response with b64_json format contains only b64_json field" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:57:3 › OpenAI API Compliance › response with b64_json format contains only b64_json field 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 123
+
+
+      56 |
+      57 |   test('response with b64_json format contains only b64_json field', async ({ request }) => {
+    > 58 |     const response = await request.post('/v1/images/generations', {
+         |                                    ^
+      59 |       data: {
+      60 |         prompt: 'A blue sky with white clouds',
+      61 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:58:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › default response format is url and contains only url field" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.038">
+<failure message="openai-sdk-compliance.spec.ts:99:3 default response format is url and contains only url field" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:99:3 › OpenAI API Compliance › default response format is url and contains only url field 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 90
+
+
+       98 |
+       99 |   test('default response format is url and contains only url field', async ({ request }) => {
+    > 100 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      101 |       data: {
+      102 |         prompt: 'A simple geometric shape',
+      103 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:100:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › multiple images each have only url field" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.04">
+<failure message="openai-sdk-compliance.spec.ts:120:3 multiple images each have only url field" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:120:3 › OpenAI API Compliance › multiple images each have only url field 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 115
+
+
+      119 |
+      120 |   test('multiple images each have only url field', async ({ request }) => {
+    > 121 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      122 |       data: {
+      123 |         prompt: 'A cat sleeping on a couch',
+      124 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:121:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › edits endpoint returns only url field" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.05">
+<failure message="openai-sdk-compliance.spec.ts:145:3 edits endpoint returns only url field" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:145:3 › OpenAI API Compliance › edits endpoint returns only url field 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/edits
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 208
+
+
+      150 |     const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      151 |
+    > 152 |     const response = await request.post('/v1/images/edits', {
+          |                                    ^
+      153 |       data: {
+      154 |         image: testImageBase64,
+      155 |         prompt: 'Add a red dot in the center',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:152:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › variations endpoint returns only url field" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.041">
+<failure message="openai-sdk-compliance.spec.ts:180:3 variations endpoint returns only url field" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:180:3 › OpenAI API Compliance › variations endpoint returns only url field 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/variations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 162
+
+
+      181 |     const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      182 |
+    > 183 |     const response = await request.post('/v1/images/variations', {
+          |                                    ^
+      184 |       data: {
+      185 |         image: testImageBase64,
+      186 |         model: '@cf/black-forest-labs/flux-2-klein-4b',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:183:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › response structure matches OpenAI spec exactly" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.049">
+<failure message="openai-sdk-compliance.spec.ts:210:3 response structure matches OpenAI spec exactly" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:210:3 › OpenAI API Compliance › response structure matches OpenAI spec exactly 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 85
+
+
+      209 |
+      210 |   test('response structure matches OpenAI spec exactly', async ({ request }) => {
+    > 211 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      212 |       data: {
+      213 |         prompt: 'A simple test image',
+      214 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:211:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › b64_json response structure matches OpenAI spec exactly" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.039">
+<failure message="openai-sdk-compliance.spec.ts:241:3 b64_json response structure matches OpenAI spec exactly" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:241:3 › OpenAI API Compliance › b64_json response structure matches OpenAI spec exactly 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 114
+
+
+      240 |
+      241 |   test('b64_json response structure matches OpenAI spec exactly', async ({ request }) => {
+    > 242 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      243 |       data: {
+      244 |         prompt: 'A simple test image',
+      245 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:242:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI API Compliance › OpenWebUI compatibility: no null values in response" classname="api/openai/openai-sdk-compliance.spec.ts" time="0.065">
+<failure message="openai-sdk-compliance.spec.ts:260:3 OpenWebUI compatibility: no null values in response" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-compliance.spec.ts:260:3 › OpenAI API Compliance › OpenWebUI compatibility: no null values in response 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/generations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 85
+
+
+      262 |     // when null values are present in the response
+      263 |
+    > 264 |     const response = await request.post('/v1/images/generations', {
+          |                                    ^
+      265 |       data: {
+      266 |         prompt: 'A simple test image',
+      267 |         model: TEST_MODEL,
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-compliance.spec.ts:264:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/openai/openai-sdk-node.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="7" failures="6" skipped="0" time="9.798" errors="0">
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK can generate images with url format" classname="api/openai/openai-sdk-node.spec.ts" time="1.361">
+<failure message="openai-sdk-node.spec.ts:23:3 OpenAI SDK can generate images with url format" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-node.spec.ts:23:3 › OpenAI SDK Node.js Compliance › OpenAI SDK can generate images with url format 
+
+    Error: Connection error.
+
+      24 |     const client = createClient(baseURL!);
+      25 |
+    > 26 |     const response = await client.images.generate({
+         |                      ^
+      27 |       model: '@cf/black-forest-labs/flux-1-schnell',
+      28 |       prompt: 'A red apple on a wooden table',
+      29 |       n: 1,
+        at OpenAI.makeRequest (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/openai/src/core.ts:507:13)
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-node.spec.ts:26:22
+    [cause]: FetchError: request to https://example.invalid/v1/images/generations failed, reason: getaddrinfo EAI_AGAIN example.invalid
+        at ClientRequest.<anonymous> (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/node-fetch/lib/index.js:1501:11)
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK can generate images with b64_json format" classname="api/openai/openai-sdk-node.spec.ts" time="1.513">
+<failure message="openai-sdk-node.spec.ts:63:3 OpenAI SDK can generate images with b64_json format" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-node.spec.ts:63:3 › OpenAI SDK Node.js Compliance › OpenAI SDK can generate images with b64_json format 
+
+    Error: Connection error.
+
+      64 |     const client = createClient(baseURL!);
+      65 |
+    > 66 |     const response = await client.images.generate({
+         |                      ^
+      67 |       model: '@cf/black-forest-labs/flux-1-schnell',
+      68 |       prompt: 'A blue sky with white clouds',
+      69 |       n: 1,
+        at OpenAI.makeRequest (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/openai/src/core.ts:507:13)
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-node.spec.ts:66:22
+    [cause]: FetchError: request to https://example.invalid/v1/images/generations failed, reason: getaddrinfo EAI_AGAIN example.invalid
+        at ClientRequest.<anonymous> (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/node-fetch/lib/index.js:1501:11)
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK can generate multiple images" classname="api/openai/openai-sdk-node.spec.ts" time="1.368">
+<failure message="openai-sdk-node.spec.ts:103:3 OpenAI SDK can generate multiple images" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-node.spec.ts:103:3 › OpenAI SDK Node.js Compliance › OpenAI SDK can generate multiple images 
+
+    Error: Connection error.
+
+      104 |     const client = createClient(baseURL!);
+      105 |
+    > 106 |     const response = await client.images.generate({
+          |                      ^
+      107 |       model: '@cf/black-forest-labs/flux-1-schnell',
+      108 |       prompt: 'A cat sleeping on a couch',
+      109 |       n: 2,
+        at OpenAI.makeRequest (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/openai/src/core.ts:507:13)
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-node.spec.ts:106:22
+    [cause]: FetchError: request to https://example.invalid/v1/images/generations failed, reason: getaddrinfo EAI_AGAIN example.invalid
+        at ClientRequest.<anonymous> (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/node-fetch/lib/index.js:1501:11)
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK handles missing prompt gracefully" classname="api/openai/openai-sdk-node.spec.ts" time="1.331">
+</testcase>
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK can list models" classname="api/openai/openai-sdk-node.spec.ts" time="1.517">
+<failure message="openai-sdk-node.spec.ts:152:3 OpenAI SDK can list models" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-node.spec.ts:152:3 › OpenAI SDK Node.js Compliance › OpenAI SDK can list models 
+
+    Error: Connection error.
+
+      153 |     const client = createClient(baseURL!);
+      154 |
+    > 155 |     const response = await client.models.list();
+          |                      ^
+      156 |
+      157 |     expect(response).toBeDefined();
+      158 |     expect(response.data).toBeDefined();
+        at OpenAI.makeRequest (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/openai/src/core.ts:507:13)
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-node.spec.ts:155:22
+    [cause]: FetchError: request to https://example.invalid/v1/models failed, reason: getaddrinfo EAI_AGAIN example.invalid
+        at ClientRequest.<anonymous> (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/node-fetch/lib/index.js:1501:11)
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK response format matches spec exactly" classname="api/openai/openai-sdk-node.spec.ts" time="1.409">
+<failure message="openai-sdk-node.spec.ts:177:3 OpenAI SDK response format matches spec exactly" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-node.spec.ts:177:3 › OpenAI SDK Node.js Compliance › OpenAI SDK response format matches spec exactly 
+
+    Error: Connection error.
+
+      178 |     const client = createClient(baseURL!);
+      179 |
+    > 180 |     const response = await client.images.generate({
+          |                      ^
+      181 |       model: '@cf/black-forest-labs/flux-1-schnell',
+      182 |       prompt: 'A simple geometric shape',
+      183 |       n: 1,
+        at OpenAI.makeRequest (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/openai/src/core.ts:507:13)
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-node.spec.ts:180:22
+    [cause]: FetchError: request to https://example.invalid/v1/images/generations failed, reason: getaddrinfo EAI_AGAIN example.invalid
+        at ClientRequest.<anonymous> (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/node-fetch/lib/index.js:1501:11)
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI SDK Node.js Compliance › OpenAI SDK b64_json response format matches spec exactly" classname="api/openai/openai-sdk-node.spec.ts" time="1.299">
+<failure message="openai-sdk-node.spec.ts:202:3 OpenAI SDK b64_json response format matches spec exactly" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/openai-sdk-node.spec.ts:202:3 › OpenAI SDK Node.js Compliance › OpenAI SDK b64_json response format matches spec exactly 
+
+    Error: Connection error.
+
+      203 |     const client = createClient(baseURL!);
+      204 |
+    > 205 |     const response = await client.images.generate({
+          |                      ^
+      206 |       model: '@cf/black-forest-labs/flux-1-schnell',
+      207 |       prompt: 'A simple geometric shape',
+      208 |       n: 1,
+        at OpenAI.makeRequest (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/openai/src/core.ts:507:13)
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/openai-sdk-node.spec.ts:205:22
+    [cause]: FetchError: request to https://example.invalid/v1/images/generations failed, reason: getaddrinfo EAI_AGAIN example.invalid
+        at ClientRequest.<anonymous> (/home/ubuntu/cloudflare-image-mcp/e2e/node_modules/node-fetch/lib/index.js:1501:11)
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="api/openai/variations.spec.ts" timestamp="2026-02-09T12:45:34.695Z" hostname="chromium" tests="3" failures="3" skipped="0" time="0.124" errors="0">
+<testcase name="OpenAI Image Variations API › POST /v1/images/variations with image" classname="api/openai/variations.spec.ts" time="0.037">
+<failure message="variations.spec.ts:14:3 POST /v1/images/variations with image" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/variations.spec.ts:14:3 › OpenAI Image Variations API › POST /v1/images/variations with image 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/variations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 181
+
+
+      13 | test.describe('OpenAI Image Variations API', () => {
+      14 |   test('POST /v1/images/variations with image', async ({ request }) => {
+    > 15 |     const response = await request.post('/v1/images/variations', {
+         |                                    ^
+      16 |       data: {
+      17 |         image: TEST_IMAGE_BASE64,
+      18 |         model: '@cf/black-forest-labs/flux-2-klein-4b',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/variations.spec.ts:15:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Variations API › POST /v1/images/variations without image returns 400" classname="api/openai/variations.spec.ts" time="0.044">
+<failure message="variations.spec.ts:40:3 POST /v1/images/variations without image returns 400" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/variations.spec.ts:40:3 › OpenAI Image Variations API › POST /v1/images/variations without image returns 400 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/variations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 49
+
+
+      39 |
+      40 |   test('POST /v1/images/variations without image returns 400', async ({ request }) => {
+    > 41 |     const response = await request.post('/v1/images/variations', {
+         |                                    ^
+      42 |       data: {
+      43 |         model: '@cf/black-forest-labs/flux-2-klein-4b',
+      44 |       },
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/variations.spec.ts:41:36
+]]>
+</failure>
+</testcase>
+<testcase name="OpenAI Image Variations API › POST /v1/images/variations respects n parameter" classname="api/openai/variations.spec.ts" time="0.043">
+<failure message="variations.spec.ts:54:3 POST /v1/images/variations respects n parameter" type="FAILURE">
+<![CDATA[  [chromium] › api/openai/variations.spec.ts:54:3 › OpenAI Image Variations API › POST /v1/images/variations respects n parameter 
+
+    Error: apiRequestContext.post: getaddrinfo EAI_AGAIN example.invalid
+    Call log:
+      - → POST https://example.invalid/v1/images/variations
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 162
+
+
+      53 |
+      54 |   test('POST /v1/images/variations respects n parameter', async ({ request }) => {
+    > 55 |     const response = await request.post('/v1/images/variations', {
+         |                                    ^
+      56 |       data: {
+      57 |         image: TEST_IMAGE_BASE64,
+      58 |         model: '@cf/black-forest-labs/flux-2-klein-4b',
+        at /home/ubuntu/cloudflare-image-mcp/e2e/tests/api/openai/variations.spec.ts:55:36
+]]>
+</failure>
+</testcase>
+</testsuite>
+</testsuites>

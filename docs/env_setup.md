@@ -1,65 +1,28 @@
-# Environment Variable Setup
+# Environment Variable Setup (Workers-only)
 
 ## Overview
 
-This guide covers all environment variables needed to run the cloudflare-image-mcp project.
+This project runs on **Cloudflare Workers**.
 
-## Environment Variables
+For deploying and developing with Wrangler, you only need:
 
-### Cloudflare Configuration (Required)
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+
+R2 and Workers AI are configured via `workers/wrangler.toml` bindings.
+
+## Required Environment Variables
 
 ```bash
-# Cloudflare API Token (needs AI and Workers AI permissions)
 CLOUDFLARE_API_TOKEN="your_api_token_here"
-
-# Cloudflare Account ID
 CLOUDFLARE_ACCOUNT_ID="your_account_id_here"
 ```
 
-### R2/S3 Storage Configuration (Required for storage features)
+## Optional Worker Secrets
 
-```bash
-# R2 bucket name
-S3_BUCKET="cloudflare-image-mcp-images"
-
-# Region (use "auto" for R2)
-S3_REGION="auto"
-
-# R2 endpoint URL (get from R2 dashboard)
-S3_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
-
-# R2 credentials (create in R2 dashboard > Manage R2 API tokens)
-S3_ACCESS_KEY="your_access_key"
-S3_SECRET_KEY="your_secret_key"
-
-# Public CDN URL for images (configure in R2 dashboard > Settings > Public access)
-# If not provided, the system will auto-detect it via Cloudflare API (requires BUCKET_NAME)
-S3_CDN_URL="https://pub-your-id.r2.dev"
-```
-
-### Server Configuration (Optional)
-
-```bash
-# Server port (default: 3000)
-PORT=3000
-
-# Image expiry time in hours (default: 24)
-IMAGE_EXPIRY_HOURS=24
-
-# Default model (@cf/black-forest-labs/flux-1-schnell, @cf/black-forest-labs/flux-2-klein-4b, @cf/black-forest-labs/flux-2-dev, @cf/stabilityai/stable-diffusion-xl-base-1.0, @cf/bytedance/stable-diffusion-xl-lightning, @cf/lykon/dreamshaper-8-lcm)
-DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
-
-# Timezone for logging and R2 folder structure (default: UTC)
-# Examples: America/New_York, Asia/Singapore, Europe/London, UTC
-TZ="UTC"
-```
-
-## File Locations
-
-| Variable | File |
-|----------|------|
-| All local variables | `packages/local/.env` |
-| Workers secrets | Cloudflare Dashboard (wrangler secrets) |
+- `API_KEYS` (comma-separated) to protect OpenAI + MCP endpoints
+- `S3_CDN_URL` (public R2 URL) if you want absolute image URLs; otherwise responses use relative `/images/...`
+- `TZ` for logging
 
 ## Part 1: Cloudflare Workers AI Setup
 
@@ -132,63 +95,35 @@ TZ="UTC"
 
 ![R2 API Token - Part 4](../static/img/r2-create-user-api-token-part4.png)
 
-### Step 4: Get Endpoint URLs
+### Step 4: Get Public URL (optional)
 
-From R2 bucket Settings, note:
-- **S3_ENDPOINT**: `https://<account-id>.r2.cloudflarestorage.com`
-- **S3_CDN_URL**: `https://pub-<id>.r2.dev` (shown after enabling public access)
+From R2 bucket settings (after enabling public access), note:
+- **Public bucket URL**: `https://pub-<id>.r2.dev`
 
-## Setting Up Local Development
-
-### 1. Copy Example Environment File
-
-```bash
-cp packages/local/.env.example packages/local/.env
-```
-
-### 2. Fill In Your Values
-
-Edit `packages/local/.env`:
-
-```bash
-# Cloudflare
-CLOUDFLARE_API_TOKEN="ey..."
-CLOUDFLARE_ACCOUNT_ID="3574999..."
-
-# R2 Storage
-S3_BUCKET="cloudflare-image-mcp-images"
-S3_REGION="auto"
-S3_ENDPOINT="https://3574999.r2.cloudflarestorage.com"
-S3_ACCESS_KEY="your_access_key"
-S3_SECRET_KEY="your_secret_key"
-S3_CDN_URL="https://pub-xxx.r2.dev"
-
-# Optional
-PORT=3000
-IMAGE_EXPIRY_HOURS=24
-DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
-TZ="UTC"  # Timezone for logging and R2 folder creation
-```
-
-### 3. Start Local Server
-
-```bash
-cd packages/local
-npm run dev
-```
-
-Access at http://localhost:3000
+If you set this as the Worker secret `S3_CDN_URL`, the API returns absolute image URLs; otherwise it returns relative `/images/...`.
 
 ## Setting Up Cloudflare Workers
 
-### 1. Set Secrets
+### 1. Configure bindings (wrangler.toml)
+
+- R2 bucket binding: `IMAGE_BUCKET`
+- Workers AI binding: `AI`
+
+### 2. Deploy
 
 ```bash
 cd workers
+npx wrangler deploy
+```
 
-# Set each secret
-npx wrangler secret put CLOUDFLARE_API_TOKEN
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+### 3. Optional: set secrets
+
+```bash
+# Protect endpoints (optional)
+echo "key1,key2" | npx wrangler secret put API_KEYS
+
+# Use absolute image URLs (optional)
+echo "https://pub-<id>.r2.dev" | npx wrangler secret put S3_CDN_URL
 ```
 
 ### 2. Deploy

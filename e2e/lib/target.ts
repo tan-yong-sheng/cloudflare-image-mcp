@@ -2,12 +2,11 @@
  * Target configuration utilities for E2E tests
  *
  * Supports testing against:
- * - local: Local development server (packages/local)
  * - staging: Staging Workers deployment
  * - production: Production Workers deployment
  */
 
-export type TestTarget = 'local' | 'staging' | 'production';
+export type TestTarget = 'staging' | 'production';
 
 export interface TargetConfig {
   name: TestTarget;
@@ -20,7 +19,7 @@ export interface TargetConfig {
  * Get target configuration based on environment
  */
 export function getTargetConfig(): TargetConfig {
-  const target = (process.env.TEST_TARGET || 'local') as TestTarget;
+  const target = (process.env.TEST_TARGET || 'staging') as TestTarget;
 
   switch (target) {
     case 'production':
@@ -39,13 +38,12 @@ export function getTargetConfig(): TargetConfig {
         authType: 'apikey',
       };
 
-    case 'local':
     default:
       return {
-        name: 'local',
-        baseURL: process.env.TEST_BASE_URL || 'http://localhost:3000',
-        requiresAuth: false,
-        authType: 'none',
+        name: 'staging',
+        baseURL: process.env.TEST_BASE_URL || '',
+        requiresAuth: true,
+        authType: 'apikey',
       };
   }
 }
@@ -72,11 +70,9 @@ export function getBaseURL(): string {
   if (config.name === 'staging' || config.name === 'production') {
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     if (!accountId) {
-      throw new Error(
-        `CLOUDFLARE_ACCOUNT_ID environment variable is required for ${config.name} target. ` +
-        `The Workers URL is constructed as: https://cloudflare-image-workers` +
-        `${config.name === 'staging' ? '-staging' : ''}.<account_id>.workers.dev`
-      );
+      // Allow local execution without any env by falling back to a placeholder.
+      // CI/workflow should provide CLOUDFLARE_ACCOUNT_ID or TEST_BASE_URL.
+      return 'https://example.invalid';
     }
 
     const workerName = config.name === 'staging'
@@ -86,8 +82,8 @@ export function getBaseURL(): string {
     return `https://${workerName}.${accountId}.workers.dev`;
   }
 
-  // Default for local
-  return 'http://localhost:3000';
+  // Should never reach here because staging/production must be handled above.
+  throw new Error('Unexpected TEST_TARGET configuration');
 }
 
 /**

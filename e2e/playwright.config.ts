@@ -5,12 +5,11 @@ import { getBaseURL, getAuthHeaders, getTargetConfig } from './lib/target.js';
  * E2E Test Configuration for Cloudflare Image MCP
  *
  * Supports testing:
- * - Local deployment (packages/local): http://localhost:3000
  * - Staging Workers: URL from secrets or environment
  * - Production Workers: URL from secrets or environment
  *
  * Configuration via environment variables:
- * - TEST_TARGET: 'local' | 'staging' | 'production' (default: 'local')
+ * - TEST_TARGET: 'staging' | 'production' (default: 'staging')
  * - TEST_BASE_URL: Override the base URL
  * - API_KEY: API key for authenticated endpoints
  * - TEST_TIMEOUT: Test timeout in milliseconds (default: 60000)
@@ -101,19 +100,8 @@ export default defineConfig({
     },
   ],
 
-  // Local dev server configuration (only for local tests)
-  webServer: targetConfig.name === 'local'
-    ? {
-        command: 'cd ../packages/local && npm run dev',
-        url: 'http://localhost:3000/health',
-        reuseExistingServer: !process.env.CI,
-        timeout: 120000,
-        env: {
-          PORT: '3000',
-          NODE_ENV: 'test',
-        },
-      }
-    : undefined,
+  // No local server: workers-only repo
+  webServer: undefined,
 
   // Global setup/teardown
   globalSetup: './global-setup.ts',

@@ -12,7 +12,6 @@ on:
         options:
           - staging
           - production
-          - local
       test_pattern:
         description: 'Test file pattern (e.g., tests/api/mcp/mcp-sdk.spec.ts)'
         required: false
@@ -24,18 +23,16 @@ on:
         default: ''
         type: string
 
-  # Run on PRs that modify packages/ or workers/
+  # Run on PRs that modify workers/ or e2e/
   pull_request:
     branches:
       - main
     paths:
-      - 'packages/**'
       - 'workers/**'
       - 'e2e/**'
       - '.github/workflows/e2e-tests.yml'
       - 'package.json'
 
-  # Run before publishing GHCR image
   workflow_call:
     inputs:
       environment:
@@ -64,8 +61,9 @@ jobs:
     env:
       TEST_TARGET: ${{ inputs.environment || 'staging' }}
       # Use custom URL if provided, otherwise construct from account ID
-      TEST_BASE_URL: ${{ inputs.custom_url != '' && inputs.custom_url || (inputs.environment == 'local' && 'http://localhost:3000' || format('https://cloudflare-image-workers{0}.{1}.workers.dev', inputs.environment == 'staging' && '-staging' || '', secrets.CLOUDFLARE_ACCOUNT_ID)) }}
+      TEST_BASE_URL: ${{ inputs.custom_url != '' && inputs.custom_url || format('https://cloudflare-image-workers{0}.{1}.workers.dev', inputs.environment == 'staging' && '-staging' || '', secrets.CLOUDFLARE_ACCOUNT_ID) }}
       API_KEY: ${{ secrets.API_KEY }}
+      API_KEYS: ${{ secrets.API_KEYS }}
 
     steps:
       - name: Checkout code
@@ -75,10 +73,10 @@ jobs:
         run: |
           echo "Environment: ${{ env.TEST_TARGET }}"
           echo "Workers URL: ${{ env.TEST_BASE_URL }}"
-          echo "API Key: ${{ secrets.API_KEY != '' && '✅ Configured' || '⚠️ Not configured (tests may fail if auth required)' }}"
+          echo "API Key: ${{ env.API_KEY != '' && '✅ Configured' || (env.API_KEYS != '' && '✅ Configured (API_KEYS)') || '⚠️ Not configured (tests may fail if auth required)' }}"
 
-          # For non-local environments with auto-constructed URL, verify CLOUDFLARE_ACCOUNT_ID is set
-          if [ "${{ env.TEST_TARGET }}" != "local" ] && [ -z "${{ inputs.custom_url }}" ]; then
+          # For auto-constructed URL, verify CLOUDFLARE_ACCOUNT_ID is set
+          if [ -z "${{ inputs.custom_url }}" ]; then
             if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
               echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
               echo "This is needed to construct the Workers URL."
@@ -91,6 +89,22 @@ jobs:
           if [ -n "${{ inputs.custom_url }}" ]; then
             echo "✅ Using custom Workers URL"
           fi
+
+      - name: Derive API key
+        run: |
+          if [ -n "$API_KEY" ]; then
+            echo "API_KEY_EFFECTIVE=$API_KEY" >> $GITHUB_ENV
+          elif [ -n "$API_KEYS" ]; then
+            # Use the first key if a comma-separated list is provided
+            FIRST_KEY=$(echo "$API_KEYS" | cut -d',' -f1)
+            echo "API_KEY_EFFECTIVE=$FIRST_KEY" >> $GITHUB_ENV
+          else
+            echo "API_KEY_EFFECTIVE=" >> $GITHUB_ENV
+          fi
+        env:
+          API_KEY: ${{ env.API_KEY }}
+          API_KEYS: ${{ env.API_KEYS }}
+          # API_KEY_EFFECTIVE is written to $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -108,29 +122,6 @@ jobs:
           cd e2e
           npx playwright install --with-deps chromium
 
-      - name: Build local packages
-        if: env.TEST_TARGET == 'local'
-        run: |
-          npm ci
-          npm run build
-
-      - name: Start local server
-        if: env.TEST_TARGET == 'local'
-        run: |
-          cd packages/local
-          npm run dev &
-          npx wait-on http://localhost:3000/health --timeout 120000
-        env:
-          PORT: 3000
-          NODE_ENV: test
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          S3_BUCKET: ${{ secrets.S3_BUCKET }}
-          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
-          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
-          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
-          S3_CDN_URL: ${{ secrets.S3_CDN_URL }}
-          API_KEYS: ${{ secrets.API_KEY }}  # For local server auth
 
       - name: Run E2E tests
         run: |
@@ -145,7 +136,7 @@ jobs:
         env:
           TEST_TARGET: ${{ env.TEST_TARGET }}
           TEST_BASE_URL: ${{ env.TEST_BASE_URL }}
-          API_KEY: ${{ env.API_KEY }}
+          API_KEY: ${{ env.API_KEY_EFFECTIVE }}
           CI: true
 
       - name: Upload test results

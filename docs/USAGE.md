@@ -8,8 +8,7 @@ This guide covers all ways to use the Cloudflare Image MCP service.
 |--------|-----------|-----------|----------|
 | **Web Frontend** | `http://localhost:8787/` or Workers URL | HTTP | Browser UI |
 | **OpenAI API** | `/v1/images/generations` | HTTP REST | API integration |
-| **HTTP MCP** | `/mcp/message` | HTTP + SSE | Claude Desktop, other MCP clients |
-| **Stdio MCP** | npm install cloudflare-image-mcp | stdio | CLI MCP clients |
+| **HTTP MCP** | `/mcp` (or `/mcp/simple?model=@cf/...`) | Streamable HTTP (optional SSE) | Claude Code, Codex, Claude Desktop, other MCP clients |
 
 ---
 
@@ -111,22 +110,26 @@ curl "http://localhost:8787/api/internal/models"
 
 ## HTTP MCP (Streamable)
 
-Connect MCP clients using HTTP transport with SSE for streaming.
+Connect MCP clients using streamable HTTP. For maximum MCP-client compatibility, use these endpoints:
+
+- **Multi-model (default):** `/mcp` (or `/mcp/smart`)
+- **Simple (single-model, generation-only):** `/mcp/simple?model=@cf/...`
+
+SSE (`?transport=sse`) is supported as an optional streaming mode.
 
 ### Setup in Claude Desktop
 
-Edit your `claude_desktop_config.json`:
+**Recommended (remote MCP):** Add the remote MCP server in the Claude Desktop app via **Settings → Connectors**.
 
-```json
-{
-  "mcpServers": {
-    "cloudflare-image-http": {
-      "url": "https://cloudflare-image-workers.<your-subdomain>.workers.dev/mcp/message?transport=sse",
-      "transport": "http"
-    }
-  }
-}
-```
+If you are using a configuration that accepts an MCP URL directly, use:
+
+**Multi-model (default):**
+- `https://cloudflare-image-workers.<your-subdomain>.workers.dev/mcp`
+
+**Simple (single-model via URL query param):**
+- `https://cloudflare-image-workers.<your-subdomain>.workers.dev/mcp/simple?model=@cf/black-forest-labs/flux-2-klein-4b`
+
+> Note: Some clients/configs historically used `.../mcp/message?transport=sse`. This worker continues to support `/mcp/message` and `?transport=sse` for compatibility, but `/mcp` (streamable HTTP) is the preferred base URL.
 
 ### Available Tools
 
@@ -198,61 +201,6 @@ curl -X POST "https://your-worker.workers.dev/mcp/message" \
 
 ---
 
-## Stdio MCP (NPM Package)
-
-Use the standalone npm package for stdio-based MCP transport.
-
-### Installation
-
-```bash
-npm install cloudflare-image-mcp
-```
-
-### Setup in Claude Desktop
-
-```json
-{
-  "mcpServers": {
-    "cloudflare-image": {
-      "command": "npx",
-      "args": ["cloudflare-image-mcp"],
-      "env": {
-        "CLOUDFLARE_API_TOKEN": "your_api_token",
-        "CLOUDFLARE_ACCOUNT_ID": "your_account_id",
-        "S3_BUCKET": "your-r2-bucket",
-        "S3_REGION": "auto",
-        "S3_ENDPOINT": "https://your-account-id.r2.cloudflarestorage.com",
-        "S3_ACCESS_KEY": "your-access-key",
-        "S3_SECRET_KEY": "your-secret-key",
-        "S3_CDN_URL": "https://pub-your-id.r2.dev"
-      }
-    }
-  }
-}
-```
-
-### Run Directly
-
-```bash
-# With environment variables
-CLOUDFLARE_API_TOKEN=xxx CLOUDFLARE_ACCOUNT_ID=xxx \
-S3_BUCKET=xxx S3_ENDPOINT=xxx \
-npx cloudflare-image-mcp
-
-# Or create a .env file
-cp mcp/.env.example mcp/.env
-# Edit .env with your values
-npx cloudflare-image-mcp
-```
-
-### Available Tools (Stdio MCP)
-
-Same tools as HTTP MCP:
-- `generate_image`
-- `list_models`
-- `describe_model`
-
----
 
 ## Image Storage
 
@@ -368,9 +316,9 @@ print(result['result']['content'][0]['text'])
 
 ### MCP Connection Failed
 
-- Verify transport type (stdio vs HTTP)
-- Check environment variables for stdio MCP
-- Ensure `/mcp/message` endpoint is accessible for HTTP MCP
+- Ensure the Worker is deployed and reachable
+- If `API_KEYS` is enabled, include `Authorization: Bearer <key>`
+- Ensure `/mcp/message` endpoint is accessible (streamable HTTP)
 
 ### Images Not Loading
 

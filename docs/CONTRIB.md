@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-Cloudflare Image MCP is a modular image generation service that provides:
+Cloudflare Image MCP is an image generation service that provides:
 - OpenAI-compatible REST API
-- MCP Server (Model Context Protocol) - stdio and HTTP transports
+- MCP Server (Model Context Protocol) over HTTP/SSE
 - Web Frontend for image generation
 - R2 Storage for generated images with auto-expiry
 
@@ -18,30 +18,11 @@ Cloudflare Image MCP is a modular image generation service that provides:
 | **Storage** | Cloudflare R2 (S3-compatible) |
 | **Protocols** | OpenAI REST API, MCP (stdio + HTTP/SSE) |
 | **Frontend** | HTML + Tailwind CSS (no framework) |
-| **Container** | Docker (for local deployment) |
 
 ## Project Structure
 
 ```
 cloudflare-image-mcp/
-├── packages/
-│   ├── core/                    # Shared library
-│   │   ├── src/
-│   │   │   ├── types.ts         # TypeScript interfaces
-│   │   │   ├── models/          # Model configurations
-│   │   │   ├── ai/              # AI client abstraction
-│   │   │   └── storage/         # Storage abstraction
-│   │   └── package.json
-│   │
-│   └── local/                   # Local deployment (NPM + Docker)
-│       ├── src/
-│       │   ├── main.ts          # Entry point
-│       │   ├── mcp/             # MCP server
-│       │   ├── api/             # REST API
-│       │   └── ui/              # Web frontend
-│       ├── Dockerfile
-│       └── package.json
-│
 ├── workers/                     # Cloudflare Workers deployment
 │   ├── src/
 │   │   ├── index.ts             # Worker entry
@@ -50,28 +31,11 @@ cloudflare-image-mcp/
 │   ├── wrangler.toml
 │   └── package.json
 │
+├── e2e/                         # Playwright E2E tests (staging/production)
 └── docs/
 ```
 
 ## Available Scripts
-
-### packages/core/
-
-| Script | Description |
-|--------|-------------|
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run check` | Type-check without emitting files |
-| `npm run clean` | Remove `dist/` directory |
-
-### packages/local/
-
-| Script | Description |
-|--------|-------------|
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run check` | Type-check without emitting files |
-| `npm run clean` | Remove `dist/` directory |
-| `npm run dev` | Start dev server with hot reload (tsx) |
-| `npm start` | Start production server |
 
 ### workers/
 
@@ -90,48 +54,26 @@ cloudflare-image-mcp/
 git clone https://github.com/yourusername/cloudflare-image-mcp.git
 cd cloudflare-image-mcp
 
-# Install dependencies for each package
-cd packages/core && npm install && cd ../..
-cd packages/local && npm install && cd ../..
-cd workers && npm install && cd ..
+cd workers && npm ci && cd ..
+cd e2e && npm ci && cd ..
 ```
 
 ### 2. Set Up Environment Variables
 
-Copy the example environment file and fill in your values:
+For local development (wrangler):
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+R2 + AI are configured via `wrangler.toml` bindings.
+
+### 3. Develop and Test
 
 ```bash
-cp packages/local/.env.example packages/local/.env
-```
+# Type check
+cd workers && npm ci && npm run check
 
-Required variables:
-
-| Variable | Description | Required For |
-|----------|-------------|--------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with AI permissions | All deployments |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID | All deployments |
-| `S3_BUCKET` | R2 bucket name | Storage |
-| `S3_REGION` | Region (use `auto` for R2) | Storage |
-| `S3_ENDPOINT` | R2 endpoint URL | Storage |
-| `S3_ACCESS_KEY` | R2 API token access key | Storage |
-| `S3_SECRET_KEY` | R2 API token secret key | Storage |
-| `S3_CDN_URL` | Public CDN URL for images | Storage |
-| `PORT` | Server port (default: 3000) | Local only |
-| `DEFAULT_MODEL` | Default model ID | All deployments |
-
-### 3. Build and Test
-
-```bash
-# Build core package first
-cd packages/core && npm run build && cd ../..
-
-# Build local package
-cd packages/local && npm run build && cd ../..
-
-# Test local server (needs credentials)
-cd packages/local && npm run dev
-
-# Test workers (needs credentials)
+# Dev (remote bindings)
 cd workers && npx wrangler dev --remote
 ```
 
@@ -139,7 +81,7 @@ cd workers && npx wrangler dev --remote
 
 To add a new AI model:
 
-1. Add model configuration to `packages/core/src/models/configs.ts`:
+1. Update the workers model registry (see `workers/src/config/models.ts`).
 
 ```typescript
 export const MODEL_CONFIGS: Record<string, ModelConfig> = {
@@ -171,40 +113,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
 };
 ```
 
-2. Rebuild the core package:
+2. Type check workers:
 ```bash
-cd packages/core && npm run build
-```
-
-## Adding Storage Providers
-
-1. Create a new provider in `packages/core/src/storage/`:
-
-```typescript
-import type { StorageProvider, StorageConfig, StorageResult } from '../types.js';
-
-export function createCustomStorageProvider(config: StorageConfig): StorageProvider {
-  return {
-    async uploadImage(base64Data: string, metadata: Record<string, string>): Promise<StorageResult> {
-      // Implementation
-    },
-    async deleteImage(id: string): Promise<boolean> {
-      // Implementation
-    },
-    async cleanupExpired(): Promise<number> {
-      // Implementation
-    },
-    async listImages(prefix?: string): Promise<string[]> {
-      // Implementation
-    },
-  };
-}
-```
-
-2. Export from `packages/core/src/storage/index.ts`:
-
-```typescript
-export { createCustomStorageProvider, type CustomStorageConfig } from './custom.js';
+cd workers && npm run check
 ```
 
 ## Code Style
@@ -216,36 +127,12 @@ export { createCustomStorageProvider, type CustomStorageConfig } from './custom.
 
 ## Testing
 
-### Local Package Tests
-
-1. Start the server:
-```bash
-cd packages/local && npm run dev
-```
-
-2. Test endpoints:
-```bash
-curl http://localhost:3000/health
-curl http://localhost:3000/v1/models
-```
-
-### Workers Tests
-
-1. Start dev server with remote resources:
-```bash
-cd workers && npx wrangler dev --remote
-```
-
-2. Access at the provided local URL (usually http://localhost:8787)
-
-## Docker
-
-Build and run locally:
+E2E tests run against Workers environments.
 
 ```bash
-cd packages/local
-docker build -t cloudflare-image-mcp .
-docker run -p 3000:3000 --env-file .env cloudflare-image-mcp
+npm run test:e2e:staging
+# or
+npm run test:e2e:production
 ```
 
 ## Troubleshooting
@@ -254,7 +141,7 @@ docker run -p 3000:3000 --env-file .env cloudflare-image-mcp
 
 Run type checking to identify issues:
 ```bash
-cd packages/local && npm run check
+cd workers && npm run check
 ```
 
 ### Cloudflare API Errors

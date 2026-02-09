@@ -7,21 +7,15 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "npm run build:core && npm run build:local",
-    "build:core": "cd packages/core && npm ci && npm run build",
-    "build:local": "cd packages/local && npm ci && npm run build",
+    "build": "npm run build:workers",
     "build:workers": "cd workers && npm ci && npm run check",
     "test": "npm run test:e2e",
     "test:e2e": "cd e2e && npm test",
-    "test:e2e:workers": "cd e2e && TEST_TARGET=workers npm test",
-    "test:e2e:local": "cd e2e && TEST_TARGET=local npm test",
-    "clean": "rm -rf packages/core/dist packages/local/dist e2e/test-results e2e/playwright-report",
-    "dev": "cd packages/local && npm run dev"
+    "test:e2e:staging": "cd e2e && TEST_TARGET=staging npm test",
+    "test:e2e:production": "cd e2e && TEST_TARGET=production npm test",
+    "clean": "rm -rf e2e/test-results e2e/playwright-report"
   },
-  "workspaces": [
-    "packages/*",
-    "e2e"
-  ],
+  "workspaces": [],
   "engines": {
     "node": ">=20.0.0"
   }
