@@ -66,9 +66,9 @@ jobs:
         working-directory: infrastructure
         continue-on-error: true
         run: |
-          BUCKET_NAME=$(terraform output -raw bucket_name 2>/dev/null || echo "cloudflare-image-mcp-images")
-          echo "Attempting to import existing bucket: $BUCKET_NAME"
-          terraform import cloudflare_r2_bucket.images ${{ secrets.CLOUDFLARE_ACCOUNT_ID}}/$BUCKET_NAME || echo "Bucket not found or already imported"
+          # Try to import the production bucket if it exists
+          echo "Attempting to import existing bucket: cloudflare-image-mcp-images"
+          terraform import cloudflare_r2_bucket.images ${{ secrets.CLOUDFLARE_ACCOUNT_ID}}/cloudflare-image-mcp-images 2>&1 || echo "Bucket not found or already imported, will create new"
 
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
