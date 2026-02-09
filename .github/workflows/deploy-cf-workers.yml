@@ -61,6 +61,15 @@ jobs:
         working-directory: infrastructure
         run: terraform plan -no-color
 
+      - name: Import existing R2 bucket if it exists
+        if: github.event.inputs.action == 'apply'
+        working-directory: infrastructure
+        continue-on-error: true
+        run: |
+          BUCKET_NAME=$(terraform output -raw bucket_name 2>/dev/null || echo "cloudflare-image-mcp-images")
+          echo "Attempting to import existing bucket: $BUCKET_NAME"
+          terraform import cloudflare_r2_bucket.images ${{ secrets.CLOUDFLARE_ACCOUNT_ID}}/$BUCKET_NAME || echo "Bucket not found or already imported"
+
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
         working-directory: infrastructure
