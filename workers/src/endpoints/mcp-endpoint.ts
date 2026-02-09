@@ -10,10 +10,16 @@ export class MCPEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
   private cdnUrl: string;
+  private defaultModel: string | null;
+  private isMode1: boolean;
 
   constructor(env: Env) {
     this.generator = new ImageGeneratorService(env);
     this.cdnUrl = env.S3_CDN_URL || '';
+    // Mode 1: DEFAULT_MODEL set - only run_models available
+    // Mode 2: DEFAULT_MODEL not set - list_models, describe_model, run_models available
+    this.defaultModel = env.DEFAULT_MODEL || null;
+    this.isMode1 = !!this.defaultModel;
     this.corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -67,7 +73,9 @@ export class MCPEndpoint {
         message: '/mcp/message',
         sse: '/mcp?transport=sse',
       },
-      tools: ['run_models', 'list_models', 'describe_model'],
+      tools: this.isMode1 ? ['run_models'] : ['run_models', 'list_models', 'describe_model'],
+      mode: this.isMode1 ? 'single-model' : 'multi-model',
+      defaultModel: this.defaultModel,
       description: 'Image generation using Cloudflare Workers AI',
     };
 
@@ -79,7 +87,7 @@ export class MCPEndpoint {
   /**
    * Handle SSE transport connection
    */
-  private async handleSSE(request: Request): Promise<Response> {
+  private async handleSSE(_request: Request): Promise<Response> {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
@@ -249,7 +257,7 @@ export class MCPEndpoint {
   private async handleRunModels(args: any): Promise<any[]> {
     const {
       prompt,
-      model_id,
+      model_id: requestedModelId,
       n,
       size,
       steps,
@@ -265,6 +273,10 @@ export class MCPEndpoint {
         isError: true,
       }];
     }
+
+    // Mode 1: Use default model if model_id not provided
+    // Mode 2: model_id is required
+    const model_id = requestedModelId || this.defaultModel;
 
     if (!model_id) {
       return [{
@@ -343,6 +355,15 @@ export class MCPEndpoint {
    * Handle list_models tool call
    */
   private async handleListModels(_args: any): Promise<any[]> {
+    // Mode 1: list_models is not available
+    if (this.isMode1) {
+      return [{
+        type: 'text',
+        text: `Error: list_models is not available when DEFAULT_MODEL is set (${this.defaultModel}). Use run_models(prompt="...") directly.`,
+        isError: true,
+      }];
+    }
+
     const models = this.generator.listModels();
 
     // Return JSON with model_id -> taskTypes mapping
@@ -370,6 +391,15 @@ export class MCPEndpoint {
    * Handle describe_model tool call
    */
   private async handleDescribeModel(args: any): Promise<any[]> {
+    // Mode 1: describe_model is not available
+    if (this.isMode1) {
+      return [{
+        type: 'text',
+        text: `Error: describe_model is not available when DEFAULT_MODEL is set (${this.defaultModel}). Use run_models(prompt="...") directly.`,
+        isError: true,
+      }];
+    }
+
     const { model_id } = args || {};
 
     if (!model_id) {
@@ -466,9 +496,60 @@ export class MCPEndpoint {
 
   /**
    * Get tool definitions for MCP
+   * Mode 1 (DEFAULT_MODEL set): Only run_models available
+   * Mode 2 (DEFAULT_MODEL not set): list_models, describe_model, run_models available
    */
   private getToolDefinitions(): any[] {
-    return [
+    // Mode 1: Only run_models with optional model_id
+    const mode1Tools = [
+      {
+        name: 'run_models',
+        description: `Generate images using the default model (${this.defaultModel}). Uses optimal parameters automatically.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            prompt: {
+              type: 'string',
+              description: 'Text description of the image to generate',
+            },
+            model_id: {
+              type: 'string',
+              description: `Optional - defaults to "${this.defaultModel}"`,
+            },
+            n: {
+              type: 'number',
+              description: 'Number of images to generate (1-8)',
+              minimum: 1,
+              maximum: 8,
+            },
+            size: {
+              type: 'string',
+              description: 'Image size (e.g., 1024x1024)',
+            },
+            steps: {
+              type: 'number',
+              description: 'Number of diffusion steps (model-dependent)',
+            },
+            seed: {
+              type: 'number',
+              description: 'Random seed for reproducibility',
+            },
+            guidance: {
+              type: 'number',
+              description: 'Guidance scale (1-30, model-dependent)',
+            },
+            negative_prompt: {
+              type: 'string',
+              description: 'Elements to avoid in the image',
+            },
+          },
+          required: ['prompt'],
+        },
+      },
+    ];
+
+    // Mode 2: All tools available
+    const mode2Tools = [
       {
         name: 'run_models',
         description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". You must call "describe_model" first to obtain the params required to use this tool, UNLESS the user explicitly provides params. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image, inpainting), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (inpainting).',
@@ -536,5 +617,7 @@ export class MCPEndpoint {
         },
       },
     ];
+
+    return this.isMode1 ? mode1Tools : mode2Tools;
   }
 }

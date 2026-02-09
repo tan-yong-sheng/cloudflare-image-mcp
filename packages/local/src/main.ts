@@ -21,6 +21,8 @@ import {
   parseEmbeddedParams,
   mergeParams,
   detectTask,
+  getEnhancedModelList,
+  getModelMetadata,
 } from '@cloudflare-image-mcp/core';
 import type { ServerConfig } from '@cloudflare-image-mcp/core';
 import { existsSync, readFileSync } from 'fs';
@@ -65,18 +67,23 @@ async function fetchImage(input: string): Promise<{ buffer: Buffer; base64: stri
   }
 }
 
-// Load environment variables
+// ============================================================================
+// Two-Mode Configuration
+// Mode 1: DEFAULT_MODEL set -> Skip list_models, use default directly
+// Mode 2: DEFAULT_MODEL not set -> Enable enhanced list_models with selection guide
+// ============================================================================
+
 const defaultModelRaw = process.env.DEFAULT_MODEL || '';
 
-// Validate that DEFAULT_MODEL must be a full model_id (not an alias)
-// Full model_ids start with '@cf/'
-const validModelIds = listModels().map(m => m.id);
-const isValidModelId = validModelIds.includes(defaultModelRaw) || defaultModelRaw.startsWith('@cf/');
-
-if (defaultModelRaw && !isValidModelId) {
-  console.error(`Error: DEFAULT_MODEL must be a full model_id (e.g., '@cf/black-forest-labs/flux-1-schnell'), not an alias like '@cf/black-forest-labs/flux-1-schnell'`);
-  console.error(`Valid model_ids: ${validModelIds.join(', ')}`);
-  process.exit(1);
+// Validate DEFAULT_MODEL if provided
+if (defaultModelRaw) {
+  const validModelIds = listModels().map(m => m.id);
+  if (!validModelIds.includes(defaultModelRaw)) {
+    console.error(`Error: DEFAULT_MODEL must be a valid full model_id.`);
+    console.error(`Provided: ${defaultModelRaw}`);
+    console.error(`Valid model_ids: ${validModelIds.join(', ')}`);
+    process.exit(1);
+  }
 }
 
 const config: ServerConfig = {
@@ -91,7 +98,11 @@ const config: ServerConfig = {
     cdnUrl: process.env.S3_CDN_URL || '',
   },
   imageExpiryHours: parseInt(process.env.IMAGE_EXPIRY_HOURS || '24', 10),
-  defaultModel: defaultModelRaw || '@cf/black-forest-labs/flux-1-schnell',
+  // Only set defaultModel if DEFAULT_MODEL env var is provided
+  // This enables two-mode workflow in stdio MCP server
+  defaultModel: defaultModelRaw,
+  // Timezone for logging and folder creation (default: UTC)
+  timezone: process.env.TZ || 'UTC',
 };
 
 // Validate required config
@@ -242,7 +253,59 @@ app.post('/mcp', async (req: Request, res: Response) => {
     }
 
     if (message.method === 'tools/list') {
-      const tools = [
+      // Determine mode for HTTP MCP as well
+      const hasDefaultModel = !!config.defaultModel;
+
+      // Mode 1: Only run_models (model_id is optional, defaults to DEFAULT_MODEL)
+      // Mode 2: list_models, describe_model, run_models (model_id is required)
+      const mode1Tools = [
+        {
+          name: 'run_models',
+          description: `Generate images using the default model (${config.defaultModel}). Uses optimal parameters automatically. Required: prompt. Optional: task, image, mask, params object with steps/seed/guidance/etc.`,
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              model_id: {
+                type: 'string',
+                description: `Optional - defaults to "${config.defaultModel}"`,
+              },
+              prompt: {
+                type: 'string',
+                description: 'Text description of the image to generate. Supports embedded params: "prompt ---steps=8 --seed=1234"',
+              },
+              task: {
+                type: 'string',
+                enum: ['text-to-image', 'image-to-image', 'inpainting'],
+                description: 'Task type. Auto-detected if not specified.',
+              },
+              n: { type: 'number', description: 'Number of images (1-8)', minimum: 1, maximum: 8 },
+              size: { type: 'string', description: 'Image size (e.g., 1024x1024)' },
+              image: {
+                type: 'string',
+                description: 'Input image for img2img/inpainting: URL, base64 data URI, or local file path.',
+              },
+              mask: {
+                type: 'string',
+                description: 'Mask for inpainting: URL, base64 data URI, or file path.',
+              },
+              params: {
+                type: 'object',
+                description: 'Task-specific parameters (steps, seed, guidance, negative_prompt, strength)',
+                properties: {
+                  steps: { type: 'number', description: 'Number of diffusion steps' },
+                  seed: { type: 'number', description: 'Random seed' },
+                  guidance: { type: 'number', description: 'Guidance scale (1-30)' },
+                  negative_prompt: { type: 'string', description: 'Elements to avoid' },
+                  strength: { type: 'number', description: 'Transformation strength (0-1)', minimum: 0, maximum: 1 },
+                },
+              },
+            },
+            required: ['prompt'],
+          },
+        },
+      ];
+
+      const mode2Tools = [
         {
           name: 'run_models',
           description: 'Execute image generation based on model capabilities. WORKFLOW: 1. Call list_models to get available models → 2. Call describe_model to understand parameters → 3. Call run_models to generate. Required: model_id (from list_models) and prompt. Optional: task (text-to-image/image-to-image/inpainting - auto-detected if not specified), image (URL/base64/path for img2img/inpainting), mask (URL/base64/path for inpainting), and other model-specific parameters.',
@@ -297,6 +360,7 @@ app.post('/mcp', async (req: Request, res: Response) => {
         },
       ];
 
+      const tools = hasDefaultModel ? mode1Tools : mode2Tools;
       res.json({ jsonrpc: '2.0', id: requestId, result: { tools } });
       return;
     }
@@ -306,31 +370,87 @@ app.post('/mcp', async (req: Request, res: Response) => {
       const params = args || {};
 
       if (name === 'list_models') {
-        const models = listModels();
-        // Return JSON with model_id -> taskTypes mapping
-        const modelMap: Record<string, string[]> = {};
-        for (const model of models) {
-          modelMap[model.id] = model.taskTypes;
+        // Mode 1: Reject list_models when DEFAULT_MODEL is set
+        if (config.defaultModel) {
+          res.json({
+            jsonrpc: '2.0',
+            id: requestId,
+            error: {
+              code: -32601,
+              message: `list_models is not available when DEFAULT_MODEL is set (${config.defaultModel}). Use run_models(prompt="...") directly.`
+            }
+          });
+          return;
         }
-        // Add next_step guidance with workflow
-        const output = {
-          ...modelMap,
-          _workflow: {
-            step1: 'list_models() - you are here',
-            step2: 'describe_model(model_id="<model_id>") - get parameters',
-            step3: 'run_models(model_id="<model_id>", prompt="...", ...) - generate',
+        // Use enhanced model list with rich metadata for better LLM selection
+        const enhancedList = getEnhancedModelList();
+
+        // Build summary for each model
+        const modelSummaries = enhancedList.models.map((model) => ({
+          id: model.id,
+          name: model.name,
+          description: model.description,
+          tasks: model.supportedTasks,
+          pricing: {
+            is_free: model.pricing.isFree,
+            estimated_cost_1024: model.pricing.estimatedCost1024,
           },
-          _next_step: 'Call describe_model(model_id="<model_id_from_above>") to get parameter details, then call run_models(...) to generate images',
+          performance: {
+            speed: model.performance.speed,
+            default_steps: model.performance.defaultSteps,
+            estimated_time_seconds: model.performance.estimatedTimeSeconds,
+          },
+          quality: {
+            photorealism: model.quality.photorealism,
+            prompt_adherence: model.quality.promptAdherence,
+            text_rendering: model.quality.textRendering,
+          },
+          best_for: model.comparison.bestFor,
+        }));
+
+        const output = {
+          models: modelSummaries,
+          selection_guide: enhancedList.selectionGuide,
+          workflow: enhancedList.workflow,
+          next_step: enhancedList.nextStep,
+          quick_start: {
+            fastest_free: enhancedList.selectionGuide.forSpeed.filter(
+              (id) => enhancedList.models.find((m) => m.id === id)?.pricing.isFree
+            ),
+            best_for_photorealism_free: enhancedList.selectionGuide.forPhotorealism.filter(
+              (id) => enhancedList.models.find((m) => m.id === id)?.pricing.isFree
+            ),
+            best_for_text: enhancedList.selectionGuide.forTextRendering,
+          },
         };
+
         res.json({ jsonrpc: '2.0', id: requestId, result: { content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] } });
         return;
       }
 
       if (name === 'describe_model') {
-        const model_id = params.model_id as string | undefined;
-        const modelConfig = model_id ? getModelConfig(model_id) : null;
+        // Mode 1: Reject describe_model when DEFAULT_MODEL is set
+        if (config.defaultModel) {
+          res.json({
+            jsonrpc: '2.0',
+            id: requestId,
+            error: {
+              code: -32601,
+              message: `describe_model is not available when DEFAULT_MODEL is set (${config.defaultModel}). Use run_models(prompt="...") directly.`
+            }
+          });
+          return;
+        }
+        // Use provided model_id or default from config
+        const model_id = (params.model_id as string | undefined) || config.defaultModel;
+        if (!model_id) {
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: 'model_id is required when DEFAULT_MODEL is not set' } });
+          return;
+        }
+        const modelConfig = getModelConfig(model_id);
+        const modelMetadata = getModelMetadata(model_id);
         if (!modelConfig) {
-          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: 'Unknown model' } });
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: `Unknown model: ${model_id}` } });
           return;
         }
         // Build OpenAPI schema format
@@ -341,6 +461,22 @@ app.post('/mcp', async (req: Request, res: Response) => {
           provider: modelConfig.provider,
           parameters: {},
         };
+
+        // Add enhanced metadata if available
+        if (modelMetadata) {
+          schema.pricing = modelMetadata.pricing;
+          schema.performance = modelMetadata.performance;
+          schema.quality = modelMetadata.quality;
+          schema.best_for = modelMetadata.comparison.bestFor;
+          schema.not_recommended_for = modelMetadata.comparison.notRecommendedFor;
+          if (modelMetadata.comparison.higherQualityAlternative) {
+            schema.higher_quality_alternative = modelMetadata.comparison.higherQualityAlternative;
+          }
+          if (modelMetadata.comparison.fasterAlternative) {
+            schema.faster_alternative = modelMetadata.comparison.fasterAlternative;
+          }
+        }
+
         for (const [key, param] of Object.entries(modelConfig.parameters)) {
           const p = param as any;
           schema.parameters[key] = {
@@ -431,9 +567,10 @@ app.post('/mcp', async (req: Request, res: Response) => {
           return;
         }
 
-        const model_id = params.model_id as string | undefined;
+        // Use provided model_id or default from config
+        const model_id = (params.model_id as string | undefined) || config.defaultModel;
         if (!model_id) {
-          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: 'model_id is required' } });
+          res.json({ jsonrpc: '2.0', id: requestId, error: { code: -32600, message: 'model_id is required when DEFAULT_MODEL is not set' } });
           return;
         }
 

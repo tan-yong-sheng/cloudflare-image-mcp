@@ -47,6 +47,10 @@ IMAGE_EXPIRY_HOURS=24
 
 # Default model (@cf/black-forest-labs/flux-1-schnell, @cf/black-forest-labs/flux-2-klein-4b, @cf/black-forest-labs/flux-2-dev, @cf/stabilityai/stable-diffusion-xl-base-1.0, @cf/bytedance/stable-diffusion-xl-lightning, @cf/lykon/dreamshaper-8-lcm)
 DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
+
+# Timezone for logging and R2 folder structure (default: UTC)
+# Examples: America/New_York, Asia/Singapore, Europe/London, UTC
+TZ="UTC"
 ```
 
 ## File Locations
@@ -162,6 +166,7 @@ S3_CDN_URL="https://pub-xxx.r2.dev"
 PORT=3000
 IMAGE_EXPIRY_HOURS=24
 DEFAULT_MODEL="@cf/black-forest-labs/flux-1-schnell"
+TZ="UTC"  # Timezone for logging and R2 folder creation
 ```
 
 ### 3. Start Local Server

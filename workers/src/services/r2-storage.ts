@@ -10,12 +10,15 @@ export class R2StorageService {
   private expiryHours: number;
   private cdnUrl: string;
   private accountId: string;
+  private timezone: string;
 
   constructor(env: Env) {
     this.bucket = env.IMAGE_BUCKET;
     this.expiryHours = parseInt(env.IMAGE_EXPIRY_HOURS || '24', 10);
     this.cdnUrl = env.S3_CDN_URL || '';
     this.accountId = env.CLOUDFLARE_ACCOUNT_ID;
+    // Default to UTC if TZ is not set
+    this.timezone = env.TZ || 'UTC';
   }
 
   /**
@@ -50,8 +53,8 @@ export class R2StorageService {
       body = imageData;
     }
 
-    // Generate key with date-based prefix for organization
-    const datePrefix = new Date(timestamp).toISOString().split('T')[0];
+    // Generate key with date-based prefix for organization (timezone-aware)
+    const datePrefix = this.getDatePrefix(timestamp);
     const key = `images/${datePrefix}/${id}.png`;
 
     // Upload to R2
@@ -267,6 +270,34 @@ export class R2StorageService {
   }
 
   // ===== Helper Methods =====
+
+  /**
+   * Get date prefix for folder organization (timezone-aware)
+   * @param timestamp Unix timestamp in milliseconds
+   * @returns Date string in YYYY-MM-DD format in configured timezone
+   */
+  private getDatePrefix(timestamp: number): string {
+    try {
+      // Use Intl.DateTimeFormat for timezone support
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: this.timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+
+      const parts = formatter.formatToParts(new Date(timestamp));
+      const year = parts.find(p => p.type === 'year')?.value;
+      const month = parts.find(p => p.type === 'month')?.value;
+      const day = parts.find(p => p.type === 'day')?.value;
+
+      return `${year}-${month}-${day}`;
+    } catch (err) {
+      // Fallback to UTC if timezone is invalid
+      console.error(`Invalid timezone "${this.timezone}", falling back to UTC:`, err);
+      return new Date(timestamp).toISOString().split('T')[0];
+    }
+  }
 
   private generateId(): string {
     const timestamp = Date.now().toString(36);

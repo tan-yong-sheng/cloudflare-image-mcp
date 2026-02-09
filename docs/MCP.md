@@ -457,3 +457,132 @@ Access-Control-Allow-Origin: *
 Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Transport
 ```
+
+## Stdio Transport - Two-Mode Workflow
+
+The stdio MCP server (for Claude Desktop and other local MCP clients) supports two operational modes based on the `DEFAULT_MODEL` environment variable.
+
+### Mode 1: Default Model (Simplified Workflow)
+
+When `DEFAULT_MODEL` is set, the server skips model selection and uses the default directly.
+
+**Available Tools:**
+- `describe_model` - Get parameters for the default model
+- `run_models` - Generate images
+
+**Workflow:**
+```
+Step 1: describe_model()
+  → Returns parameter schema for DEFAULT_MODEL
+
+Step 2: run_models(prompt="...", params={...})
+  → Generates image using DEFAULT_MODEL
+```
+
+**Configuration:**
+```bash
+DEFAULT_MODEL=@cf/black-forest-labs/flux-1-schnell
+```
+
+### Mode 2: Model Selection (Full Workflow)
+
+When `DEFAULT_MODEL` is not set, the server provides enhanced model selection.
+
+**Available Tools:**
+- `list_models` - List all models with pricing, performance, and selection guide
+- `describe_model` - Get detailed parameters for a specific model
+- `run_models` - Generate images
+
+**Workflow:**
+```
+Step 1: list_models()
+  → Returns models[] with metadata and selection_guide
+
+Step 2: describe_model(model_id="...")
+  → Returns detailed parameters for chosen model
+
+Step 3: run_models(model_id="...", prompt="...", params={...})
+  → Generates image using selected model
+```
+
+**Enhanced list_models Output:**
+```json
+{
+  "models": [
+    {
+      "id": "@cf/black-forest-labs/flux-1-schnell",
+      "name": "FLUX.1 [schnell]",
+      "pricing": { "is_free": false, "estimated_cost_1024": "~$0.0007" },
+      "performance": { "speed": "ultra-fast", "estimated_time_seconds": 2 },
+      "quality": { "photorealism": 8, "text_rendering": 9 },
+      "best_for": ["Rapid prototyping", "Text-heavy images"]
+    }
+  ],
+  "selection_guide": {
+    "forSpeed": [...],
+    "forFreeModels": [...],
+    "forPhotorealism": [...],
+    "forTextRendering": [...]
+  },
+  "quick_start": {
+    "fastest_free": [...],
+    "best_for_photorealism_free": [...]
+  }
+}
+```
+
+### Selection Guide Categories
+
+| Category | Description |
+|----------|-------------|
+| `forSpeed` | Models with "ultra-fast" or "fast" speed ratings |
+| `forFreeModels` | Models with `is_free: true` pricing |
+| `forPhotorealism` | Models with photorealism score >= 8 |
+| `forArtisticStyle` | Models with artistic style score >= 8 |
+| `forTextRendering` | Models with text rendering score >= 8 |
+| `forImageToImage` | Models supporting "image-to-image" task |
+| `forInpainting` | Models supporting "inpainting" task |
+| `forHighestQuality` | Models with highest combined quality scores |
+
+### Claude Desktop Configuration
+
+**Mode 1 (with default model):**
+```json
+{
+  "mcpServers": {
+    "cloudflare-image": {
+      "command": "npx",
+      "args": ["-y", "@cloudflare-image-mcp/local"],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "your_token",
+        "CLOUDFLARE_ACCOUNT_ID": "your_account",
+        "S3_BUCKET": "your_bucket",
+        "S3_ENDPOINT": "https://...",
+        "S3_ACCESS_KEY": "your_key",
+        "S3_SECRET_KEY": "your_secret",
+        "DEFAULT_MODEL": "@cf/black-forest-labs/flux-1-schnell"
+      }
+    }
+  }
+}
+```
+
+**Mode 2 (with model selection):**
+```json
+{
+  "mcpServers": {
+    "cloudflare-image": {
+      "command": "npx",
+      "args": ["-y", "@cloudflare-image-mcp/local"],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "your_token",
+        "CLOUDFLARE_ACCOUNT_ID": "your_account",
+        "S3_BUCKET": "your_bucket",
+        "S3_ENDPOINT": "https://...",
+        "S3_ACCESS_KEY": "your_key",
+        "S3_SECRET_KEY": "your_secret"
+      }
+    }
+  }
+}
+```

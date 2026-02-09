@@ -347,6 +347,7 @@ docker inspect cloudflare-image-mcp | grep Health
 | `S3_CDN_URL` | Public R2 URL | `https://pub-xxx.r2.dev` |
 | `IMAGE_EXPIRY_HOURS` | Image auto-delete time | `24` |
 | `DEFAULT_MODEL` | Default AI model | `@cf/black-forest-labs/flux-1-schnell` |
+| `TZ` | Timezone for logging and R2 folder creation | `UTC` |
 | `PORT` | Server port (Docker only) | `3000` |
 
 ---

@@ -43,9 +43,31 @@ export default {
 
       // Route: Health check
       if (path === '/health') {
+        const timezone = env.TZ || 'UTC';
+        const now = new Date();
+
+        // Format current time in configured timezone
+        let currentTime: string;
+        try {
+          currentTime = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+          }).format(now);
+        } catch (err) {
+          currentTime = now.toISOString();
+        }
+
         return new Response(JSON.stringify({
           status: 'healthy',
           timestamp: Date.now(),
+          currentTime,
+          timezone,
           version: '0.1.0',
           deployedAt: env.DEPLOYED_AT || 'unknown',
           commitSha: env.COMMIT_SHA || 'unknown',

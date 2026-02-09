@@ -261,6 +261,8 @@ export interface ServerConfig {
   imageExpiryHours: number;
   /** Default model to use */
   defaultModel: string;
+  /** Timezone for logging and folder creation (default: UTC) */
+  timezone?: string;
 }
 
 /**
@@ -289,4 +291,6 @@ export interface EnvVariables {
   IMAGE_EXPIRY_HOURS?: string;
   /** Default model */
   DEFAULT_MODEL?: string;
+  /** Timezone for logging and folder creation (default: UTC) */
+  TZ?: string;
 }
