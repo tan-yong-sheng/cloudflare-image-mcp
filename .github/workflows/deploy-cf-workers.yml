@@ -67,8 +67,9 @@ jobs:
         continue-on-error: true
         run: |
           # Try to import the production bucket if it exists
+          # Format: account_id/bucket_name/jurisdiction (jurisdiction defaults to 'default')
           echo "Attempting to import existing bucket: cloudflare-image-mcp-images"
-          terraform import cloudflare_r2_bucket.images ${{ secrets.CLOUDFLARE_ACCOUNT_ID}}/cloudflare-image-mcp-images 2>&1 || echo "Bucket not found or already imported, will create new"
+          terraform import cloudflare_r2_bucket.images ${{ secrets.CLOUDFLARE_ACCOUNT_ID}}/cloudflare-image-mcp-images/default 2>&1 || echo "Bucket not found or already imported, will create new"
 
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
