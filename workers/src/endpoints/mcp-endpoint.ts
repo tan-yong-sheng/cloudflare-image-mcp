@@ -12,10 +12,12 @@ export class MCPEndpoint {
   private cdnUrl: string;
   private defaultModel: string | null;
   private isMode1: boolean;
+  private workerBaseUrl: string; // Store worker's base URL
 
   constructor(env: Env) {
     this.generator = new ImageGeneratorService(env);
     this.cdnUrl = env.S3_CDN_URL || '';
+    this.workerBaseUrl = ''; // Will be set from first request
     // Mode 1: DEFAULT_MODEL set - only run_models available
     // Mode 2: DEFAULT_MODEL not set - list_models, describe_model, run_models available
     this.defaultModel = env.DEFAULT_MODEL || null;
@@ -33,6 +35,11 @@ export class MCPEndpoint {
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const pathname = url.pathname;
+
+    // Capture worker's base URL from first request (for constructing full image URLs)
+    if (!this.workerBaseUrl) {
+      this.workerBaseUrl = `${url.protocol}//${url.host}`;
+    }
 
     // CORS preflight
     if (request.method === 'OPTIONS') {
@@ -319,9 +326,10 @@ export class MCPEndpoint {
       }];
     }
 
-    // Format response with full CDN URL
+    // Format response with full URL (use CDN URL if set, otherwise use worker proxy URL)
     const textParts: string[] = [];
-    const fullUrl = (path: string) => path.startsWith('http') ? path : `${this.cdnUrl}${path}`;
+    const baseUrl = this.cdnUrl || this.workerBaseUrl;
+    const fullUrl = (path: string) => path.startsWith('http') ? path : `${baseUrl}${path}`;
 
     // Helper to check if image has url (not b64_json)
     const hasUrl = (img: { url?: string; b64_json?: string }): img is { url: string } => 'url' in img && !!img.url;
