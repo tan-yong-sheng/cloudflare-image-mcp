@@ -43,7 +43,8 @@ export class R2StorageService {
     }
 
     try {
-      // Fetch bucket configuration from Cloudflare API to get public URL
+      // Fetch R2 public domain configuration from Cloudflare API
+      // The public domain is managed via cloudflare_r2_managed_domain resource
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/r2/buckets/${this.bucketName}`,
         {
@@ -56,13 +57,16 @@ export class R2StorageService {
 
       if (response.ok) {
         const data = await response.json() as any;
-        // R2 public domain is in the format: pub-{hash}.r2.dev
-        // It's available at: data.result.domain
-        const publicDomain = data.result?.domain;
-        if (publicDomain) {
-          this.cdnUrl = `https://${publicDomain}`;
-          console.log(`Auto-detected CDN URL: ${this.cdnUrl}`);
-          return this.cdnUrl;
+        // Check if public access is enabled (R2 managed domain)
+        // The public URL format is: https://pub-{hash}.r2.dev
+        // Try to get it from the bucket location and construct it
+        const bucketName = data.result?.name;
+        if (bucketName) {
+          // Note: The actual public domain hash is not available via API
+          // We need to construct it or get it from Terraform outputs
+          // For now, log and return empty to fall back to worker proxy
+          console.log(`Bucket found: ${bucketName}, but public domain not available via API`);
+          console.log('Tip: Set S3_CDN_URL secret manually for full CDN URLs');
         }
       }
     } catch (error) {
