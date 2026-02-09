@@ -60,8 +60,10 @@ jobs:
       pull-requests: write
     env:
       TEST_TARGET: ${{ inputs.environment || 'staging' }}
-      # Use custom URL if provided, otherwise construct from account ID
-      TEST_BASE_URL: ${{ inputs.custom_url != '' && inputs.custom_url || format('https://cloudflare-image-workers{0}.{1}.workers.dev', inputs.environment == 'staging' && '-staging' || '', secrets.CLOUDFLARE_ACCOUNT_ID) }}
+      # TEST_BASE_URL is derived in a step below (or directly set via custom_url)
+      TEST_BASE_URL: ${{ inputs.custom_url }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       API_KEY: ${{ secrets.API_KEY }}
       API_KEYS: ${{ secrets.API_KEYS }}
 
@@ -72,23 +74,36 @@ jobs:
       - name: Verify environment configuration
         run: |
           echo "Environment: ${{ env.TEST_TARGET }}"
-          echo "Workers URL: ${{ env.TEST_BASE_URL }}"
+          echo "Custom URL provided: ${{ inputs.custom_url != '' && 'yes' || 'no' }}"
           echo "API Key: ${{ env.API_KEY != '' && '✅ Configured' || (env.API_KEYS != '' && '✅ Configured (API_KEYS)') || '⚠️ Not configured (tests may fail if auth required)' }}"
 
-          # For auto-constructed URL, verify CLOUDFLARE_ACCOUNT_ID is set
-          if [ -z "${{ inputs.custom_url }}" ]; then
-            if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
-              echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
-              echo "This is needed to construct the Workers URL."
-              echo "Either set CLOUDFLARE_ACCOUNT_ID or provide a custom_url."
-              exit 1
-            fi
-            echo "✅ Workers URL auto-constructed from account ID"
+          if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+            echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
+            echo "This is required to derive the Workers URL."
+            exit 1
           fi
+          echo "✅ CLOUDFLARE_ACCOUNT_ID configured"
 
           if [ -n "${{ inputs.custom_url }}" ]; then
             echo "✅ Using custom Workers URL"
+          else
+            echo "✅ Workers URL will be derived from account ID"
           fi
+
+      - name: Derive base URL
+        run: |
+          if [ -n "${{ inputs.custom_url }}" ]; then
+            echo "TEST_BASE_URL=${{ inputs.custom_url }}" >> $GITHUB_ENV
+          else
+            if [ "${{ env.TEST_TARGET }}" = "staging" ]; then
+              WORKER_NAME="cloudflare-image-workers-staging"
+            else
+              WORKER_NAME="cloudflare-image-workers"
+            fi
+            echo "TEST_BASE_URL=https://${WORKER_NAME}.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev" >> $GITHUB_ENV
+          fi
+
+          echo "Resolved TEST_BASE_URL=$(cat $GITHUB_ENV | grep '^TEST_BASE_URL=' | cut -d'=' -f2-)"
 
       - name: Derive API key
         run: |
@@ -123,6 +138,27 @@ jobs:
           npx playwright install --with-deps chromium
 
 
+      - name: Smoke check /health
+        run: |
+          echo "Testing /health at: $TEST_BASE_URL/health"
+
+          # Dump DNS for visibility
+          echo "DNS lookup:"
+          node -e "const {hostname}=new URL(process.env.TEST_BASE_URL); require('dns').lookup(hostname,(e,a,f)=>{ console.log(e?e.message:{address:a,family:f});});"
+
+          # Try to reach the endpoint (no auth required for /health)
+          curl -sS -D /tmp/headers.txt -o /tmp/body.txt "$TEST_BASE_URL/health" || true
+          echo "Status line: $(head -n 1 /tmp/headers.txt || true)"
+          echo "Response body:"
+          cat /tmp/body.txt || true
+
+          # Fail fast if not 200; this provides a clearer error than Playwright fetch failed
+          if ! grep -q "^HTTP/.* 200" /tmp/headers.txt; then
+            echo "❌ /health is not reachable (expected HTTP 200)"
+            exit 1
+          fi
+          echo "✅ /health reachable"
+
       - name: Run E2E tests
         run: |
           cd e2e
@@ -134,8 +170,8 @@ jobs:
             npx playwright test --reporter=list,junit,html
           fi
         env:
-          TEST_TARGET: ${{ env.TEST_TARGET }}
-          TEST_BASE_URL: ${{ env.TEST_BASE_URL }}
+          # NOTE: TEST_BASE_URL is derived at runtime via $GITHUB_ENV.
+          # Do not override it here with ${{ env.TEST_BASE_URL }} (expressions are evaluated before runtime env updates).
           API_KEY: ${{ env.API_KEY_EFFECTIVE }}
           CI: true
 
