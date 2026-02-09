@@ -100,7 +100,20 @@ jobs:
             else
               WORKER_NAME="cloudflare-image-workers"
             fi
-            echo "TEST_BASE_URL=https://${WORKER_NAME}.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev" >> $GITHUB_ENV
+
+            echo "Fetching account workers.dev subdomain via Cloudflare API..."
+            SUBDOMAIN=$(curl -sS \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+              | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const j=JSON.parse(s); if(!j.success){ console.error(JSON.stringify(j.errors||j, null, 2)); process.exit(1);} console.log(j.result?.subdomain||'');});")
+
+            if [ -z "$SUBDOMAIN" ]; then
+              echo "❌ Could not derive workers.dev subdomain"
+              exit 1
+            fi
+
+            echo "✅ workers.dev subdomain: $SUBDOMAIN"
+            echo "TEST_BASE_URL=https://${WORKER_NAME}.${SUBDOMAIN}.workers.dev" >> $GITHUB_ENV
           fi
 
           echo "Resolved TEST_BASE_URL=$(cat $GITHUB_ENV | grep '^TEST_BASE_URL=' | cut -d'=' -f2-)"
