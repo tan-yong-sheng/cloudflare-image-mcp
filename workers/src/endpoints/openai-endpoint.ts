@@ -121,9 +121,12 @@ export class OpenAIEndpoint {
         b64_json: 'b64_json' in img ? img.b64_json : '',
       }));
     } else {
-      responseData = result.images.map((img) => ({
-        url: 'url' in img ? img.url : '',
-      }));
+      const origin = new URL(request.url).origin;
+      responseData = result.images.map((img) => {
+        const url = 'url' in img ? img.url : '';
+        const absoluteUrl = url.startsWith('/') ? new URL(url, origin).toString() : url;
+        return { url: absoluteUrl };
+      });
     }
 
     const response: OpenAIImageResponse = {
