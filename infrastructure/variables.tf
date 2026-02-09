@@ -30,7 +30,7 @@ variable "bucket_name" {
 variable "bucket_location" {
   description = "Geographic location hint for the R2 bucket"
   type        = string
-  default     = "WNAM"  # Match existing bucket location
+  default     = "WNAM" # Match existing bucket location
 
   validation {
     condition     = contains(["APAC", "WNAM", "ENAM", "WEUR", "EEUR", "OC"], var.bucket_location)
