@@ -11,14 +11,66 @@ export class R2StorageService {
   private cdnUrl: string;
   private accountId: string;
   private timezone: string;
+  private bucketName: string;
+  private apiToken: string;
 
   constructor(env: Env) {
     this.bucket = env.IMAGE_BUCKET;
     this.expiryHours = parseInt(env.IMAGE_EXPIRY_HOURS || '24', 10);
-    this.cdnUrl = env.S3_CDN_URL || '';
     this.accountId = env.CLOUDFLARE_ACCOUNT_ID;
+    this.apiToken = env.CLOUDFLARE_API_TOKEN;
+    this.bucketName = env.BUCKET_NAME || '';
     // Default to UTC if TZ is not set
     this.timezone = env.TZ || 'UTC';
+
+    // Auto-detect CDN URL if not provided
+    this.cdnUrl = env.S3_CDN_URL || '';
+  }
+
+  /**
+   * Get or fetch the public CDN URL for the R2 bucket
+   * If S3_CDN_URL is not set, fetch it from Cloudflare API
+   */
+  private async getCdnUrl(): Promise<string> {
+    if (this.cdnUrl) {
+      return this.cdnUrl;
+    }
+
+    // If bucket name is not available, we can't fetch the CDN URL
+    if (!this.bucketName) {
+      console.warn('BUCKET_NAME not set, using worker proxy URLs instead of CDN');
+      return '';
+    }
+
+    try {
+      // Fetch bucket configuration from Cloudflare API to get public URL
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/r2/buckets/${this.bucketName}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json() as any;
+        // R2 public domain is in the format: pub-{hash}.r2.dev
+        // It's available at: data.result.domain
+        const publicDomain = data.result?.domain;
+        if (publicDomain) {
+          this.cdnUrl = `https://${publicDomain}`;
+          console.log(`Auto-detected CDN URL: ${this.cdnUrl}`);
+          return this.cdnUrl;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to auto-detect CDN URL:', error);
+    }
+
+    // Fallback to empty string (will use worker proxy)
+    return '';
   }
 
   /**
@@ -71,9 +123,9 @@ export class R2StorageService {
       },
     });
 
-    // Generate URL - use CDN URL if configured, otherwise fall back to worker proxy
-    // The worker proxy serves images at /images/{key} path
-    const url = this.cdnUrl ? `${this.cdnUrl}/${key}` : `/${key}`;
+    // Generate URL - try to get CDN URL (auto-detect if not configured), otherwise fall back to worker proxy
+    const cdnUrl = await this.getCdnUrl();
+    const url = cdnUrl ? `${cdnUrl}/${key}` : `/${key}`;
 
     return { id, url, expiresAt };
   }
@@ -175,12 +227,15 @@ export class R2StorageService {
 
     const listed = await this.bucket.list(listOptions);
 
+    // Get CDN URL once for all images
+    const cdnUrl = await this.getCdnUrl();
+
     const images = listed.objects.map((obj) => {
       const custom = obj.customMetadata || {};
       const id = this.extractIdFromKey(obj.key);
 
-      // Generate URL - use CDN URL if configured, otherwise fall back to worker proxy
-      const url = this.cdnUrl ? `${this.cdnUrl}/${obj.key}` : `/${obj.key}`;
+      // Generate URL - use CDN URL if available, otherwise fall back to worker proxy
+      const url = cdnUrl ? `${cdnUrl}/${obj.key}` : `/${obj.key}`;
 
       return {
         id,

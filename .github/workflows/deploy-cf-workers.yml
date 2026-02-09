@@ -147,6 +147,7 @@ jobs:
 
           [vars]
           IMAGE_EXPIRY_HOURS = "24"
+          BUCKET_NAME = "${{ needs.infrastructure.outputs.s3_bucket }}"
           EOF
 
           echo "✅ wrangler.toml generated with bucket: ${{ needs.infrastructure.outputs.s3_bucket }}"

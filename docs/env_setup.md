@@ -33,6 +33,7 @@ S3_ACCESS_KEY="your_access_key"
 S3_SECRET_KEY="your_secret_key"
 
 # Public CDN URL for images (configure in R2 dashboard > Settings > Public access)
+# If not provided, the system will auto-detect it via Cloudflare API (requires BUCKET_NAME)
 S3_CDN_URL="https://pub-your-id.r2.dev"
 ```
 

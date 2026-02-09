@@ -132,6 +132,7 @@ export interface Env {
   COMMIT_SHA?: string;
   DEFAULT_MODEL?: string; // If set, only run_models is available with this default
   TZ?: string; // Timezone for logging and folder creation (default: UTC)
+  BUCKET_NAME?: string; // R2 bucket name (for constructing CDN URL if S3_CDN_URL not provided)
 }
 
 // MCP message types
