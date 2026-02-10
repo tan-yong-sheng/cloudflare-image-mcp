@@ -220,7 +220,7 @@ curl https://cloudflare-image-workers.<account_id>.workers.dev/health
 Verify Workers deployment:
 
 ```bash
-curl https://cloudflare-image-workers.tanyongsheng-net.workers.dev/health
+curl https://cloudflare-image-workers.*.workers.dev/health
 ```
 
 ### Browser Installation Issues

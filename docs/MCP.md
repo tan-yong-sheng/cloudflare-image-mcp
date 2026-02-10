@@ -352,7 +352,7 @@ Returns detailed OpenAPI schema for a model.
 
 ```typescript
 async function callMCPTool(method: string, params: any) {
-  const response = await fetch('https://cloudflare-image-workers.tanyongsheng-net.workers.dev/mcp/message', {
+  const response = await fetch('https://cloudflare-image-workers.*.workers.dev/mcp/message', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -392,7 +392,7 @@ import requests
 
 def call_mcp(method, params=None):
     response = requests.post(
-        'https://cloudflare-image-workers.tanyongsheng-net.workers.dev/mcp/message',
+        'https://cloudflare-image-workers.*.workers.dev/mcp/message',
         json={
             'jsonrpc': '2.0',
             'id': 1,
@@ -418,7 +418,7 @@ print(result['result']['content'][0]['text'])
 
 ```bash
 # Initialize
-curl -X POST https://cloudflare-image-workers.tanyongsheng-net.workers.dev/mcp/message \
+curl -X POST https://cloudflare-image-workers.*.workers.dev/mcp/message \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -432,7 +432,7 @@ curl -X POST https://cloudflare-image-workers.tanyongsheng-net.workers.dev/mcp/m
   }'
 
 # Generate image
-curl -X POST https://cloudflare-image-workers.tanyongsheng-net.workers.dev/mcp/message \
+curl -X POST https://cloudflare-image-workers.*.workers.dev/mcp/message \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",

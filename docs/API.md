@@ -269,7 +269,7 @@ Rate limits depend on your Cloudflare Workers plan and Cloudflare AI subscriptio
 ### JavaScript/TypeScript
 
 ```typescript
-const response = await fetch('https://cloudflare-image-workers.tanyongsheng-net.workers.dev/v1/images/generations', {
+const response = await fetch('https://cloudflare-image-workers.*.workers.dev/v1/images/generations', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -290,7 +290,7 @@ console.log(data.data[0].url);
 import requests
 
 response = requests.post(
-    'https://cloudflare-image-workers.tanyongsheng-net.workers.dev/v1/images/generations',
+    'https://cloudflare-image-workers.*.workers.dev/v1/images/generations',
     json={
         'prompt': 'A futuristic city at night',
         'model': '@cf/black-forest-labs/flux-1-schnell',
@@ -306,7 +306,7 @@ print(data['data'][0]['url'])
 ### cURL
 
 ```bash
-curl -X POST https://cloudflare-image-workers.tanyongsheng-net.workers.dev/v1/images/generations \
+curl -X POST https://cloudflare-image-workers.*.workers.dev/v1/images/generations \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "A futuristic city at night",
@@ -322,7 +322,7 @@ The API is compatible with OpenAI's Node.js SDK:
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  baseURL: 'https://cloudflare-image-workers.tanyongsheng-net.workers.dev/v1',
+  baseURL: 'https://cloudflare-image-workers.*.workers.dev/v1',
   apiKey: 'dummy-key' // Not used but required by SDK
 });
 
