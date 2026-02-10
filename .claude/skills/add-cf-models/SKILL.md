@@ -266,7 +266,7 @@ curl -sS http://localhost:8787/v1/models -H "Authorization: Bearer <your-api-key
 - Open http://localhost:8787/
 - Verify the dropdown includes: `@cf/provider/model-name`
 
-### Level 2 — API smoke test (optional image generation)
+### Level 2 — API smoke test (optional generation + edits)
 
 If you want to verify the model can actually generate:
 
@@ -281,6 +281,47 @@ curl -sS -X POST "http://localhost:8787/v1/images/generations" \
     "size": "1024x1024"
   }'
 ```
+
+If the model supports `image-to-image` (`supportedTasks` includes `"image-to-image"`), verify `/v1/images/edits` too.
+
+**Important:** In this project, **OpenAI-compatible image-to-image and masked edits both use** `POST /v1/images/edits`:
+- **img2img**: provide `image` + `prompt` (no `mask`)
+- **masked edits (inpainting-style)**: provide `image` + `mask` + `prompt`
+
+#### `/v1/images/edits` (JSON base64) — img2img (no mask)
+
+```bash
+curl -sS -X POST "http://localhost:8787/v1/images/edits" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -d '{
+    "model": "@cf/provider/model-name",
+    "prompt": "Make it a watercolor painting",
+    "image_b64": "<base64 PNG>",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+#### `/v1/images/edits` (JSON base64) — masked edit (requires mask)
+
+```bash
+curl -sS -X POST "http://localhost:8787/v1/images/edits" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -d '{
+    "model": "@cf/provider/model-name",
+    "prompt": "Replace the background with a forest",
+    "image_b64": "<base64 PNG>",
+    "mask_b64": "<base64 PNG mask>",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+Notes:
+- Some models use different parameter names (e.g. `image` instead of `image_b64`, or `mask` instead of `mask_b64`).
+- Always confirm via **MCP**: `describe_model(model_id)` (it lists the accepted parameter keys), or check `workers/src/config/models.json`.
 
 ### Level 3 — CI-grade verification (GitHub Actions E2E)
 
