@@ -10,6 +10,7 @@
 import { test, expect } from '@playwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { getAuthHeaders } from '../../../lib/target.js';
 
 interface TextContent {
   type: 'text';
@@ -25,8 +26,12 @@ test.describe('MCP SDK Integration', () => {
       version: '1.0.0',
     });
 
+    // Get auth headers from environment (same as Playwright config)
+    const authHeaders = getAuthHeaders();
+
     const transport = new StreamableHTTPClientTransport(
-      new URL(`${baseURL}/mcp`)
+      new URL(`${baseURL}/mcp`),
+      { requestInit: { headers: authHeaders } }
     );
 
     await client.connect(transport);
