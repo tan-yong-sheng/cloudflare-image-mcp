@@ -1,3 +1,11 @@
+---
+name: add-cf-models
+description: Guides you through adding a new Cloudflare Workers AI text-to-image model. Covers updating backend model configuration, frontend dropdowns, and creating documentation. Includes instructions for parameter setup, supported tasks, usage examples, and deployment.
+license: MIT
+version: 2.0.0
+models: gpt-5.2
+---
+
 # Add Cloudflare Text-to-Image Model Skill
 
 This skill guides you through adding a new Cloudflare Workers AI text-to-image model to the Cloudflare Image MCP project.
@@ -8,6 +16,8 @@ When adding a new Cloudflare text-to-image model, you need to update:
 1. **Model Configuration** (backend) - Define model parameters, limits, and capabilities
 2. **Frontend Dropdown** - Add model to the UI selection
 3. **Model Documentation** - Create markdown doc in `docs/models/generation/`
+
+**Note:** MCP automatically picks up new models from the model configuration - no separate MCP code changes are needed. The `list_models` and `describe_model` tools dynamically read from `workers/src/config/models.ts`.
 
 ## Prerequisites
 
@@ -35,18 +45,6 @@ docs/
 └── models/
     └── generation/
         └── <model-name>.md      # Cloudflare model documentation (REQUIRED)
-```
-
-## Files to Edit
-
-```
-workers/
-├── src/
-│   ├── config/
-│   │   ├── models.json          # Source of truth - JSON schema
-│   │   └── models.ts            # TypeScript runtime config (mirror of JSON)
-│   └── endpoints/
-│       └── frontend.ts          # HTML dropdown options
 ```
 
 ## Step-by-Step Process
@@ -227,6 +225,84 @@ Then deploy via GitHub Actions or:
 ```bash
 gh workflow run deploy-workers.yml -f environment=production
 ```
+
+## Verify the new model is available (choose a level)
+
+MCP and the OpenAI-compatible APIs surface models from the model registry, so the goal here is to confirm:
+- The model appears in **model listings**
+- The model can be **described** (parameters/limits show up)
+- The model can be **invoked** (optional; requires Workers AI access and may incur cost)
+
+### Level 1 — Quick local verification (fastest)
+
+1) **Type-check**
+```bash
+cd workers
+npm run check
+```
+
+2) **Run the Worker locally (remote bindings)**
+```bash
+cd workers
+npx wrangler dev --remote
+```
+
+3) **Confirm the model is listed (OpenAI)**
+```bash
+curl -sS http://localhost:8787/v1/models | head
+```
+
+4) **Confirm the model can be described**
+```bash
+curl -sS "http://localhost:8787/v1/models/%40cf%2Fprovider%2Fmodel-name" | head
+```
+
+If `API_KEYS` is enabled, add the header:
+```bash
+curl -sS http://localhost:8787/v1/models -H "Authorization: Bearer <your-api-key>" | head
+```
+
+5) **Confirm the model appears in the Web UI dropdown**
+- Open http://localhost:8787/
+- Verify the dropdown includes: `@cf/provider/model-name`
+
+### Level 2 — API smoke test (optional image generation)
+
+If you want to verify the model can actually generate:
+
+```bash
+curl -sS -X POST "http://localhost:8787/v1/images/generations" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -d '{
+    "model": "@cf/provider/model-name",
+    "prompt": "A cute robot reading a book",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+### Level 3 — CI-grade verification (GitHub Actions E2E)
+
+Run the same tests used for staging/production validations.
+
+1) **Deploy**
+```bash
+gh workflow run deploy-workers.yml -f environment=staging
+# or
+gh workflow run deploy-workers.yml -f environment=production
+```
+
+2) **Run E2E tests**
+```bash
+gh workflow run e2e-tests.yml -f environment=staging
+# or target a specific test file
+# gh workflow run e2e-tests.yml -f environment=staging -f test_pattern=tests/api/mcp/tools.spec.ts
+```
+
+Notes:
+- The E2E workflow derives the Workers URL automatically using `CLOUDFLARE_ACCOUNT_ID` and the Workers subdomain API.
+- If your endpoints require auth, ensure repository secrets `API_KEY` or `API_KEYS` are set for E2E.
 
 ## Common Parameter Types
 
