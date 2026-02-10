@@ -63,13 +63,33 @@ export default {
           currentTime = now.toISOString();
         }
 
+        // Format deployedAt in configured timezone if available
+        let deployedAtFormatted = env.DEPLOYED_AT || 'unknown';
+        if (env.DEPLOYED_AT && env.DEPLOYED_AT !== 'unknown') {
+          try {
+            const deployedDate = new Date(env.DEPLOYED_AT);
+            deployedAtFormatted = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+            }).format(deployedDate);
+          } catch (err) {
+            // Keep original value if parsing fails
+          }
+        }
+
         return new Response(JSON.stringify({
           status: 'healthy',
           timestamp: Date.now(),
           currentTime,
           timezone,
           version: '0.1.0',
-          deployedAt: env.DEPLOYED_AT || 'unknown',
+          deployedAt: deployedAtFormatted,
           commitSha: env.COMMIT_SHA || 'unknown',
           authEnabled: !!env.API_KEYS,
         }), {
