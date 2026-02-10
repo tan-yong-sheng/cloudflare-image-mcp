@@ -52,7 +52,7 @@ env:
 jobs:
   deploy-staging:
     name: Deploy staging (for E2E)
-    if: (inputs.environment || 'staging') == 'staging' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: (inputs.environment || 'staging') == 'staging' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
     uses: ./.github/workflows/deploy-workers.yml
     with:
       environment: staging
@@ -62,7 +62,7 @@ jobs:
     name: E2E Tests (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
     needs: [deploy-staging]
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository)
     environment: ${{ inputs.environment || 'staging' }}
     permissions:
       contents: read
@@ -283,7 +283,7 @@ jobs:
   cleanup-staging:
     name: Cleanup Staging Worker
     needs: [deploy-staging, e2e-tests]
-    if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy-staging.result == 'success'
+    if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy-staging.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     environment: staging
     permissions:
