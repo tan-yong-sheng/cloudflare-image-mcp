@@ -39,10 +39,10 @@ async function main() {
   const TEST_IMAGE = path.join(__dirname, 'test_images/white-cloud-blue-sky-sea.jpg');
   const imageB64 = imageToBase64(TEST_IMAGE);
 
-  console.log('=== INPAINTING TESTS (JSON format with image_b64 + mask) ===\n');
+  console.log('=== MASKED EDIT TESTS (JSON format with image_b64 + mask) ===\n');
 
-  // Test 1: SDXL Inpainting with JSON format
-  console.log('1. SDXL Inpainting (JSON format)...');
+  // Test 1: SDXL Masked edit with JSON format
+  console.log('1. SDXL Masked edit (JSON format)...');
   const r1 = await makeRequest('/v1/images/edits', {
     model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
     prompt: 'Replace the background with a tropical beach',
@@ -55,8 +55,8 @@ async function main() {
   console.log(`Status: ${r1.status}`);
   console.log(`Response: ${r1.body.substring(0, 500)}\n`);
 
-  // Test 2: SD 1.5 Inpainting with JSON format
-  console.log('2. SD 1.5 Inpainting (JSON format)...');
+  // Test 2: SD 1.5 Masked edit with JSON format
+  console.log('2. SD 1.5 Masked edit (JSON format)...');
   const r2 = await makeRequest('/v1/images/edits', {
     model: '@cf/runwayml/stable-diffusion-v1-5-inpainting',
     prompt: 'Replace with a dragon',
@@ -118,8 +118,8 @@ async function main() {
 
   console.log('=== SUMMARY ===');
   const results = [
-    { name: 'SDXL Inpainting', status: r1.status },
-    { name: 'SD 1.5 Inpainting', status: r2.status },
+    { name: 'SDXL Masked edit', status: r1.status },
+    { name: 'SD 1.5 Masked edit', status: r2.status },
     { name: 'SDXL Img2Img', status: r3.status },
     { name: '@cf/lykon/dreamshaper-8-lcm Img2Img', status: r4.status },
     { name: 'SD 1.5 Img2Img', status: r5.status },

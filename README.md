@@ -6,11 +6,11 @@ OpenAI-compatible image generation API + MCP server powered by Cloudflare Worker
 
 ## 🌟 Features
 
-- **OpenAI-Compatible API**: `/v1/images/generations` endpoint
+- **OpenAI-Compatible API**: `/v1/images/generations` + `/v1/images/edits` endpoints
 - **MCP Protocol Support**:
   - HTTP transport with SSE (streamable)
 - **10 Image Generation Models**: FLUX, SDXL, Stable Diffusion, and more
-- **Multiple Tasks**: Text-to-image, image-to-image, inpainting
+- **Multiple Tasks**: Text-to-image, image-to-image (masked edits supported)
 - **Deployment**: Cloudflare Workers
 - **Web Frontend**: Interactive UI for image generation
 - **R2 Storage**: Auto-expiring image storage with CDN
@@ -52,23 +52,23 @@ npx wrangler deploy
 
 ### Cloudflare Workers Deployment (CI/CD)
 
-**Option 1: Manual Deployment**
+**Option 1: Manual Deployment (local wrangler.toml)**
 
 ```bash
 cd workers
-cp wrangler.toml.example wrangler.toml
-# Edit wrangler.toml with your account details
-npm run deploy
+# Configure your local workers/wrangler.toml (bindings: IMAGE_BUCKET, AI)
+# Then deploy
+npx wrangler deploy
 ```
 
-**Option 2: Automated CI/CD**
+**Option 2: Automated CI/CD (recommended)**
 
 The repository includes automated deployment via GitHub Actions:
 
 1. Add secrets to your GitHub repository:
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
-   - `CDN_URL` (optional)
+   - `S3_CDN_URL` (optional)
 
 2. Push to main branch or trigger workflow manually
 
@@ -114,13 +114,13 @@ Open http://localhost:3000/ in your browser for an interactive UI.
 | FLUX.1 [schnell] | text-to-image | Black Forest Labs |
 | FLUX.2 [klein] | text-to-image, image-to-image | Black Forest Labs |
 | FLUX.2 [dev] | text-to-image, image-to-image | Black Forest Labs |
-| SDXL Base 1.0 | text-to-image, image-to-image, inpainting | Stability AI |
+| SDXL Base 1.0 | text-to-image, image-to-image (img2img + masked edits) | Stability AI |
 | SDXL Lightning | text-to-image | ByteDance |
-| Dreamshaper 8 LCM | text-to-image, image-to-image | Lykon |
+| Dreamshaper 8 LCM | text-to-image, image-to-image (img2img) | Lykon |
 | Lucid Origin | text-to-image | Leonardo |
 | Phoenix 1.0 | text-to-image | Leonardo |
-| SD 1.5 Img2Img | image-to-image | Runway ML |
-| SD 1.5 Inpainting | inpainting | Runway ML |
+| SD 1.5 Img2Img | image-to-image (img2img) | Runway ML |
+| SD 1.5 Inpainting | image-to-image (requires mask) | Runway ML |
 
 ## 🧪 Testing
 
@@ -135,9 +135,10 @@ npm run test:e2e:production
 ## 📚 Documentation
 
 - [Usage Guide](docs/USAGE.md) - Detailed API usage
+- [Environment Setup](docs/CREDENTIALS_SETUP.md) - Required Cloudflare credentials
 - [Deployment Guide](docs/DEPLOY.md) - Production deployment
-- [Implementation Plan](docs/PLAN.md) - Architecture details
-- [OpenAI API Spec](docs/api/openai_standard/image_endpoint.md) - API reference
+- [MCP Guide](docs/MCP.md) - MCP tools and transports
+- [OpenAI-Compatible API](docs/API.md) - REST endpoints (`/v1/images/*`)
 
 ## 🔧 Development
 

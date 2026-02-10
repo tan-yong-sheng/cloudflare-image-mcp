@@ -2,7 +2,7 @@
 // Image Generator Service - Routes to appropriate Cloudflare AI model
 // ============================================================================
 
-import type { Env, ModelConfig, ParsedParams } from '../types.js';
+import type { Env, ModelConfig } from '../types.js';
 import { ParamParser } from './param-parser.js';
 import { R2StorageService } from './r2-storage.js';
 import { MODEL_CONFIGS } from '../config/models.js';
@@ -206,6 +206,13 @@ export class ImageGeneratorService {
       return { success: false, error: `Model ${modelId} does not support image-to-image` };
     }
 
+    if (model.editCapabilities?.mask === 'required') {
+      return {
+        success: false,
+        error: `Model ${modelId} requires a mask; use /v1/images/edits with mask (masked edit).`,
+      };
+    }
+
     try {
       // Parse parameters with image
       const params = ParamParser.parse(
@@ -291,8 +298,8 @@ export class ImageGeneratorService {
       return { success: false, error: `Unknown model: ${modelId}` };
     }
 
-    if (!model.supportedTasks.includes('inpainting')) {
-      return { success: false, error: `Model ${modelId} does not support inpainting` };
+    if (!model.editCapabilities?.mask) {
+      return { success: false, error: `Model ${modelId} does not support mask-based edits` };
     }
 
     try {
@@ -341,6 +348,7 @@ export class ImageGeneratorService {
     description: string;
     capabilities: string[];
     taskTypes: string[];
+    editCapabilities?: ModelConfig['editCapabilities'];
   }> {
     const models: Array<{
       id: string;
@@ -348,6 +356,7 @@ export class ImageGeneratorService {
       description: string;
       capabilities: string[];
       taskTypes: string[];
+      editCapabilities?: ModelConfig['editCapabilities'];
     }> = [];
 
     for (const [id, config] of this.models) {
@@ -363,6 +372,7 @@ export class ImageGeneratorService {
         description: config.description,
         capabilities,
         taskTypes: config.supportedTasks,
+        editCapabilities: config.editCapabilities,
       });
     }
 

@@ -1,17 +1,11 @@
 import { test, expect } from '@playwright/test';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 /**
  * OpenAI Image Edits API E2E Tests
  *
- * Tests the /v1/images/edits endpoint for image editing (image-to-image and inpainting).
+ * Tests the /v1/images/edits endpoint for image editing (image-to-image and masked edits).
  * @api
  */
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Test image - 1x1 pixel red PNG in base64
 const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -20,11 +14,6 @@ const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQ
 const TEST_MASK_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR42mP8DwABAQEAA0Q9124AAAAASUVORK5CYII=';
 
 test.describe('OpenAI Image Edits API', () => {
-  // Models that support image-to-image
-  const IMG2IMG_MODELS = [
-    '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-    '@cf/black-forest-labs/flux-2-klein-4b',
-  ];
 
   test('POST /v1/images/edits with image for image-to-image transformation', async ({ request }) => {
     const model = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
@@ -55,7 +44,7 @@ test.describe('OpenAI Image Edits API', () => {
     }
   });
 
-  test('POST /v1/images/edits with image and mask for inpainting', async ({ request }) => {
+  test('POST /v1/images/edits with image and mask for masked edits', async ({ request }) => {
     const model = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 
     const response = await request.post('/v1/images/edits', {
@@ -77,6 +66,24 @@ test.describe('OpenAI Image Edits API', () => {
     } else {
       console.log(`Inpainting returned ${response.status()} (may not be supported)`);
     }
+  });
+
+  test('POST /v1/images/edits with mask-required model without mask returns error', async ({ request }) => {
+    const response = await request.post('/v1/images/edits', {
+      data: {
+        image: TEST_IMAGE_BASE64,
+        prompt: 'Add something',
+        model: '@cf/runwayml/stable-diffusion-v1-5-inpainting',
+        n: 1,
+        size: '512x512',
+      },
+    });
+
+    expect(response.status()).toBeGreaterThanOrEqual(400);
+
+    const body = await response.json();
+    expect(body).toHaveProperty('error');
+    expect(String(body.error.message)).toMatch(/requires a mask/i);
   });
 
   test('POST /v1/images/edits without image returns 400', async ({ request }) => {

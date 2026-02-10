@@ -94,7 +94,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     apiVersion: 2,
     inputFormat: 'json',
     responseFormat: 'binary',
-    supportedTasks: ['text-to-image', 'image-to-image', 'inpainting'],
+    supportedTasks: ['text-to-image', 'image-to-image'],
+    editCapabilities: { mask: 'supported' },
     parameters: {
       prompt: { cfParam: 'prompt', type: 'string', required: true },
       negative_prompt: { cfParam: 'negative_prompt', type: 'string', default: '' },
@@ -270,12 +271,13 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   '@cf/runwayml/stable-diffusion-v1-5-inpainting': {
     id: '@cf/runwayml/stable-diffusion-v1-5-inpainting',
     name: 'Stable Diffusion 1.5 Inpainting',
-    description: 'Stable Diffusion for inpainting with mask support',
+    description: 'Stable Diffusion for masked edits (requires mask)',
     provider: 'runwayml',
     apiVersion: 2,
     inputFormat: 'json',
     responseFormat: 'binary',
-    supportedTasks: ['inpainting'],
+    supportedTasks: ['image-to-image'],
+    editCapabilities: { mask: 'required' },
     parameters: {
       prompt: { cfParam: 'prompt', type: 'string', required: true },
       negative_prompt: { cfParam: 'negative_prompt', type: 'string', default: '' },
@@ -311,6 +313,7 @@ export function listModels(): Array<{
   description: string;
   capabilities: string[];
   taskTypes: string[];
+  editCapabilities?: ModelConfig['editCapabilities'];
 }> {
   return Object.values(MODEL_CONFIGS).map((config) => ({
     id: config.id,
@@ -318,5 +321,6 @@ export function listModels(): Array<{
     description: config.description,
     capabilities: Object.keys(config.parameters),
     taskTypes: config.supportedTasks,
+    editCapabilities: config.editCapabilities,
   }));
 }

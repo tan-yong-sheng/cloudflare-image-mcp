@@ -2,7 +2,7 @@
 
 **Model ID**: @cf/runwayml/stable-diffusion-v1-5-img2img
 
-**Mode**: Text-to-Image
+**Mode**: Image-to-Image
 
 **Origin**: runwayml
 
@@ -32,20 +32,14 @@ export default {
       "https://pub-1fb693cb11cc46b2b2f656f51e015a2c.r2.dev/dog.png"
     );
 
-    // Mask of dog
-    const exampleMask = await fetch(
-      "https://pub-1fb693cb11cc46b2b2f656f51e015a2c.r2.dev/dog-mask.png"
-    );
-
     const inputs = {
-      prompt: "Change to a lion",
+      prompt: "Transform into a lion",
       image: [...new Uint8Array(await exampleInputImage.arrayBuffer())],
-      mask: [...new Uint8Array(await exampleMask.arrayBuffer())],
     };
 
     const response =
       await env.AI.run(
-        "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+        "@cf/runwayml/stable-diffusion-v1-5-img2img",
         inputs
       );
 
@@ -102,7 +96,7 @@ curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run
     
 -   `mask`
     
-    An array representing An array of integers that represent mask image data for inpainting constrained to 8-bit unsigned integer values
+    An array representing mask image data for masked edits (inpainting) constrained to 8-bit unsigned integer values
     
     -   `items`
         
@@ -173,7 +167,7 @@ The following schemas are based on JSON Schema
         },
         "mask": {
             "type": "array",
-            "description": "An array representing An array of integers that represent mask image data for inpainting constrained to 8-bit unsigned integer values",
+            "description": "An array representing mask image data for masked edits (inpainting) constrained to 8-bit unsigned integer values",
             "items": {
                 "type": "number",
                 "description": "A value between 0 and 255"

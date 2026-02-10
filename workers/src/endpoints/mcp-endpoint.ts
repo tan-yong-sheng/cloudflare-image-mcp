@@ -448,8 +448,13 @@ export class MCPEndpoint {
 
     // Return JSON with model_id -> taskTypes mapping
     const modelMap: Record<string, string[]> = {};
+    const editCapabilitiesMap: Record<string, any> = {};
+
     for (const model of models) {
       modelMap[model.id] = model.taskTypes;
+      if (model.editCapabilities) {
+        editCapabilitiesMap[model.id] = model.editCapabilities;
+      }
     }
 
     // Add next_step guidance
@@ -458,6 +463,7 @@ export class MCPEndpoint {
 
     const output = {
       ...modelMap,
+      edit_capabilities: editCapabilitiesMap,
       next_step: nextStep,
     };
 
@@ -508,6 +514,7 @@ export class MCPEndpoint {
       input_format: modelConfig.inputFormat,
       response_format: modelConfig.responseFormat,
       supported_tasks: modelConfig.supportedTasks,
+      edit_capabilities: modelConfig.editCapabilities || {},
       parameters: {},
     };
 
@@ -630,7 +637,7 @@ export class MCPEndpoint {
     const mode2Tools = [
       {
         name: 'run_models',
-        description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". You must call "describe_model" first to obtain the params required to use this tool, UNLESS the user explicitly provides params. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image, inpainting), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (inpainting).',
+        description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". You must call "describe_model" first to obtain the params required to use this tool, UNLESS the user explicitly provides params. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (image-to-image; requires mask in /v1/images/edits).',
         inputSchema: {
           type: 'object',
           properties: {

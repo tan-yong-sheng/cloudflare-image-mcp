@@ -102,13 +102,21 @@ export class ParamParser {
 
     // Image inputs
     if (mergedParams.image !== undefined) {
-      result.image_b64 = this.extractBase64(mergedParams.image);
+      const b64 = this.extractBase64(mergedParams.image);
+      result.image_b64 = b64;
+      // Some model configs use "image" as the parameter key.
+      (result as any).image = b64;
     }
     if (mergedParams.image_b64 !== undefined) {
-      result.image_b64 = this.extractBase64(mergedParams.image_b64);
+      const b64 = this.extractBase64(mergedParams.image_b64);
+      result.image_b64 = b64;
+      (result as any).image = b64;
     }
     if (mergedParams.mask !== undefined) {
-      result.mask_b64 = this.extractBase64(mergedParams.mask);
+      const b64 = this.extractBase64(mergedParams.mask);
+      result.mask_b64 = b64;
+      // Some model configs use "mask" as the parameter key.
+      (result as any).mask = b64;
     }
 
     // Apply model-specific limits
@@ -164,13 +172,19 @@ export class ParamParser {
 
     // Image inputs
     if (obj.image !== undefined) {
-      result.image_b64 = this.extractBase64(obj.image);
+      const b64 = this.extractBase64(obj.image);
+      result.image_b64 = b64;
+      (result as any).image = b64;
     }
     if (obj.image_b64 !== undefined) {
-      result.image_b64 = this.extractBase64(obj.image_b64);
+      const b64 = this.extractBase64(obj.image_b64);
+      result.image_b64 = b64;
+      (result as any).image = b64;
     }
     if (obj.mask !== undefined) {
-      result.mask_b64 = this.extractBase64(obj.mask);
+      const b64 = this.extractBase64(obj.mask);
+      result.mask_b64 = b64;
+      (result as any).mask = b64;
     }
 
     // Apply model-specific limits

@@ -210,9 +210,11 @@
       "responseFormat": "binary",
       "supportedTasks": [
         "text-to-image",
-        "image-to-image",
-        "inpainting"
+        "image-to-image"
       ],
+      "editCapabilities": {
+        "mask": "supported"
+      },
       "parameters": {
         "prompt": {
           "cfParam": "prompt",
@@ -276,7 +278,7 @@
           "cfParam": "mask",
           "type": "string",
           "default": null,
-          "description": "Mask for inpainting (base64)"
+          "description": "Mask for masked edits (base64)"
         },
         "strength": {
           "cfParam": "strength",

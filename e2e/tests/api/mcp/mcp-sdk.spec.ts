@@ -104,7 +104,22 @@ test.describe('MCP SDK Integration', () => {
         const models = JSON.parse(textContent.text);
         expect(Object.keys(models).length).toBeGreaterThan(0);
 
-        console.log('✅ MCP list_models returned', Object.keys(models).length - 1, 'models');
+        // Ensure task arrays never include the legacy "inpainting" task type
+        for (const [key, value] of Object.entries(models)) {
+          if (key === 'next_step' || key === 'edit_capabilities') continue;
+          if (Array.isArray(value)) {
+            expect(value).not.toContain('inpainting');
+          }
+        }
+
+        // Ensure edit_capabilities is present for mask-capable models
+        expect(models).toHaveProperty('edit_capabilities');
+        expect(models.edit_capabilities).toHaveProperty('@cf/stabilityai/stable-diffusion-xl-base-1.0');
+        expect(models.edit_capabilities['@cf/stabilityai/stable-diffusion-xl-base-1.0']).toHaveProperty('mask', 'supported');
+        expect(models.edit_capabilities).toHaveProperty('@cf/runwayml/stable-diffusion-v1-5-inpainting');
+        expect(models.edit_capabilities['@cf/runwayml/stable-diffusion-v1-5-inpainting']).toHaveProperty('mask', 'required');
+
+        console.log('✅ MCP list_models returned', Object.keys(models).length - 2, 'models');
       }
     } finally {
       await transport.close();

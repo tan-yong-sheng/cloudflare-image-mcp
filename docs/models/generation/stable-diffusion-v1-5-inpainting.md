@@ -2,7 +2,7 @@
 
 **Model ID**: @cf/runwayml/stable-diffusion-v1-5-inpainting
 
-**Mode**: Text-to-Image
+**Mode**: Image-to-Image (masked edits; mask required)
 
 **Origin**: runwayml
 
@@ -59,10 +59,16 @@ export default {
 
 curl
 ```curl
+# Masked edits require an input image + mask.
+# (Use image_b64/mask_b64 placeholders here; provide real base64 strings in practice.)
 curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/runwayml/stable-diffusion-v1-5-inpainting  \
   -X POST  \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"  \
-  -d '{ "prompt": "cyberpunk cat" }'
+  -d '{
+    "prompt": "Change to a lion",
+    "image_b64": "<base64-image>",
+    "mask_b64": "<base64-mask>"
+  }'
 ```
 
 ## Parameters
@@ -101,7 +107,7 @@ curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run
     
 -   `mask`
     
-    An array representing An array of integers that represent mask image data for inpainting constrained to 8-bit unsigned integer values
+    An array representing mask image data for masked edits (inpainting) constrained to 8-bit unsigned integer values
     
     -   `items`
         
@@ -172,7 +178,7 @@ The following schemas are based on JSON Schema
         },
         "mask": {
             "type": "array",
-            "description": "An array representing An array of integers that represent mask image data for inpainting constrained to 8-bit unsigned integer values",
+            "description": "An array representing mask image data for masked edits (inpainting) constrained to 8-bit unsigned integer values",
             "items": {
                 "type": "number",
                 "description": "A value between 0 and 255"

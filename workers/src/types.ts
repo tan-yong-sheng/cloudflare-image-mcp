@@ -60,7 +60,10 @@ export interface ModelConfig {
   apiVersion: number;
   inputFormat: 'json' | 'multipart';
   responseFormat: 'base64' | 'binary';
-  supportedTasks: ('text-to-image' | 'image-to-image' | 'inpainting')[];
+  supportedTasks: ('text-to-image' | 'image-to-image')[];
+  editCapabilities?: {
+    mask?: 'supported' | 'required';
+  };
   parameters: Record<string, ParamConfig>;
   limits: {
     maxPromptLength: number;

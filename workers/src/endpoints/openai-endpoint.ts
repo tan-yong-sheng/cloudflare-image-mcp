@@ -141,7 +141,7 @@ export class OpenAIEndpoint {
 
   /**
    * POST /v1/images/edits
-   * Image editing / inpainting (OpenAI-compatible)
+   * Image editing / masked edits (OpenAI-compatible)
    */
   private async handleEdits(request: Request): Promise<Response> {
     const contentType = request.headers.get('content-type') || '';
@@ -164,8 +164,9 @@ export class OpenAIEndpoint {
     } else {
       const body = await request.json();
       const req = body as OpenAIGenerationRequest;
-      imageData = (req as any).image;
-      maskData = (req as any).mask;
+      // JSON form can supply either image/mask or image_b64/mask_b64.
+      imageData = (req as any).image ?? (req as any).image_b64;
+      maskData = (req as any).mask ?? (req as any).mask_b64;
       prompt = req.prompt;
       modelId = req.model || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = req.n || 1;

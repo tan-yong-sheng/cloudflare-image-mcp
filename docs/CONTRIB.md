@@ -16,7 +16,7 @@ Cloudflare Image MCP is an image generation service that provides:
 | **Language** | TypeScript |
 | **AI Provider** | Cloudflare Workers AI (FLUX, SDXL, @cf/lykon/dreamshaper-8-lcm) |
 | **Storage** | Cloudflare R2 (S3-compatible) |
-| **Protocols** | OpenAI REST API, MCP (stdio + HTTP/SSE) |
+| **Protocols** | OpenAI REST API, MCP (HTTP/SSE) |
 | **Frontend** | HTML + Tailwind CSS (no framework) |
 
 ## Project Structure
@@ -65,7 +65,7 @@ For local development (wrangler):
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 
-R2 + AI are configured via `wrangler.toml` bindings.
+R2 + AI are configured via `workers/wrangler.toml` bindings for local development. In CI, `workers/wrangler.toml` is generated dynamically by `.github/workflows/deploy-workers.yml`.
 
 ### 3. Develop and Test
 

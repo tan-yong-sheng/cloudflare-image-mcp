@@ -1,15 +1,15 @@
 #!/bin/bash
-# Inpainting and Image-to-Image Tests - OpenAI-Compatible Format
+# Masked edits and Image-to-Image Tests - OpenAI-Compatible Format
 
 BASE_URL="http://localhost:3000"
 IMAGE_FILE="test_images/white-cloud-blue-sky-sea.jpg"
 MASK_FILE="test_images/white-cloud-blue-sky-sea.jpg"  # Using same image as mask for testing
 
-echo "=== INPAINTING TESTS (with mask) ==="
+echo "=== MASKED EDIT TESTS (with mask) ==="
 echo ""
 
-# Test 1: SDXL Inpainting
-echo "1. SDXL Inpainting (multipart)..."
+# Test 1: SDXL Masked edit
+echo "1. SDXL Masked edit (multipart)..."
 curl -s -X POST "$BASE_URL/v1/images/edits" \
   -F "model=@cf/stabilityai/stable-diffusion-xl-base-1.0" \
   -F "prompt=Replace the background with a tropical beach" \
@@ -21,8 +21,8 @@ curl -s -X POST "$BASE_URL/v1/images/edits" \
 echo ""
 echo ""
 
-# Test 2: SD 1.5 Inpainting
-echo "2. SD 1.5 Inpainting (multipart)..."
+# Test 2: SD 1.5 Masked edit
+echo "2. SD 1.5 Masked edit (multipart)..."
 curl -s -X POST "$BASE_URL/v1/images/edits" \
   -F "model=@cf/runwayml/stable-diffusion-v1-5-inpainting" \
   -F "prompt=Replace with a dragon" \

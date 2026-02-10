@@ -262,13 +262,21 @@ Generates images using Cloudflare Workers AI models.
 
 Lists all available models with their supported task types.
 
+Masked edits ("inpainting") are treated as **image-to-image** with a mask. Models advertise mask support via `edit_capabilities.mask`:
+- `supported` — masks are accepted
+- `required` — masks are required (this model_id cannot be used for unmasked img2img)
+
 **Parameters:** None
 
 **Returns:**
 ```json
 {
   "@cf/black-forest-labs/flux-1-schnell": ["text-to-image"],
-  "@cf/stabilityai/stable-diffusion-xl-base-1.0": ["text-to-image", "image-to-image", "inpainting"],
+  "@cf/stabilityai/stable-diffusion-xl-base-1.0": ["text-to-image", "image-to-image"],
+  "edit_capabilities": {
+    "@cf/stabilityai/stable-diffusion-xl-base-1.0": { "mask": "supported" },
+    "@cf/runwayml/stable-diffusion-v1-5-inpainting": { "mask": "required" }
+  },
   "next_step": "call describe_model(model_id=\"@cf/black-forest-labs/flux-1-schnell\")"
 }
 ```
@@ -492,19 +500,19 @@ Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Transport
 ```
 
-## Stdio Transport
+## Transport notes
 
-The stdio MCP server (for Claude Desktop and other local MCP clients) always runs in multi-model mode.
+This Worker exposes MCP over **HTTP** (streamable HTTP) with optional **SSE** transport. There is no separate stdio server in this repository.
 
 **Available Tools:**
-- `list_models` - List all models with pricing, performance, and selection guide
+- `list_models` - List all available models (plus `edit_capabilities` for masked edits)
 - `describe_model` - Get detailed parameters for a specific model
 - `run_models` - Generate images
 
 **Workflow:**
 ```
 Step 1: list_models()
-  → Returns models[] with metadata and selection_guide
+  → Returns model_id → supported_tasks, plus edit_capabilities (if any)
 
 Step 2: describe_model(model_id="...")
   → Returns detailed parameters for chosen model
@@ -513,44 +521,17 @@ Step 3: run_models(model_id="...", prompt="...", params={...})
   → Generates image using selected model
 ```
 
-**Enhanced list_models Output:**
+**Example list_models Output:**
 ```json
 {
-  "models": [
-    {
-      "id": "@cf/black-forest-labs/flux-1-schnell",
-      "name": "FLUX.1 [schnell]",
-      "pricing": { "is_free": false, "estimated_cost_1024": "~$0.0007" },
-      "performance": { "speed": "ultra-fast", "estimated_time_seconds": 2 },
-      "quality": { "photorealism": 8, "text_rendering": 9 },
-      "best_for": ["Rapid prototyping", "Text-heavy images"]
-    }
-  ],
-  "selection_guide": {
-    "forSpeed": [...],
-    "forFreeModels": [...],
-    "forPhotorealism": [...],
-    "forTextRendering": [...]
+  "@cf/black-forest-labs/flux-1-schnell": ["text-to-image"],
+  "@cf/stabilityai/stable-diffusion-xl-base-1.0": ["text-to-image", "image-to-image"],
+  "edit_capabilities": {
+    "@cf/stabilityai/stable-diffusion-xl-base-1.0": { "mask": "supported" },
+    "@cf/runwayml/stable-diffusion-v1-5-inpainting": { "mask": "required" }
   },
-  "quick_start": {
-    "fastest_free": [...],
-    "best_for_photorealism_free": [...]
-  }
+  "next_step": "call describe_model(model_id=\"@cf/black-forest-labs/flux-1-schnell\")"
 }
-```
-
-### Selection Guide Categories
-
-| Category | Description |
-|----------|-------------|
-| `forSpeed` | Models with "ultra-fast" or "fast" speed ratings |
-| `forFreeModels` | Models with `is_free: true` pricing |
-| `forPhotorealism` | Models with photorealism score >= 8 |
-| `forArtisticStyle` | Models with artistic style score >= 8 |
-| `forTextRendering` | Models with text rendering score >= 8 |
-| `forImageToImage` | Models supporting "image-to-image" task |
-| `forInpainting` | Models supporting "inpainting" task |
-| `forHighestQuality` | Models with highest combined quality scores |
 
 ### Claude Desktop Configuration
 

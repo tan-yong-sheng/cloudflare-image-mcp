@@ -104,7 +104,7 @@ Generate images from text prompts.
 POST /v1/images/edits
 ```
 
-Edit images using image-to-image transformation or inpainting.
+Edit images using **image-to-image** transformation ("img2img"), including masked edits (inpainting) when you provide a `mask`.
 
 **Request Body (JSON):**
 ```json
@@ -134,7 +134,7 @@ model: "@cf/stabilityai/stable-diffusion-xl-base-1.0"
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `image` | string/binary | Yes | Source image (base64 or file) |
-| `mask` | string/binary | No | Mask for inpainting |
+| `mask` | string/binary | No | Mask for masked edits (inpainting) |
 | `prompt` | string | Yes | Edit description |
 | `model` | string | No | Model ID |
 | `strength` | number | No | Transformation strength (0-1) |
@@ -172,22 +172,20 @@ Generate variations of an input image.
 | `@cf/leonardo/lucid-origin` | Leonardo.AI | Adaptable |
 | `@cf/leonardo/phoenix-1.0` | Leonardo.AI | Prompt adherence |
 
-### Image-to-Image Models
+### Image-to-Image Models (includes masked edits)
 
-| Model | Provider | Features |
-|-------|----------|----------|
-| `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Stability AI | img2img, inpainting |
+Masked edits (inpainting) are a specialized form of image-to-image editing: it uses the same `/v1/images/edits` endpoint, but additionally accepts a `mask`.
+
+| Model | Provider | Edit capabilities |
+|-------|----------|------------------|
+| `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Stability AI | img2img + masked edits (mask supported) |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Black Forest Labs | img2img |
 | `@cf/black-forest-labs/flux-2-dev` | Black Forest Labs | img2img |
 | `@cf/lykon/dreamshaper-8-lcm-8-lcm` | Lykon | img2img |
-| `@cf/runwayml/stable-diffusion-v1-5-img2img` | RunwayML | img2img only |
+| `@cf/runwayml/stable-diffusion-v1-5-img2img` | RunwayML | img2img |
+| `@cf/runwayml/stable-diffusion-v1-5-inpainting` | RunwayML | masked edits (mask required) |
 
-### Inpainting Models
-
-| Model | Provider |
-|-------|----------|
-| `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Stability AI |
-| `@cf/runwayml/stable-diffusion-v1-5-inpainting` | RunwayML |
+> Note: Models specialized for masked edits are still image-to-image models; they simply require a mask.
 
 ## Model-Specific Parameters
 

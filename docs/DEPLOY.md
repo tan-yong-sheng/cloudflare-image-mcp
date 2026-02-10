@@ -19,6 +19,12 @@ This guide covers deploying the Cloudflare Image MCP service to **Cloudflare Wor
 
 ## GitHub Secrets Setup (CI/CD)
 
+### CI generates wrangler.toml
+
+In CI, `workers/wrangler.toml` is **generated dynamically** by `.github/workflows/deploy-workers.yml` and removed after deploy.
+
+Treat the checked-in `workers/wrangler.toml` as a **local/dev template only**.
+
 ### Required
 
 | Secret | Description |
@@ -43,6 +49,15 @@ cd workers
 npm ci
 npx wrangler dev --remote
 ```
+
+### Local dev note: R2 preview bucket
+
+Depending on your Wrangler version/config, `wrangler dev` may require using a **separate R2 preview bucket** from production.
+
+- This is a **local development requirement**, not a production requirement.
+- The CI deployment workflow (`.github/workflows/deploy-workers.yml`) generates its own `wrangler.toml` and does **not** rely on the checked-in file.
+
+If you hit an error about `preview_bucket_name`, create a dev R2 bucket and set `preview_bucket_name` under the `[[r2_buckets]]` binding in your *local* `workers/wrangler.toml`.
 
 ---
 

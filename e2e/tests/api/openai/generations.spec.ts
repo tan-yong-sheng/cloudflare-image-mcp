@@ -35,14 +35,14 @@ test.describe('OpenAI Image Generations API', () => {
     const image = body.data[0];
     expect(image).toHaveProperty('url');
     expect(typeof image.url).toBe('string');
-    // URL should be absolute (https://) when CDN_URL is configured, or relative (/images/...)
+    // URL should be absolute (https://) when S3_CDN_URL is configured, or relative (/images/...)
     expect(image.url).toMatch(/^(https?:\/\/|\/images\/)/);
 
     // Log URL type for debugging
     if (image.url.startsWith('http')) {
       console.log('✅ Full CDN URL:', image.url);
     } else {
-      console.log('⚠️  Relative URL (set CDN_URL for full URLs):', image.url);
+      console.log('⚠️  Relative URL (set S3_CDN_URL for full URLs):', image.url);
     }
   });
 
@@ -221,8 +221,8 @@ test.describe('OpenAI Image Generations API', () => {
     expect(image.url.length).toBeGreaterThan(0);
 
     // URL should either be:
-    // 1. Full HTTPS URL (when CDN_URL is configured): https://cdn.example.com/images/...
-    // 2. Relative URL (when CDN_URL is not set): /images/...
+    // 1. Full HTTPS URL (when S3_CDN_URL is configured): https://cdn.example.com/images/...
+    // 2. Relative URL (when S3_CDN_URL is not set): /images/...
     const isFullUrl = image.url.startsWith('https://');
     const isRelativeUrl = image.url.startsWith('/images/');
 

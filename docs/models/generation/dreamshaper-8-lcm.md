@@ -89,7 +89,7 @@ curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run
     
 -   `mask`
     
-    An array representing An array of integers that represent mask image data for inpainting constrained to 8-bit unsigned integer values
+    An array representing mask image data for masked edits (inpainting) constrained to 8-bit unsigned integer values
     
     -   `items`
         
@@ -160,7 +160,7 @@ The following schemas are based on JSON Schema
         },
         "mask": {
             "type": "array",
-            "description": "An array representing An array of integers that represent mask image data for inpainting constrained to 8-bit unsigned integer values",
+            "description": "An array representing mask image data for masked edits (inpainting) constrained to 8-bit unsigned integer values",
             "items": {
                 "type": "number",
                 "description": "A value between 0 and 255"

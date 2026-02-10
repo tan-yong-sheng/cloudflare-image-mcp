@@ -44,14 +44,22 @@ cloudflare-image-mcp/
 - `/mcp/smart` (explicit multi-model)
 - `/mcp/simple?model=@cf/...` (single-model; `model` is required)
 
-## Configuration
+## Configuration & deployment (source of truth)
 
-### For CI deploy / Wrangler
+### CI/CD deploy (GitHub Actions)
 
+**Source of truth:** `.github/workflows/deploy-workers.yml`
+
+- CI **generates `workers/wrangler.toml` at deploy time** from GitHub Secrets and then **deletes it** after deploy.
+- The checked-in `workers/wrangler.toml` should be treated as a **local/dev convenience**, not authoritative for production.
+
+Required GitHub Secrets (CI deploy):
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 
 Optional Worker secrets:
-- `API_KEYS`
-- `S3_CDN_URL`
+- `API_KEYS` (protects MCP + OpenAI endpoints)
+- `S3_CDN_URL` (absolute image URLs; otherwise `/images/...`)
 - `TZ`
+
+Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contradiction).
