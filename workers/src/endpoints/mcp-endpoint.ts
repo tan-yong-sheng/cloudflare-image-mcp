@@ -556,16 +556,28 @@ export class MCPEndpoint {
     }
 
     // Build params string for next_step (exclude prompt since it's added separately)
+    // Canonical parameter channel is prompt-embedded flags ("... --key=value").
     const paramStrings: string[] = [];
+
+    // 1) Include any required non-prompt params
     for (const [key, param] of Object.entries(modelConfig.parameters)) {
       const p = param as any;
-      // Skip prompt since it's added separately at the end
       if (p.required && key !== 'prompt') {
-        // Encourage prompt-embedded flags so agents don't need to pass extra JSON fields.
-        // ParamParser supports --key=value and will map to Cloudflare's cfParam internally.
         paramStrings.push(`--${key}=value`);
       }
     }
+
+    // 2) If there are no required non-prompt params, include a few common optional flags (if present)
+    if (paramStrings.length === 0) {
+      const commonOptionalKeys = ['steps', 'num_steps', 'seed', 'width', 'height', 'guidance', 'negative_prompt', 'strength'];
+      for (const key of commonOptionalKeys) {
+        if (Object.prototype.hasOwnProperty.call(modelConfig.parameters, key)) {
+          paramStrings.push(`--${key}=value`);
+        }
+        if (paramStrings.length >= 4) break;
+      }
+    }
+
     const paramsStr = paramStrings.join(' ');
 
     // Add next_step guidance (preferred: embed params in prompt as flags)
@@ -591,14 +603,14 @@ export class MCPEndpoint {
       {
         name: 'run_models',
         description: this.defaultModel
-          ? `Generate images using the default model (${this.defaultModel}).`
-          : 'Generate images using the model specified via ?model= on /mcp/simple.',
+          ? `Generate images using the default model (${this.defaultModel}). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.`
+          : 'Generate images using the model specified via ?model= on /mcp/simple. Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.',
         inputSchema: {
           type: 'object',
           properties: {
             prompt: {
               type: 'string',
-              description: 'Text prompt. Preferred: embed parameters as flags in the prompt using --key=value (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42").',
+              description: 'Prompt with optional --key=value flags. Canonical channel for model parameters. Example: "a cat --steps=20 --seed=42 --width=1024 --height=1024".',
             },
             n: {
               type: 'number',
