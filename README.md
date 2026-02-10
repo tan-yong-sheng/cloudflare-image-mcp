@@ -176,6 +176,17 @@ MIT
 
 See [CONTRIB.md](docs/CONTRIB.md) for guidelines.
 
+### Adding New Models
+
+Want to add a new Cloudflare Workers AI text-to-image model? Use the Claude Code skill:
+
+```bash
+# In Claude Code:
+/add-cf-models docs/models/generations/{new-cf-model}.md
+```
+
+Or see `.claude/skills/add-cf-models/SKILL.md` for manual instructions.
+
 ---
 
 **Built with:**

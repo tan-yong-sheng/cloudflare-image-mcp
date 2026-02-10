@@ -79,44 +79,38 @@ cd workers && npx wrangler dev --remote
 
 ## Adding New Models
 
-To add a new AI model:
+To add a new Cloudflare Workers AI text-to-image model, use the Claude Code skill:
 
-1. Update the workers model registry (see `workers/src/config/models.ts`).
-
-```typescript
-export const MODEL_CONFIGS: Record<string, ModelConfig> = {
-  // ... existing models
-  '@cf/provider/new-model': {
-    id: '@cf/provider/new-model',
-    name: 'New Model',
-    provider: 'Cloudflare',
-    description: 'Description of the model',
-    taskType: 'image-generation',
-    parameters: {
-      prompt: { type: 'string', required: true, maxLength: 2048 },
-      // ... other parameters
-    },
-    defaults: {
-      prompt: '',
-      steps: 20,
-    },
-    limits: {
-      maxPromptLength: 2048,
-      minSteps: 1,
-      maxSteps: 50,
-      defaultSteps: 20,
-      supportsSize: true,
-      sizes: ['512x512', '1024x1024'],
-    },
-    aliases: ['new-model', 'nm'],
-  },
-};
+```bash
+# In Claude Code, use the skill:
+Skill: add-cf-models
 ```
 
-2. Type check workers:
+Or follow the guide in `.claude/skills/add-cf-models/SKILL.md`.
+
+### Quick Steps
+
+1. **Add model configuration** to `workers/src/config/models.json` (source of truth)
+2. **Mirror changes** to `workers/src/config/models.ts` (TypeScript runtime)
+3. **Update frontend dropdown** in `workers/src/endpoints/frontend.ts`
+4. **Type check and deploy**
+
 ```bash
 cd workers && npm run check
+git add . && git commit -m "Add @cf/provider/model-name"
+git push origin main
+gh workflow run deploy-workers.yml -f environment=production
 ```
+
+### Model Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `workers/src/config/models.json` | Source of truth - JSON schema with all model definitions |
+| `workers/src/config/models.ts` | TypeScript runtime config (mirror of JSON) |
+| `workers/src/endpoints/frontend.ts` | Frontend HTML with model dropdown |
+
+See the skill documentation for detailed parameter definitions and examples.
 
 ## Code Style
 
