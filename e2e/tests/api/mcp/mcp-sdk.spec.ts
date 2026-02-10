@@ -11,6 +11,7 @@ import { test, expect } from '@playwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { getAuthHeaders } from '../../../lib/target.js';
+import { readFileSync } from 'node:fs';
 
 interface TextContent {
   type: 'text';
@@ -117,12 +118,21 @@ test.describe('MCP SDK Integration', () => {
           }
         }
 
-        // Ensure edit_capabilities is present for mask-capable models
+        // Ensure edit_capabilities matches models that declare editCapabilities.mask in the source-of-truth registry.
+        // NOTE: Jest/Vitest `toHaveProperty()` treats dots in strings as path separators, so use direct indexing.
         expect(models).toHaveProperty('edit_capabilities');
-        expect(models.edit_capabilities).toHaveProperty('@cf/stabilityai/stable-diffusion-xl-base-1.0');
-        expect(models.edit_capabilities['@cf/stabilityai/stable-diffusion-xl-base-1.0']).toHaveProperty('mask', 'supported');
-        expect(models.edit_capabilities).toHaveProperty('@cf/runwayml/stable-diffusion-v1-5-inpainting');
-        expect(models.edit_capabilities['@cf/runwayml/stable-diffusion-v1-5-inpainting']).toHaveProperty('mask', 'required');
+
+        const registryPath = new URL('../../../../workers/src/config/models.json', import.meta.url);
+        const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as any;
+
+        const expectedMaskModels = Object.entries(registry.models as Record<string, any>)
+          .filter(([, cfg]) => cfg?.editCapabilities?.mask)
+          .map(([id, cfg]) => ({ id, mask: cfg.editCapabilities.mask }));
+
+        for (const { id, mask } of expectedMaskModels) {
+          expect(models.edit_capabilities[id]).toBeDefined();
+          expect(models.edit_capabilities[id]).toHaveProperty('mask', mask);
+        }
 
         console.log('✅ MCP list_models returned', Object.keys(models).length - 2, 'models');
       }

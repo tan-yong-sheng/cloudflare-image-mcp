@@ -120,12 +120,14 @@ jobs:
 
       - name: Derive API key
         run: |
-          if [ -n "$API_KEY" ]; then
-            echo "API_KEY_EFFECTIVE=$API_KEY" >> $GITHUB_ENV
-          elif [ -n "$API_KEYS" ]; then
+          # Prefer API_KEYS (source of truth for the Worker) if present.
+          # This avoids mismatches when API_KEY is stale/different from the deployed API_KEYS.
+          if [ -n "$API_KEYS" ]; then
             # Use the first key if a comma-separated list is provided
-            FIRST_KEY=$(echo "$API_KEYS" | cut -d',' -f1)
+            FIRST_KEY=$(echo "$API_KEYS" | cut -d',' -f1 | xargs)
             echo "API_KEY_EFFECTIVE=$FIRST_KEY" >> $GITHUB_ENV
+          elif [ -n "$API_KEY" ]; then
+            echo "API_KEY_EFFECTIVE=$API_KEY" >> $GITHUB_ENV
           else
             echo "API_KEY_EFFECTIVE=" >> $GITHUB_ENV
           fi

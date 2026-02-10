@@ -35,8 +35,9 @@ test.describe('OpenAI Image Generations API', () => {
     const image = body.data[0];
     expect(image).toHaveProperty('url');
     expect(typeof image.url).toBe('string');
-    // URL should be relative (/images/...) - served through worker proxy
-    expect(image.url).toMatch(/^\/images\//);
+    // URL can be absolute or relative, but must point to the worker image proxy (/images/...)
+    const path = image.url.startsWith('http') ? new URL(image.url).pathname : image.url;
+    expect(path).toMatch(/^\/images\//);
 
     console.log('✅ Image URL:', image.url);
   });
@@ -215,8 +216,9 @@ test.describe('OpenAI Image Generations API', () => {
     expect(typeof image.url).toBe('string');
     expect(image.url.length).toBeGreaterThan(0);
 
-    // URL should be relative: /images/...
-    expect(image.url).toMatch(/^\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/);
+    // URL should point to: /images/YYYY-MM-DD/<id>.png (absolute or relative)
+    const path = image.url.startsWith('http') ? new URL(image.url).pathname : image.url;
+    expect(path).toMatch(/^\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/);
   });
 
   test('POST /v1/images/generations returns clean response without b64_json when format=url', async ({ request }) => {

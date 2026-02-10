@@ -103,7 +103,9 @@ export function getAuthHeaders(): Record<string, string> {
     return {};
   }
 
-  const apiKey = process.env.API_KEY;
+  // Support either a single API_KEY or a comma-separated API_KEYS.
+  // CI typically derives API_KEY_EFFECTIVE and exports it as API_KEY.
+  const apiKey = process.env.API_KEY?.trim() || process.env.API_KEYS?.split(',')[0]?.trim();
   if (apiKey) {
     return { 'Authorization': `Bearer ${apiKey}` };
   }

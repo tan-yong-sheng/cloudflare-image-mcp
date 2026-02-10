@@ -10,7 +10,7 @@ import { expect } from '@playwright/test';
  * Get API key from environment
  */
 export function getApiKey(): string | undefined {
-  return process.env.API_KEY;
+  return process.env.API_KEY?.trim() || process.env.API_KEYS?.split(',')[0]?.trim();
 }
 
 /**

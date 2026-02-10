@@ -14,8 +14,10 @@ test.describe('OpenAI SDK Node.js Compliance', () => {
   // Create OpenAI client pointing to our endpoint
   // baseURL is provided by Playwright config from TEST_BASE_URL env var
   const createClient = (baseURL: string) => {
+    // Our Worker uses API key auth when API_KEYS is configured.
+    // The OpenAI SDK always sends `Authorization: Bearer <apiKey>`.
     return new OpenAI({
-      apiKey: 'dummy-api-key', // Our endpoint doesn't validate API keys
+      apiKey: process.env.API_KEY?.trim() || 'dummy-api-key',
       baseURL: `${baseURL}/v1`,
     });
   };
