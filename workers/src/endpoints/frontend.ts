@@ -237,14 +237,15 @@ export function getFrontendHTML(): string {
                             <i class="fa-solid fa-robot mr-1"></i>Model
                         </label>
                         <select id="model" class="w-full">
-                            <option value="@cf/black-forest-labs/flux-1-schnell">FLUX.1 [schnell] - Fast, high quality</option>
-                            <option value="@cf/black-forest-labs/flux-2-klein-4b">FLUX.2 [klein] - Ultra-fast, supports img2img</option>
-                            <option value="@cf/black-forest-labs/flux-2-dev">FLUX.2 [dev] - High quality, multi-reference</option>
-                            <option value="@cf/stabilityai/stable-diffusion-xl-base-1.0">SDXL Base 1.0 - Stable, versatile</option>
-                            <option value="@cf/bytedance/stable-diffusion-xl-lightning">SDXL Lightning - Fast SDXL</option>
-                            <option value="@cf/lykon/dreamshaper-8-lcm">@cf/lykon/dreamshaper-8-lcm 8 LCM - Photorealistic</option>
-                            <option value="@cf/leonardo/lucid-origin">Lucid Origin - Leonardo.AI</option>
-                            <option value="@cf/leonardo/phoenix-1.0">Phoenix 1.0 - Leonardo.AI</option>
+                            <option value="@cf/black-forest-labs/flux-1-schnell">@cf/black-forest-labs/flux-1-schnell</option>
+                            <option value="@cf/black-forest-labs/flux-2-klein-4b">@cf/black-forest-labs/flux-2-klein-4b</option>
+                            <option value="@cf/black-forest-labs/flux-2-klein-9b">@cf/black-forest-labs/flux-2-klein-9b</option>
+                            <option value="@cf/black-forest-labs/flux-2-dev">@cf/black-forest-labs/flux-2-dev</option>
+                            <option value="@cf/stabilityai/stable-diffusion-xl-base-1.0">@cf/stabilityai/stable-diffusion-xl-base-1.0</option>
+                            <option value="@cf/bytedance/stable-diffusion-xl-lightning">@cf/bytedance/stable-diffusion-xl-lightning</option>
+                            <option value="@cf/lykon/dreamshaper-8-lcm">@cf/lykon/dreamshaper-8-lcm</option>
+                            <option value="@cf/leonardo/lucid-origin">@cf/leonardo/lucid-origin</option>
+                            <option value="@cf/leonardo/phoenix-1.0">@cf/leonardo/phoenix-1.0</option>
                         </select>
                     </div>
 

@@ -200,6 +200,81 @@
         ]
       }
     },
+    "@cf/black-forest-labs/flux-2-klein-9b": {
+      "id": "@cf/black-forest-labs/flux-2-klein-9b",
+      "name": "FLUX.2 [klein] 9B",
+      "description": "Ultra-fast, distilled 9B image model with enhanced quality, unifying generation and editing",
+      "provider": "black-forest-labs",
+      "apiVersion": 2,
+      "inputFormat": "multipart",
+      "responseFormat": "base64",
+      "supportedTasks": [
+        "text-to-image",
+        "image-to-image"
+      ],
+      "parameters": {
+        "prompt": {
+          "cfParam": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "Text description of the image"
+        },
+        "steps": {
+          "cfParam": "steps",
+          "type": "integer",
+          "default": 25,
+          "min": 1,
+          "max": 50,
+          "description": "Diffusion steps"
+        },
+        "seed": {
+          "cfParam": "seed",
+          "type": "integer",
+          "default": null,
+          "description": "Random seed for reproducibility"
+        },
+        "width": {
+          "cfParam": "width",
+          "type": "integer",
+          "default": 1024,
+          "min": 256,
+          "max": 2048,
+          "step": 64,
+          "description": "Image width in pixels"
+        },
+        "height": {
+          "cfParam": "height",
+          "type": "integer",
+          "default": 1024,
+          "min": 256,
+          "max": 2048,
+          "step": 64,
+          "description": "Image height in pixels"
+        },
+        "image": {
+          "cfParam": "image",
+          "type": "string",
+          "required": false,
+          "description": "Input image for img2img (base64 encoded, up to 4 images)"
+        }
+      },
+      "limits": {
+        "maxPromptLength": 2048,
+        "defaultSteps": 25,
+        "maxSteps": 50,
+        "minWidth": 256,
+        "maxWidth": 2048,
+        "minHeight": 256,
+        "maxHeight": 2048,
+        "supportedSizes": [
+          "256x256",
+          "512x512",
+          "768x768",
+          "1024x1024",
+          "1280x1280"
+        ]
+      }
+    },
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": {
       "id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
       "name": "Stable Diffusion XL Base 1.0",
@@ -488,6 +563,7 @@
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
     "@cf/black-forest-labs/flux-1-schnell": "@cf/black-forest-labs/flux-1-schnell",
     "@cf/black-forest-labs/flux-2-klein-4b": "@cf/black-forest-labs/flux-2-klein-4b",
+    "@cf/black-forest-labs/flux-2-klein-9b": "@cf/black-forest-labs/flux-2-klein-9b",
     "@cf/black-forest-labs/flux-2-dev": "@cf/black-forest-labs/flux-2-dev",
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
     "@cf/bytedance/stable-diffusion-xl-lightning": "@cf/bytedance/stable-diffusion-xl-lightning",

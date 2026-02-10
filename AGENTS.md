@@ -62,3 +62,22 @@ Optional Worker secrets:
 - `TZ`
 
 Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contradiction).
+
+### Model Configuration (Source of Truth)
+
+**Source of truth:** `workers/src/config/models.json`
+
+This file defines all available image generation models, their parameters, and capabilities. It is the authoritative source for:
+- Model IDs and names
+- Supported tasks (text-to-image, image-to-image)
+- Input/output formats (json, multipart, base64, binary)
+- Parameter schemas (prompt, steps, seed, width, height, etc.)
+- Model limits (max prompt length, supported sizes)
+- Edit capabilities (mask support for inpainting)
+
+To add or update models:
+1. Edit `workers/src/config/models.json`
+2. Mirror the changes in `workers/src/config/models.ts` (TypeScript version used at runtime)
+3. Deploy to apply changes
+
+The frontend dropdown and MCP model discovery both use this configuration.
