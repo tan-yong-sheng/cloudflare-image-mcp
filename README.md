@@ -96,12 +96,12 @@ curl -X POST "http://localhost:3000/v1/images/generations" \
 **Available Tools:**
 - `list_models` - List all available models
 - `describe_model` - Get model parameters and limits
-- `run_models` - Generate images
+- `run_model` - Generate images
 
 **Workflow:**
 1. Call `list_models` to get available models
 2. Call `describe_model(model_id)` to understand parameters
-3. Call `run_models(model_id, prompt, ...)` to generate
+3. Call `run_model(model_id, prompt, ...)` to generate
 
 ### Web Frontend
 

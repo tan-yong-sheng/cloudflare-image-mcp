@@ -76,7 +76,7 @@ test.describe('MCP SDK Integration', () => {
 
       // Check for expected tools
       const toolNames = tools.tools.map((t: any) => t.name);
-      expect(toolNames).toContain('run_models');
+      expect(toolNames).toContain('run_model');
       expect(toolNames).toContain('list_models');
       expect(toolNames).toContain('describe_model');
 
@@ -173,12 +173,12 @@ test.describe('MCP SDK Integration', () => {
     }
   });
 
-  test('MCP SDK can call run_models tool', async ({ baseURL }) => {
+  test('MCP SDK can call run_model tool', async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
       const result = await client.callTool({
-        name: 'run_models',
+        name: 'run_model',
         arguments: {
           prompt: 'A bright red apple on a wooden table',
           model_id: '@cf/black-forest-labs/flux-1-schnell',
@@ -202,7 +202,7 @@ test.describe('MCP SDK Integration', () => {
         const imageUrl = urlMatch![1];
         expect(imageUrl).toMatch(/^https:\/\//);
 
-        console.log('✅ MCP run_models generated image:', imageUrl.substring(0, 60) + '...');
+        console.log('✅ MCP run_model generated image:', imageUrl.substring(0, 60) + '...');
       }
     } finally {
       await transport.close();
@@ -215,7 +215,7 @@ test.describe('MCP SDK Integration', () => {
     try {
       // Call with missing required parameter
       const result = await client.callTool({
-        name: 'run_models',
+        name: 'run_model',
         arguments: {
           // Missing prompt and model_id
         },
@@ -244,7 +244,7 @@ test.describe('MCP SDK Integration', () => {
 
     try {
       const result = await client.callTool({
-        name: 'run_models',
+        name: 'run_model',
         arguments: {
           prompt: 'A blue sky with clouds',
           model_id: '@cf/black-forest-labs/flux-1-schnell',
@@ -265,7 +265,7 @@ test.describe('MCP SDK Integration', () => {
         expect(urlMatches).not.toBeNull();
         expect(urlMatches!.length).toBe(2);
 
-        console.log('✅ MCP run_models generated', urlMatches!.length, 'images');
+        console.log('✅ MCP run_model generated', urlMatches!.length, 'images');
       }
     } finally {
       await transport.close();

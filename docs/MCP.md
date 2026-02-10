@@ -57,7 +57,7 @@ Each returns MCP server information (tools differ by endpoint):
       }
     }
   },
-  "tools": ["run_models", "list_models", "describe_model"],
+  "tools": ["run_model", "list_models", "describe_model"],
   "mode": "multi-model",
   "defaultModel": null
 }
@@ -129,7 +129,7 @@ Lists available tools.
   "result": {
     "tools": [
       {
-        "name": "run_models",
+        "name": "run_model",
         "description": "Generate images using Cloudflare AI models",
         "inputSchema": {
           "type": "object",
@@ -183,14 +183,14 @@ Lists available tools.
 
 Invokes a tool.
 
-**Request (run_models):**
+**Request (run_model):**
 ```json
 {
   "jsonrpc": "2.0",
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "run_models",
+    "name": "run_model",
     "arguments": {
       "prompt": "A beautiful sunset over mountains",
       "model_id": "@cf/black-forest-labs/flux-1-schnell",
@@ -220,7 +220,7 @@ Invokes a tool.
 
 ## Tools Reference
 
-### run_models
+### run_model
 
 Generates images using Cloudflare Workers AI models.
 
@@ -323,7 +323,7 @@ Returns detailed OpenAPI schema for a model.
     "max_steps": 8,
     "supported_sizes": ["512x512", "768x768", "1024x1024"]
   },
-  "next_step": "call run_models(model_id=\"@cf/black-forest-labs/flux-1-schnell\" prompt=\"your prompt here\")"
+  "next_step": "call run_model(model_id=\"@cf/black-forest-labs/flux-1-schnell\" prompt=\"your prompt here\")"
 }
 ```
 
@@ -343,7 +343,7 @@ Returns detailed OpenAPI schema for a model.
 
 3. **Run Model** (generate image):
    ```json
-   { "method": "tools/call", "params": { "name": "run_models", "arguments": { "prompt": "A cat", "model_id": "@cf/black-forest-labs/flux-1-schnell" } } }
+   { "method": "tools/call", "params": { "name": "run_model", "arguments": { "prompt": "A cat", "model_id": "@cf/black-forest-labs/flux-1-schnell" } } }
    ```
 
 ## Example Client Usage
@@ -375,7 +375,7 @@ await callMCPTool('initialize', {
 
 // Generate image
 const result = await callMCPTool('tools/call', {
-  name: 'run_models',
+  name: 'run_model',
   arguments: {
     prompt: 'A beautiful landscape',
     model_id: '@cf/black-forest-labs/flux-1-schnell'
@@ -404,7 +404,7 @@ def call_mcp(method, params=None):
 
 # Generate image
 result = call_mcp('tools/call', {
-    'name': 'run_models',
+    'name': 'run_model',
     'arguments': {
         'prompt': 'A beautiful landscape',
         'model_id': '@cf/black-forest-labs/flux-1-schnell'
@@ -439,7 +439,7 @@ curl -X POST https://cloudflare-image-workers.*.workers.dev/mcp/message \
     "id": 2,
     "method": "tools/call",
     "params": {
-      "name": "run_models",
+      "name": "run_model",
       "arguments": {
         "prompt": "A futuristic city",
         "model_id": "@cf/black-forest-labs/flux-1-schnell"
@@ -507,7 +507,7 @@ This Worker exposes MCP over **HTTP** (streamable HTTP) with optional **SSE** tr
 **Available Tools:**
 - `list_models` - List all available models (plus `edit_capabilities` for masked edits)
 - `describe_model` - Get detailed parameters for a specific model
-- `run_models` - Generate images
+- `run_model` - Generate images
 
 **Workflow:**
 ```
@@ -517,7 +517,7 @@ Step 1: list_models()
 Step 2: describe_model(model_id="...")
   → Returns detailed parameters for chosen model
 
-Step 3: run_models(model_id="...", prompt="...", params={...})
+Step 3: run_model(model_id="...", prompt="...", params={...})
   → Generates image using selected model
 ```
 

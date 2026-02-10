@@ -11,8 +11,8 @@ export class MCPEndpoint {
   private corsHeaders: Record<string, string>;
 
   // Per-request mode (derived from path)
-  // - smart/multi: list_models, describe_model, run_models
-  // - simple/single: run_models only (model comes from ?model=...)
+  // - smart/multi: list_models, describe_model, run_model
+  // - simple/single: run_model only (model comes from ?model=...)
   private mode: 'multi-model' | 'single-model';
   private defaultModel: string | null;
   private isMode1: boolean;
@@ -50,7 +50,7 @@ export class MCPEndpoint {
 
     // Derive mode from path
     // - /mcp (default) and /mcp/smart => multi-model
-    // - /mcp/simple => single-model (run_models only; model is required via ?model=)
+    // - /mcp/simple => single-model (run_model only; model is required via ?model=)
     if (pathname === '/mcp/simple' || pathname === '/mcp/simple/message') {
       this.mode = 'single-model';
       const modelFromQuery = url.searchParams.get('model');
@@ -127,11 +127,11 @@ export class MCPEndpoint {
           },
         },
       },
-      tools: this.isMode1 ? ['run_models'] : ['run_models', 'list_models', 'describe_model'],
+      tools: this.isMode1 ? ['run_model'] : ['run_model', 'list_models', 'describe_model'],
       mode: this.mode,
       defaultModel: this.defaultModel,
       description: isSimpleEndpoint
-        ? 'Single-model image generation (run_models only). Requires ?model='
+        ? 'Single-model image generation (run_model only). Requires ?model='
         : 'Multi-model image generation using Cloudflare Workers AI',
     };
 
@@ -270,7 +270,7 @@ export class MCPEndpoint {
     try {
       let result;
 
-      if (name === 'run_models') {
+      if (name === 'run_model') {
         result = await this.handleRunModels(args);
       } else if (name === 'list_models') {
         result = await this.handleListModels(args);
@@ -308,7 +308,7 @@ export class MCPEndpoint {
   }
 
   /**
-   * Handle run_models tool call
+   * Handle run_model tool call
    */
   private async handleRunModels(args: any): Promise<any[]> {
     const {
@@ -437,7 +437,7 @@ export class MCPEndpoint {
     if (this.isMode1) {
       return [{
         type: 'text',
-        text: 'Error: list_models is not available on /mcp/simple. Use /mcp or /mcp/smart for multi-model discovery, or call run_models(prompt="...") directly.',
+        text: 'Error: list_models is not available on /mcp/simple. Use /mcp or /mcp/smart for multi-model discovery, or call run_model(prompt="...") directly.',
         isError: true,
       }];
     }
@@ -479,7 +479,7 @@ export class MCPEndpoint {
     if (this.isMode1) {
       return [{
         type: 'text',
-        text: 'Error: describe_model is not available on /mcp/simple. Use /mcp or /mcp/smart for multi-model discovery, or call run_models(prompt="...") directly.',
+        text: 'Error: describe_model is not available on /mcp/simple. Use /mcp or /mcp/smart for multi-model discovery, or call run_model(prompt="...") directly.',
         isError: true,
       }];
     }
@@ -581,7 +581,7 @@ export class MCPEndpoint {
     const paramsStr = paramStrings.join(' ');
 
     // Add next_step guidance (preferred: embed params in prompt as flags)
-    const nextStep = `call run_models(model_id="${modelConfig.id}" prompt="your prompt here${paramsStr ? ' ' + paramsStr : ''}")`;
+    const nextStep = `call run_model(model_id="${modelConfig.id}" prompt="your prompt here${paramsStr ? ' ' + paramsStr : ''}")`;
 
     // Add next_step to schema
     schema.next_step = nextStep;
@@ -594,14 +594,14 @@ export class MCPEndpoint {
 
   /**
    * Get tool definitions for MCP
-   * Single-model endpoint (/mcp/simple): Only run_models available
-   * Multi-model endpoints (/mcp, /mcp/smart): list_models, describe_model, run_models available
+   * Single-model endpoint (/mcp/simple): Only run_model available
+   * Multi-model endpoints (/mcp, /mcp/smart): list_models, describe_model, run_model available
    */
   private getToolDefinitions(): any[] {
-    // Single-model endpoint: only run_models (no model selection)
+    // Single-model endpoint: only run_model (no model selection)
     const mode1Tools = [
       {
-        name: 'run_models',
+        name: 'run_model',
         description: this.defaultModel
           ? `Generate images using the default model (${this.defaultModel}). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.`
           : 'Generate images using the model specified via ?model= on /mcp/simple. Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.',
@@ -647,8 +647,8 @@ export class MCPEndpoint {
     // Mode 2: All tools available
     const mode2Tools = [
       {
-        name: 'run_models',
-        description: 'Preferred workflow: call "list_models" to get the exact model_id. Next, you need to check model-specific parameters of your selected model_id, call "describe_model(model_id)" and then pass parameters by embedding flags in the prompt using --key=value (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42"). Avoid inventing extra JSON fields; prompt flags are the canonical parameter channel. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (image-to-image; requires mask in /v1/images/edits).',
+        name: 'run_model',
+        description: 'Generate images with a specific model. REQUIRED WORKFLOW: (1) First call list_models to get available model_ids, (2) Then ALWAYS call describe_model(model_id) to discover what parameters that specific model accepts (different models support different parameters like steps, guidance, width, height, etc.), (3) Finally call run_model with the model_id and embed the model-specific parameters you discovered in step 2 as --key=value flags in the prompt (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42"). DO NOT skip describe_model - it reveals which parameters are valid for your chosen model. Parameters vary significantly between models and using unsupported parameters may cause errors or be ignored.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -692,7 +692,7 @@ export class MCPEndpoint {
       },
       {
         name: 'list_models',
-        description: 'List all available image generation models. Returns JSON object mapping model_id to supported task types.',
+        description: 'STEP 1: List all available image generation models with their model_ids and supported task types (text-to-image, image-to-image, etc.). Returns JSON object. After calling this, you MUST call describe_model for your chosen model_id before using run_model.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -700,7 +700,7 @@ export class MCPEndpoint {
       },
       {
         name: 'describe_model',
-        description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". Returns detailed OpenAPI schema documentation for a specific model including all parameters with type, min, max, default values.',
+        description: 'STEP 2 (REQUIRED): Get the complete parameter schema for a specific model. This reveals ALL available parameters (steps, guidance, width, height, seed, negative_prompt, etc.) with their types, ranges, and defaults. Each model has different supported parameters - you MUST call this before run_model to know which --key=value flags you can use. Call list_models first to get valid model_ids, unless the user explicitly provided a model_id like "@cf/black-forest-labs/flux-1-schnell".',
         inputSchema: {
           type: 'object',
           properties: {

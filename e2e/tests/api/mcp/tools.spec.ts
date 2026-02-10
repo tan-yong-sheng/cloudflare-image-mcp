@@ -39,7 +39,7 @@ test.describe('MCP Tools', () => {
     console.log('MCP Tools:', body.result.tools.map((t: any) => t.name).join(', '));
   });
 
-  test('tools/list includes run_models tool', async ({ request }) => {
+  test('tools/list includes run_model tool', async ({ request }) => {
     const response = await request.post('/mcp/message', {
       data: {
         jsonrpc: '2.0',
@@ -51,7 +51,7 @@ test.describe('MCP Tools', () => {
     const body = await response.json();
     const toolNames = body.result.tools.map((t: any) => t.name);
 
-    expect(toolNames).toContain('run_models');
+    expect(toolNames).toContain('run_model');
   });
 
   test('tools/list includes list_models tool', async ({ request }) => {
@@ -170,14 +170,14 @@ test.describe('MCP Tools', () => {
     expect(content).toHaveProperty('isError', true);
   });
 
-  test('tools/call run_models generates image', async ({ request }) => {
+  test('tools/call run_model generates image', async ({ request }) => {
     const response = await request.post('/mcp/message', {
       data: {
         jsonrpc: '2.0',
         id: 9,
         method: 'tools/call',
         params: {
-          name: 'run_models',
+          name: 'run_model',
           arguments: {
             prompt: 'A bright red apple on a wooden table',
             model_id: '@cf/black-forest-labs/flux-1-schnell',
@@ -208,14 +208,14 @@ test.describe('MCP Tools', () => {
     }
   });
 
-  test('tools/call run_models without prompt returns error', async ({ request }) => {
+  test('tools/call run_model without prompt returns error', async ({ request }) => {
     const response = await request.post('/mcp/message', {
       data: {
         jsonrpc: '2.0',
         id: 10,
         method: 'tools/call',
         params: {
-          name: 'run_models',
+          name: 'run_model',
           arguments: {
             model_id: '@cf/black-forest-labs/flux-1-schnell',
           },
@@ -233,14 +233,14 @@ test.describe('MCP Tools', () => {
     expect(content).toHaveProperty('isError', true);
   });
 
-  test('tools/call run_models without model_id returns error', async ({ request }) => {
+  test('tools/call run_model without model_id returns error', async ({ request }) => {
     const response = await request.post('/mcp/message', {
       data: {
         jsonrpc: '2.0',
         id: 11,
         method: 'tools/call',
         params: {
-          name: 'run_models',
+          name: 'run_model',
           arguments: {
             prompt: 'Test prompt',
           },

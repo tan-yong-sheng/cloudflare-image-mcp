@@ -45,7 +45,7 @@ const transport = new StreamableHTTPClientTransport(new URL(`${baseURL}/mcp`));
 await client.connect(transport);
 
 const tools = await client.listTools();
-const result = await client.callTool({ name: 'run_models', arguments: {...} });
+const result = await client.callTool({ name: 'run_model', arguments: {...} });
 ```
 
 **Pros:**
@@ -107,7 +107,7 @@ The SDK tests in `mcp-sdk.spec.ts` cover:
 2. **listTools** - Tool discovery with schema validation
 3. **callTool(list_models)** - Tool execution returning JSON
 4. **callTool(describe_model)** - Tool with parameters
-5. **callTool(run_models)** - Image generation
+5. **callTool(run_model)** - Image generation
 6. **Error handling** - Missing parameters
 7. **Batch generation** - Multiple images (n=2)
 
