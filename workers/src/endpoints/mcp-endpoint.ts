@@ -561,14 +561,15 @@ export class MCPEndpoint {
       const p = param as any;
       // Skip prompt since it's added separately at the end
       if (p.required && key !== 'prompt') {
-        const cfParam = p.cfParam || key;
-        paramStrings.push(`${cfParam}=value`);
+        // Encourage prompt-embedded flags so agents don't need to pass extra JSON fields.
+        // ParamParser supports --key=value and will map to Cloudflare's cfParam internally.
+        paramStrings.push(`--${key}=value`);
       }
     }
     const paramsStr = paramStrings.join(' ');
 
-    // Add next_step guidance
-    const nextStep = `call run_models(model_id="${modelConfig.id}"${paramsStr ? ' ' + paramsStr : ''} prompt="your prompt here")`;
+    // Add next_step guidance (preferred: embed params in prompt as flags)
+    const nextStep = `call run_models(model_id="${modelConfig.id}" prompt="your prompt here${paramsStr ? ' ' + paramsStr : ''}")`;
 
     // Add next_step to schema
     schema.next_step = nextStep;
@@ -597,7 +598,7 @@ export class MCPEndpoint {
           properties: {
             prompt: {
               type: 'string',
-              description: 'Text description of the image to generate',
+              description: 'Text prompt. Preferred: embed parameters as flags in the prompt using --key=value (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42").',
             },
             n: {
               type: 'number',
@@ -635,13 +636,13 @@ export class MCPEndpoint {
     const mode2Tools = [
       {
         name: 'run_models',
-        description: 'You must call "list_models" first to obtain the exact model_id required to use this tool, UNLESS the user explicitly provides a model_id in the format "@cf/black-forest-labs/flux-1-schnell". You must call "describe_model" first to obtain the params required to use this tool, UNLESS the user explicitly provides params. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (image-to-image; requires mask in /v1/images/edits).',
+        description: 'Preferred workflow: call "list_models" to get the exact model_id. If you need model-specific parameters, call "describe_model(model_id)" and then pass parameters by embedding flags in the prompt using --key=value (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42"). Avoid inventing extra JSON fields; prompt flags are the canonical parameter channel. Available model_ids: @cf/black-forest-labs/flux-1-schnell (text-to-image), @cf/black-forest-labs/flux-2-klein-4b (text-to-image, image-to-image), @cf/black-forest-labs/flux-2-dev (text-to-image, image-to-image), @cf/stabilityai/stable-diffusion-xl-base-1.0 (text-to-image, image-to-image), @cf/bytedance/stable-diffusion-xl-lightning (text-to-image), @cf/lykon/dreamshaper-8-lcm-8-lcm (text-to-image, image-to-image), @cf/leonardo/lucid-origin (text-to-image), @cf/leonardo/phoenix-1.0 (text-to-image), @cf/runwayml/stable-diffusion-v1-5-img2img (image-to-image), @cf/runwayml/stable-diffusion-v1-5-inpainting (image-to-image; requires mask in /v1/images/edits).',
         inputSchema: {
           type: 'object',
           properties: {
             prompt: {
               type: 'string',
-              description: 'Text description of the image to generate',
+              description: 'Text prompt. Preferred: embed parameters as flags in the prompt using --key=value (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42").',
             },
             model_id: {
               type: 'string',
