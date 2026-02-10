@@ -338,7 +338,7 @@ export class MCPEndpoint {
       if (!this.defaultModel) {
         return [{
           type: 'text',
-          text: 'Error: /mcp/simple requires ?model=. Example: /mcp/simple?model=@cf/black-forest-labs/flux-2-klein-4b',
+          text: 'Error: /mcp/simple requires ?model=. Example: /mcp/simple?model=@cf/{provider}/{model_name}',
           isError: true,
         }];
       }
@@ -444,25 +444,22 @@ export class MCPEndpoint {
 
     const models = this.generator.listModels();
 
-    // Return JSON with model_id -> taskTypes mapping
-    const modelMap: Record<string, string[]> = {};
-    const editCapabilitiesMap: Record<string, any> = {};
-
-    for (const model of models) {
-      modelMap[model.id] = model.taskTypes;
-      if (model.editCapabilities) {
-        editCapabilitiesMap[model.id] = model.editCapabilities;
-      }
-    }
-
-    // Add next_step guidance
-    const userMentionedModel = '${user_mentioned_model_id}';
-    const nextStep = `call describe_model(model_id="${userMentionedModel}")`;
+    const sortedModels = [...models].sort((a, b) => {
+      const byProvider = a.provider.localeCompare(b.provider);
+      if (byProvider !== 0) return byProvider;
+      return a.name.localeCompare(b.name);
+    });
 
     const output = {
-      ...modelMap,
-      edit_capabilities: editCapabilitiesMap,
-      next_step: nextStep,
+      models: sortedModels.map((m) => ({
+        model_id: m.id,
+        name: m.name,
+        description: m.description,
+        provider: m.provider,
+        supported_image_sizes: m.supportedSizes,
+        task_types: m.taskTypes,
+      })),
+      next_step: 'call describe_model(model_id="<model_id from list_models>")',
     };
 
     return [{
@@ -658,7 +655,7 @@ export class MCPEndpoint {
             },
             model_id: {
               type: 'string',
-              description: 'Exact model_id from list_models output (e.g., @cf/black-forest-labs/flux-1-schnell)',
+              description: 'Exact model_id from list_models output (format: @cf/{provider}/{model_name})',
             },
             n: {
               type: 'number',
@@ -700,7 +697,7 @@ export class MCPEndpoint {
       },
       {
         name: 'describe_model',
-        description: 'STEP 2 (REQUIRED): Get the complete parameter schema for a specific model. This reveals ALL available parameters (steps, guidance, width, height, seed, negative_prompt, etc.) with their types, ranges, and defaults. Each model has different supported parameters - you MUST call this before run_model to know which --key=value flags you can use. Call list_models first to get valid model_ids, unless the user explicitly provided a model_id like "@cf/black-forest-labs/flux-1-schnell".',
+        description: 'STEP 2 (REQUIRED): Get the complete parameter schema for a specific model. This reveals ALL available parameters (steps, guidance, width, height, seed, negative_prompt, etc.) with their types, ranges, and defaults. Each model has different supported parameters - you MUST call this before run_model to know which --key=value flags you can use. Call list_models first to get valid model_ids, unless the user explicitly provided a model_id in the form "@cf/{provider}/{model_name}".',
         inputSchema: {
           type: 'object',
           properties: {

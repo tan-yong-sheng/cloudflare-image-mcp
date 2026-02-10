@@ -346,7 +346,8 @@ export class ImageGeneratorService {
     id: string;
     name: string;
     description: string;
-    capabilities: string[];
+    provider: string;
+    supportedSizes: string[];
     taskTypes: string[];
     editCapabilities?: ModelConfig['editCapabilities'];
   }> {
@@ -354,23 +355,19 @@ export class ImageGeneratorService {
       id: string;
       name: string;
       description: string;
-      capabilities: string[];
+      provider: string;
+      supportedSizes: string[];
       taskTypes: string[];
       editCapabilities?: ModelConfig['editCapabilities'];
     }> = [];
 
     for (const [id, config] of this.models) {
-      const capabilities: string[] = [];
-      if (config.parameters.seed) capabilities.push('seed');
-      if (config.parameters.width) capabilities.push('custom-size');
-      if (config.parameters.guidance) capabilities.push('guidance');
-      if (config.parameters.negative_prompt) capabilities.push('negative-prompt');
-
       models.push({
         id,
         name: config.name,
         description: config.description,
-        capabilities,
+        provider: config.provider,
+        supportedSizes: config.limits.supportedSizes,
         taskTypes: config.supportedTasks,
         editCapabilities: config.editCapabilities,
       });
