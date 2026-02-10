@@ -50,7 +50,7 @@ env:
   NODE_VERSION: '20'
 
 jobs:
-  deploy-staging:
+  deploy_staging:
     name: Deploy staging (for E2E)
     if: (inputs.environment || 'staging') == 'staging' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
     uses: ./.github/workflows/deploy-workers.yml
@@ -61,8 +61,8 @@ jobs:
   e2e-tests:
     name: E2E Tests (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
-    needs: [deploy-staging]
-    if: github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [deploy_staging]
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository)) && ((inputs.environment || 'staging') != 'staging' || needs.deploy_staging.result == 'success')
     environment: ${{ inputs.environment || 'staging' }}
     permissions:
       contents: read
@@ -104,8 +104,8 @@ jobs:
         run: |
           if [ -n "${{ inputs.custom_url }}" ]; then
             echo "TEST_BASE_URL=${{ inputs.custom_url }}" >> $GITHUB_ENV
-          elif [ -n "${{ needs.deploy-staging.outputs.workers_url }}" ]; then
-            echo "TEST_BASE_URL=${{ needs.deploy-staging.outputs.workers_url }}" >> $GITHUB_ENV
+          elif [ -n "${{ needs.deploy_staging.outputs.workers_url }}" ]; then
+            echo "TEST_BASE_URL=${{ needs.deploy_staging.outputs.workers_url }}" >> $GITHUB_ENV
           else
             if [ "${{ env.TEST_TARGET }}" = "staging" ]; then
               WORKER_NAME="cloudflare-image-workers-staging"
@@ -282,8 +282,8 @@ jobs:
 
   cleanup-staging:
     name: Cleanup Staging Worker
-    needs: [deploy-staging, e2e-tests]
-    if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy-staging.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: [deploy_staging, e2e-tests]
+    if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy_staging.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     environment: staging
     permissions:
