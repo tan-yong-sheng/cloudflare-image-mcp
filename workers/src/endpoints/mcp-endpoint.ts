@@ -450,6 +450,13 @@ export class MCPEndpoint {
       return a.name.localeCompare(b.name);
     });
 
+    const editCapabilitiesMap: Record<string, any> = {};
+    for (const model of sortedModels) {
+      if (model.editCapabilities) {
+        editCapabilitiesMap[model.id] = model.editCapabilities;
+      }
+    }
+
     const output = {
       models: sortedModels.map((m) => ({
         model_id: m.id,
@@ -459,6 +466,7 @@ export class MCPEndpoint {
         supported_image_sizes: m.supportedSizes,
         task_types: m.taskTypes,
       })),
+      edit_capabilities: editCapabilitiesMap,
       next_step: 'call describe_model(model_id="<model_id from list_models>")',
     };
 

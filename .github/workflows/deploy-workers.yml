@@ -7,6 +7,7 @@ on:
     paths:
       - 'workers/**'
       - '.github/workflows/deploy-workers.yml'
+
   workflow_dispatch:
     inputs:
       environment:
@@ -18,14 +19,28 @@ on:
           - staging
           - production
 
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: false
+        default: 'production'
+        type: string
+    outputs:
+      workers_url:
+        description: 'Deployed Workers base URL'
+        value: ${{ jobs.deploy.outputs.workers_url }}
+
 env:
   NODE_VERSION: '20'
 
 jobs:
   deploy:
-    name: Deploy Workers (${{ github.event.inputs.environment || 'production' }})
+    name: Deploy Workers (${{ inputs.environment || github.event.inputs.environment || 'production' }})
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    environment: ${{ inputs.environment || github.event.inputs.environment || 'production' }}
+    outputs:
+      workers_url: ${{ steps.export_workers_url.outputs.workers_url }}
     permissions:
       contents: read
       deployments: write
@@ -63,7 +78,7 @@ jobs:
 
       - name: Set environment variables
         run: |
-          ENVIRONMENT="${{ github.event.inputs.environment || 'production' }}"
+          ENVIRONMENT="${{ inputs.environment || github.event.inputs.environment || 'production' }}"
           echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
 
           # Determine worker name based on environment
@@ -164,6 +179,11 @@ jobs:
           WORKERS_URL="https://${{ env.WORKERS_NAME }}.${SUBDOMAIN}.workers.dev"
           echo "WORKERS_URL=$WORKERS_URL" >> $GITHUB_ENV
           echo "✅ Workers URL: $WORKERS_URL"
+
+      - name: Export Workers URL
+        id: export_workers_url
+        run: |
+          echo "workers_url=$WORKERS_URL" >> $GITHUB_OUTPUT
 
       # NOTE: This workflow does not create a GitHub Deployment object, so deployment statuses are not applicable.
       # Leaving this step disabled avoids failing deployments with 404s.
