@@ -188,12 +188,35 @@ export function getFrontendHTML(): string {
     </style>
 </head>
 <body class="min-h-screen py-4">
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="card p-8 max-w-md w-full mx-4">
+            <h2 class="text-2xl font-bold mb-4 flex items-center">
+                <i class="fa-solid fa-lock mr-2 text-primary"></i>Login Required
+            </h2>
+            <p class="text-sm mb-4 opacity-75">Enter your API key to access the image generator.</p>
+            <div class="space-y-4">
+                <div>
+                    <label for="password" class="block text-sm font-medium mb-1">Password / API Key</label>
+                    <input type="password" id="password" class="w-full" placeholder="Enter your API key">
+                </div>
+                <div id="loginError" class="text-sm text-red-500 hidden"></div>
+                <button id="loginButton" class="btn btn-primary w-full py-3">
+                    <i class="fa-solid fa-sign-in-alt mr-2"></i>Login
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="container mx-auto px-4 py-4 max-w-6xl">
         <div class="flex items-center justify-between mb-6">
             <h1 class="text-2xl md:text-3xl font-bold flex items-center">
                 <i class="fa-solid fa-image mr-2"></i>AI Image Generator
             </h1>
             <div class="flex items-center space-x-2">
+                <button id="logoutButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Logout">
+                    <i class="fa-solid fa-sign-out-alt mr-2"></i>Logout
+                </button>
                 <button id="themeToggle" class="btn btn-secondary p-2 h-10 w-10 flex items-center justify-center" aria-label="Toggle dark theme">
                     <i class="fa-solid fa-moon"></i>
                 </button>
@@ -354,6 +377,77 @@ export function getFrontendHTML(): string {
 
         // State
         let currentImageUrl = null;
+        let authToken = sessionStorage.getItem('api_key') || '';
+
+        // Auth Elements
+        const loginModal = document.getElementById('loginModal');
+        const passwordInput = document.getElementById('password');
+        const loginButton = document.getElementById('loginButton');
+        const loginError = document.getElementById('loginError');
+        const logoutButton = document.getElementById('logoutButton');
+
+        // Check auth status on load
+        function checkAuth() {
+            if (authToken) {
+                loginModal.classList.add('hidden');
+                logoutButton.classList.remove('hidden');
+            } else {
+                loginModal.classList.remove('hidden');
+                logoutButton.classList.add('hidden');
+            }
+        }
+
+        // Login handler
+        loginButton.addEventListener('click', async () => {
+            const password = passwordInput.value.trim();
+            if (!password) {
+                loginError.textContent = 'Please enter a password';
+                loginError.classList.remove('hidden');
+                return;
+            }
+
+            loginButton.disabled = true;
+            loginButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Logging in...';
+
+            try {
+                // Validate by making a test request to /health with auth
+                const response = await fetch('/health', {
+                    headers: { 'Authorization': 'Bearer ' + password }
+                });
+
+                if (response.ok) {
+                    authToken = password;
+                    sessionStorage.setItem('api_key', authToken);
+                    loginError.classList.add('hidden');
+                    passwordInput.value = '';
+                    checkAuth();
+                } else {
+                    loginError.textContent = 'Invalid API key';
+                    loginError.classList.remove('hidden');
+                }
+            } catch (error) {
+                loginError.textContent = 'Login failed: ' + error.message;
+                loginError.classList.remove('hidden');
+            } finally {
+                loginButton.disabled = false;
+                loginButton.innerHTML = '<i class="fa-solid fa-sign-in-alt mr-2"></i>Login';
+            }
+        });
+
+        // Allow Enter key to submit
+        passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loginButton.click();
+        });
+
+        // Logout handler
+        logoutButton.addEventListener('click', () => {
+            authToken = '';
+            sessionStorage.removeItem('api_key');
+            checkAuth();
+        });
+
+        // Check auth on load
+        checkAuth();
 
         // DOM Elements
         const themeToggle = document.getElementById('themeToggle');
@@ -433,9 +527,13 @@ export function getFrontendHTML(): string {
             const startTime = Date.now();
 
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) {
+                    headers['Authorization'] = 'Bearer ' + authToken;
+                }
                 const response = await fetch(API_BASE + '/images/generations', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify({
                         model: model,
                         prompt: prompt,
@@ -449,6 +547,12 @@ export function getFrontendHTML(): string {
                 });
 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        authToken = '';
+                        sessionStorage.removeItem('api_key');
+                        checkAuth();
+                        throw new Error('Session expired. Please login again.');
+                    }
                     const error = await response.json();
                     throw new Error(error.error?.message || 'Generation failed');
                 }

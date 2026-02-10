@@ -57,7 +57,8 @@ export function authenticateRequest(request: Request, env: Env): AuthResult {
 
 /**
  * Check if request path requires authentication
- * Public endpoints: /health, /, /index.html, /images/* (if served directly)
+ * Public endpoints: /health, /login (POST), /images/* (if served directly)
+ * Note: Frontend (/) requires auth when API_KEYS is configured
  */
 export function requiresAuth(path: string, method: string): boolean {
   // Always allow OPTIONS (CORS preflight)
@@ -65,11 +66,10 @@ export function requiresAuth(path: string, method: string): boolean {
     return false;
   }
 
-  // Public endpoints
+  // Public endpoints (always accessible)
   const publicPaths = [
     '/health',
-    '/',
-    '/index.html',
+    '/login',  // Login endpoint is public (it validates password)
   ];
 
   // Check exact matches
@@ -88,6 +88,7 @@ export function requiresAuth(path: string, method: string): boolean {
   }
 
   // Everything else requires auth if API_KEYS is configured
+  // This includes / and /index.html (frontend)
   return true;
 }
 

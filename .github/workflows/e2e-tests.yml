@@ -265,3 +265,37 @@ jobs:
         run: |
           echo "E2E tests failed!"
           exit 1
+
+  cleanup-staging:
+    name: Cleanup Staging Worker
+    needs: e2e-tests
+    if: always() && (inputs.environment || 'staging') == 'staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: workers/package-lock.json
+
+      - name: Install Wrangler
+        working-directory: workers
+        run: npm install -g wrangler
+
+      - name: Delete Staging Worker
+        working-directory: workers
+        run: |
+          echo "Deleting staging worker..."
+          wrangler delete --name cloudflare-image-workers-staging --force
+          echo "✅ Staging worker deleted successfully"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
