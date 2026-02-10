@@ -12,6 +12,77 @@ export class ImageGeneratorService {
   private storage: R2StorageService;
   private models: Map<string, ModelConfig>;
 
+  private cleanBase64(data: string): string {
+    return data.replace(/^data:image\/\w+;base64,/, '');
+  }
+
+  private async extractImageResult(
+    result: unknown
+  ): Promise<
+    | { kind: 'base64'; data: string }
+    | { kind: 'binary'; data: ArrayBuffer }
+    | null
+  > {
+    // Common base64-returning shape
+    if (typeof result === 'string') {
+      return { kind: 'base64', data: result };
+    }
+
+    // Some models may return { image: "...base64..." }
+    if (result && typeof result === 'object' && 'image' in result) {
+      const maybeImage = (result as any).image;
+      if (typeof maybeImage === 'string') {
+        return { kind: 'base64', data: maybeImage };
+      }
+      if (maybeImage instanceof ArrayBuffer) {
+        return { kind: 'binary', data: maybeImage };
+      }
+      if (maybeImage instanceof Uint8Array) {
+        // Uint8Array.buffer is typed as ArrayBufferLike; slice() produces an ArrayBuffer
+        const copied = new Uint8Array(maybeImage);
+        const buf = copied.buffer.slice(copied.byteOffset, copied.byteOffset + copied.byteLength);
+        return { kind: 'binary', data: buf };
+      }
+      if (maybeImage instanceof ReadableStream) {
+        const buf = await new Response(maybeImage).arrayBuffer();
+        return { kind: 'binary', data: buf };
+      }
+    }
+
+    // Binary response directly
+    if (result instanceof ArrayBuffer) {
+      return { kind: 'binary', data: result };
+    }
+    if (result instanceof Uint8Array) {
+      // Uint8Array.buffer is typed as ArrayBufferLike; slice() produces an ArrayBuffer
+      const copied = new Uint8Array(result);
+      const buf = copied.buffer.slice(copied.byteOffset, copied.byteOffset + copied.byteLength);
+      return { kind: 'binary', data: buf };
+    }
+    if (result instanceof ReadableStream) {
+      const buf = await new Response(result).arrayBuffer();
+      return { kind: 'binary', data: buf };
+    }
+
+    return null;
+  }
+
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    // Convert ArrayBuffer to base64 without Node Buffer.
+    // Use chunking to avoid quadratic string concatenation and stack issues.
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000; // 32KB
+    let binary = '';
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      binary += String.fromCharCode(...(chunk as any));
+    }
+
+    return btoa(binary);
+  }
+
   constructor(env: Env) {
     this.ai = env.AI;
     this.storage = new R2StorageService(env);
@@ -101,35 +172,39 @@ export class ImageGeneratorService {
         result = await (this.ai as any).run(model.id, payload);
       }
 
-      // Extract image from response
-      let base64Image = typeof result === 'string' ? result : (result?.image || result);
-      if (!base64Image) {
+      // Extract image from response (base64 string OR binary stream/bytes)
+      const extracted = await this.extractImageResult(result);
+      if (!extracted) {
         return { success: false, error: 'No image in model response' };
       }
 
-      // Clean up base64 data (remove data URI prefix if present)
-      base64Image = base64Image.replace(/^data:image\/\w+;base64,/, '');
-
       // If base64 format requested, return directly without uploading
       if (returnBase64) {
+        const base64Data = extracted.kind === 'base64'
+          ? this.cleanBase64(extracted.data)
+          : this.arrayBufferToBase64(extracted.data);
+
         return {
           success: true,
-          base64Data: base64Image,
+          base64Data,
         };
       }
 
       // Upload to R2 storage
-      const uploadResult = await this.storage.uploadImage(base64Image, {
-        model: model.id,
-        prompt: params.prompt,
-        parameters: {
-          size: params.size,
-          steps: params.steps,
-          seed: params.seed,
-          guidance: params.guidance,
-          negative_prompt: params.negative_prompt,
-        },
-      });
+      const uploadResult = await this.storage.uploadImage(
+        extracted.kind === 'base64' ? this.cleanBase64(extracted.data) : extracted.data,
+        {
+          model: model.id,
+          prompt: params.prompt,
+          parameters: {
+            size: params.size,
+            steps: params.steps,
+            seed: params.seed,
+            guidance: params.guidance,
+            negative_prompt: params.negative_prompt,
+          },
+        }
+      );
 
       return {
         success: true,
@@ -190,11 +265,13 @@ export class ImageGeneratorService {
     prompt: string | Record<string, any>,
     imageData: string,
     strength: number = 0.5,
-    explicitParams: Record<string, any> = {}
+    explicitParams: Record<string, any> = {},
+    returnBase64: boolean = false
   ): Promise<{
     success: boolean;
     imageUrl?: string;
     imageId?: string;
+    base64Data?: string;
     error?: string;
   }> {
     const model = this.getModelConfig(modelId);
@@ -252,20 +329,34 @@ export class ImageGeneratorService {
         result = await (this.ai as any).run(model.id, payload);
       }
 
-      const base64Image = typeof result === 'string' ? result : (result?.image || result);
-      if (!base64Image) {
+      const extracted = await this.extractImageResult(result);
+      if (!extracted) {
         return { success: false, error: 'No image in model response' };
       }
 
-      const uploadResult = await this.storage.uploadImage(base64Image, {
-        model: model.id,
-        prompt: params.prompt,
-        parameters: {
-          size: params.size,
-          steps: params.steps,
-          seed: params.seed,
-        },
-      });
+      if (returnBase64) {
+        const base64Data = extracted.kind === 'base64'
+          ? this.cleanBase64(extracted.data)
+          : this.arrayBufferToBase64(extracted.data);
+
+        return {
+          success: true,
+          base64Data,
+        };
+      }
+
+      const uploadResult = await this.storage.uploadImage(
+        extracted.kind === 'base64' ? this.cleanBase64(extracted.data) : extracted.data,
+        {
+          model: model.id,
+          prompt: params.prompt,
+          parameters: {
+            size: params.size,
+            steps: params.steps,
+            seed: params.seed,
+          },
+        }
+      );
 
       return {
         success: true,
@@ -286,11 +377,13 @@ export class ImageGeneratorService {
     prompt: string,
     imageData: string,
     maskData: string,
-    explicitParams: Record<string, any> = {}
+    explicitParams: Record<string, any> = {},
+    returnBase64: boolean = false
   ): Promise<{
     success: boolean;
     imageUrl?: string;
     imageId?: string;
+    base64Data?: string;
     error?: string;
   }> {
     const model = this.getModelConfig(modelId);
@@ -313,20 +406,34 @@ export class ImageGeneratorService {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (this.ai as any).run(model.id, payload);
 
-      const base64Image = typeof result === 'string' ? result : (result?.image || result);
-      if (!base64Image) {
+      const extracted = await this.extractImageResult(result);
+      if (!extracted) {
         return { success: false, error: 'No image in model response' };
       }
 
-      const uploadResult = await this.storage.uploadImage(base64Image, {
-        model: model.id,
-        prompt: params.prompt,
-        parameters: {
-          size: params.size,
-          steps: params.steps,
-          seed: params.seed,
-        },
-      });
+      if (returnBase64) {
+        const base64Data = extracted.kind === 'base64'
+          ? this.cleanBase64(extracted.data)
+          : this.arrayBufferToBase64(extracted.data);
+
+        return {
+          success: true,
+          base64Data,
+        };
+      }
+
+      const uploadResult = await this.storage.uploadImage(
+        extracted.kind === 'base64' ? this.cleanBase64(extracted.data) : extracted.data,
+        {
+          model: model.id,
+          prompt: params.prompt,
+          parameters: {
+            size: params.size,
+            steps: params.steps,
+            seed: params.seed,
+          },
+        }
+      );
 
       return {
         success: true,

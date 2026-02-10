@@ -176,8 +176,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       supportedSizes: ['512x512', '1024x1024'],
     },
   },
-  '@cf/lykon/dreamshaper-8-lcm-8-lcm': {
-    id: '@cf/lykon/dreamshaper-8-lcm-8-lcm',
+  '@cf/lykon/dreamshaper-8-lcm': {
+    id: '@cf/lykon/dreamshaper-8-lcm',
     name: '@cf/lykon/dreamshaper-8-lcm 8 LCM',
     description: 'Enhanced photorealistic SD model with LCM acceleration',
     provider: 'lykon',

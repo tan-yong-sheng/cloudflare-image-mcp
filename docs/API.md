@@ -168,7 +168,7 @@ Generate variations of an input image.
 | `@cf/black-forest-labs/flux-2-dev` | Black Forest Labs | High quality |
 | `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Stability AI | High quality, many features |
 | `@cf/bytedance/stable-diffusion-xl-lightning` | ByteDance | Very fast |
-| `@cf/lykon/dreamshaper-8-lcm-8-lcm` | Lykon | Photorealistic |
+| `@cf/lykon/dreamshaper-8-lcm` | Lykon | Photorealistic |
 | `@cf/leonardo/lucid-origin` | Leonardo.AI | Adaptable |
 | `@cf/leonardo/phoenix-1.0` | Leonardo.AI | Prompt adherence |
 
@@ -181,7 +181,7 @@ Masked edits (inpainting) are a specialized form of image-to-image editing: it u
 | `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Stability AI | img2img + masked edits (mask supported) |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Black Forest Labs | img2img |
 | `@cf/black-forest-labs/flux-2-dev` | Black Forest Labs | img2img |
-| `@cf/lykon/dreamshaper-8-lcm-8-lcm` | Lykon | img2img |
+| `@cf/lykon/dreamshaper-8-lcm` | Lykon | img2img |
 | `@cf/runwayml/stable-diffusion-v1-5-img2img` | RunwayML | img2img |
 | `@cf/runwayml/stable-diffusion-v1-5-inpainting` | RunwayML | masked edits (mask required) |
 

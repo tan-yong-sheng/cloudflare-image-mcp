@@ -3,7 +3,7 @@
 // Implements /v1/images/generations, /v1/images/edits, /v1/images/variations
 // ============================================================================
 
-import type { Env, OpenAIGenerationRequest, OpenAIVariationRequest, OpenAIImageResponse } from '../types.js';
+import type { Env, OpenAIGenerationRequest, OpenAIEditRequest, OpenAIVariationRequest, OpenAIImageResponse } from '../types.js';
 import { ImageGeneratorService } from '../services/image-generator.js';
 
 export class OpenAIEndpoint {
@@ -152,18 +152,22 @@ export class OpenAIEndpoint {
     let modelId: string;
     let n: number;
     let size: string;
+    let returnBase64 = false;
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       imageData = formData.get('image') as string;
-      maskData = formData.get('mask') as string || undefined;
+      maskData = (formData.get('mask') as string) || undefined;
       prompt = formData.get('prompt') as string;
       modelId = (formData.get('model') as string) || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = parseInt(formData.get('n') as string) || 1;
       size = (formData.get('size') as string) || '1024x1024';
+
+      // OpenAI-compatible: response_format supports url | b64_json
+      returnBase64 = formData.get('response_format') === 'b64_json';
     } else {
       const body = await request.json();
-      const req = body as OpenAIGenerationRequest;
+      const req = body as OpenAIEditRequest;
       // JSON form can supply either image/mask or image_b64/mask_b64.
       imageData = (req as any).image ?? (req as any).image_b64;
       maskData = (req as any).mask ?? (req as any).mask_b64;
@@ -171,6 +175,9 @@ export class OpenAIEndpoint {
       modelId = req.model || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = req.n || 1;
       size = req.size || '1024x1024';
+
+      // OpenAI-compatible: response_format supports url | b64_json
+      returnBase64 = req.response_format === 'b64_json';
     }
 
     if (!imageData || !prompt) {
@@ -182,6 +189,7 @@ export class OpenAIEndpoint {
       });
     }
 
+
     // Generate edit
     let result;
     if (maskData) {
@@ -191,7 +199,8 @@ export class OpenAIEndpoint {
         prompt,
         imageData,
         maskData,
-        { size, n }
+        { size, n },
+        returnBase64
       );
     } else {
       // Image-to-image
@@ -200,7 +209,8 @@ export class OpenAIEndpoint {
         prompt,
         imageData,
         0.5, // Default strength
-        { size, n }
+        { size, n },
+        returnBase64
       );
     }
 
@@ -213,11 +223,18 @@ export class OpenAIEndpoint {
       });
     }
 
+    // OpenAI spec: return only the requested format field (url OR b64_json)
+    const origin = new URL(request.url).origin;
     const response: OpenAIImageResponse = {
       created: Math.floor(Date.now() / 1000),
-      data: [{
-        url: result.imageUrl,
-      }],
+      data: returnBase64
+        ? [{ b64_json: (result as any).base64Data || '' }]
+        : [{
+          url: (() => {
+            const url = (result as any).imageUrl || '';
+            return url.startsWith('/') ? new URL(url, origin).toString() : url;
+          })(),
+        }],
     };
 
     return new Response(JSON.stringify(response), {
@@ -236,6 +253,7 @@ export class OpenAIEndpoint {
     let modelId: string;
     let n: number;
     let size: string;
+    let returnBase64 = false;
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
@@ -243,6 +261,7 @@ export class OpenAIEndpoint {
       modelId = (formData.get('model') as string) || '@cf/black-forest-labs/flux-2-klein-4b';
       n = parseInt(formData.get('n') as string) || 1;
       size = (formData.get('size') as string) || '1024x1024';
+      returnBase64 = formData.get('response_format') === 'b64_json';
     } else {
       const body = await request.json();
       const req = body as OpenAIVariationRequest;
@@ -250,6 +269,7 @@ export class OpenAIEndpoint {
       modelId = req.model || '@cf/black-forest-labs/flux-2-klein-4b';
       n = req.n || 1;
       size = req.size || '1024x1024';
+      returnBase64 = req.response_format === 'b64_json';
     }
 
     if (!imageData) {
@@ -261,13 +281,15 @@ export class OpenAIEndpoint {
       });
     }
 
-    // Generate variation (uses image-to-image with empty prompt or similar)
+
+    // Generate variation (uses image-to-image with empty prompt)
     const result = await this.generator.generateImageToImage(
       modelId,
       '', // Empty prompt for variations
       imageData,
       0.7, // Lower strength for more faithful variations
-      { size, n }
+      { size, n },
+      returnBase64
     );
 
     if (!result.success) {
@@ -279,11 +301,18 @@ export class OpenAIEndpoint {
       });
     }
 
+    // OpenAI spec: return only the requested format field (url OR b64_json)
+    const origin = new URL(request.url).origin;
     const response: OpenAIImageResponse = {
       created: Math.floor(Date.now() / 1000),
-      data: [{
-        url: result.imageUrl,
-      }],
+      data: returnBase64
+        ? [{ b64_json: (result as any).base64Data || '' }]
+        : [{
+          url: (() => {
+            const url = (result as any).imageUrl || '';
+            return url.startsWith('/') ? new URL(url, origin).toString() : url;
+          })(),
+        }],
     };
 
     return new Response(JSON.stringify(response), {

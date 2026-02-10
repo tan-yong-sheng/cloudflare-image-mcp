@@ -462,8 +462,8 @@
         ]
       }
     },
-    "@cf/lykon/dreamshaper-8-lcm-8-lcm": {
-      "id": "@cf/lykon/dreamshaper-8-lcm-8-lcm",
+    "@cf/lykon/dreamshaper-8-lcm": {
+      "id": "@cf/lykon/dreamshaper-8-lcm",
       "name": "@cf/lykon/dreamshaper-8-lcm 8 LCM",
       "description": "Enhanced photorealistic SD model with LCM acceleration",
       "provider": "lykon",
@@ -567,6 +567,6 @@
     "@cf/black-forest-labs/flux-2-dev": "@cf/black-forest-labs/flux-2-dev",
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
     "@cf/bytedance/stable-diffusion-xl-lightning": "@cf/bytedance/stable-diffusion-xl-lightning",
-    "@cf/lykon/dreamshaper-8-lcm": "@cf/lykon/dreamshaper-8-lcm-8-lcm"
+    "@cf/lykon/dreamshaper-8-lcm": "@cf/lykon/dreamshaper-8-lcm"
   }
 }
