@@ -43,7 +43,6 @@ jobs:
       workers_url: ${{ steps.export_workers_url.outputs.workers_url }}
     permissions:
       contents: read
-      deployments: write
 
     steps:
       - name: Checkout code
