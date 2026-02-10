@@ -35,15 +35,10 @@ test.describe('OpenAI Image Generations API', () => {
     const image = body.data[0];
     expect(image).toHaveProperty('url');
     expect(typeof image.url).toBe('string');
-    // URL should be absolute (https://) when S3_CDN_URL is configured, or relative (/images/...)
-    expect(image.url).toMatch(/^(https?:\/\/|\/images\/)/);
+    // URL should be relative (/images/...) - served through worker proxy
+    expect(image.url).toMatch(/^\/images\//);
 
-    // Log URL type for debugging
-    if (image.url.startsWith('http')) {
-      console.log('✅ Full CDN URL:', image.url);
-    } else {
-      console.log('⚠️  Relative URL (set S3_CDN_URL for full URLs):', image.url);
-    }
+    console.log('✅ Image URL:', image.url);
   });
 
   test('POST /v1/images/generations with all parameters', async ({ request }) => {
@@ -220,19 +215,8 @@ test.describe('OpenAI Image Generations API', () => {
     expect(typeof image.url).toBe('string');
     expect(image.url.length).toBeGreaterThan(0);
 
-    // URL should either be:
-    // 1. Full HTTPS URL (when S3_CDN_URL is configured): https://cdn.example.com/images/...
-    // 2. Relative URL (when S3_CDN_URL is not set): /images/...
-    const isFullUrl = image.url.startsWith('https://');
-    const isRelativeUrl = image.url.startsWith('/images/');
-
-    expect(isFullUrl || isRelativeUrl).toBe(true);
-
-    if (isFullUrl) {
-      // Validate full URL format
-      const urlPattern = /^https:\/\/[^\/]+\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/;
-      expect(image.url).toMatch(urlPattern);
-    }
+    // URL should be relative: /images/...
+    expect(image.url).toMatch(/^\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/);
   });
 
   test('POST /v1/images/generations returns clean response without b64_json when format=url', async ({ request }) => {

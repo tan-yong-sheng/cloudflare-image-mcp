@@ -36,8 +36,7 @@ Treat the checked-in `workers/wrangler.toml` as a **local/dev template only**.
 
 | Secret | Description |
 |--------|-------------|
-| `API_KEYS` | Comma-separated API keys to protect OpenAI + MCP endpoints |
-| `S3_CDN_URL` | Public R2 URL for absolute image URLs (otherwise relative `/images/...`) |
+| `API_KEYS` | Comma-separated API keys to protect OpenAI + MCP endpoints + Frontend |
 | `TZ` | Timezone for logging |
 
 ---

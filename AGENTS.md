@@ -58,8 +58,7 @@ Required GitHub Secrets (CI deploy):
 - `CLOUDFLARE_ACCOUNT_ID`
 
 Optional Worker secrets:
-- `API_KEYS` (protects MCP + OpenAI endpoints)
-- `S3_CDN_URL` (absolute image URLs; otherwise `/images/...`)
+- `API_KEYS` (protects MCP + OpenAI endpoints + Frontend)
 - `TZ`
 
 Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contradiction).

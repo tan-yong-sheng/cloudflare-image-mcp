@@ -204,11 +204,7 @@ test.describe('MCP Tools', () => {
       expect(urlMatch).not.toBeNull();
 
       const imageUrl = urlMatch[1];
-      if (imageUrl.startsWith('http')) {
-        console.log('✅ MCP returns full CDN URL:', imageUrl);
-      } else {
-        console.log('⚠️  MCP returns relative URL (set S3_CDN_URL for full URLs):', imageUrl);
-      }
+      console.log('✅ MCP returns image URL:', imageUrl);
     }
   });
 

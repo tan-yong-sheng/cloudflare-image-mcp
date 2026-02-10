@@ -99,7 +99,7 @@ jobs:
           # Environment variables
           [vars]
           IMAGE_EXPIRY_HOURS = "24"
-          # S3_CDN_URL and API_KEYS are set as secrets via wrangler secret put
+          # API_KEYS is set as secret via wrangler secret put
           EOF
 
           echo "✅ wrangler.toml generated successfully"
@@ -117,9 +117,6 @@ jobs:
 
       - name: Check optional secrets
         run: |
-          if [ -z "${{ secrets.S3_CDN_URL }}" ]; then
-            echo "ℹ️ S3_CDN_URL not set (image URLs may be relative)"
-          fi
           if [ -z "${{ secrets.API_KEYS }}" ]; then
             echo "ℹ️ API_KEYS not set (endpoints are public)"
           fi
@@ -132,9 +129,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers
           command: deploy
-        env:
-          S3_CDN_URL: ${{ secrets.S3_CDN_URL }}
-          API_KEYS: ${{ secrets.API_KEYS }}
 
       - name: Set Worker secrets
         working-directory: workers
@@ -146,9 +140,6 @@ jobs:
           # Optional runtime configuration
           if [ -n "${{ secrets.API_KEYS }}" ]; then
             echo "${{ secrets.API_KEYS }}" | npx wrangler secret put API_KEYS --name ${{ env.WORKERS_NAME }}
-          fi
-          if [ -n "${{ secrets.S3_CDN_URL }}" ]; then
-            echo "${{ secrets.S3_CDN_URL }}" | npx wrangler secret put S3_CDN_URL --name ${{ env.WORKERS_NAME }}
           fi
           if [ -n "${{ secrets.TZ }}" ]; then
             echo "${{ secrets.TZ }}" | npx wrangler secret put TZ --name ${{ env.WORKERS_NAME }}
@@ -216,7 +207,6 @@ jobs:
           echo "- MCP SSE: ${{ env.WORKERS_URL }}/mcp?transport=sse" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Secrets Configured" >> $GITHUB_STEP_SUMMARY
-          echo "- S3_CDN_URL: ${{ secrets.S3_CDN_URL != '' && '✅ Configured' || '❌ Missing' }}" >> $GITHUB_STEP_SUMMARY
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured' || '❌ Missing' }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup sensitive files

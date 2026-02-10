@@ -129,12 +129,10 @@ export interface Env {
   CLOUDFLARE_API_TOKEN: string;
   CLOUDFLARE_ACCOUNT_ID: string;
   IMAGE_EXPIRY_HOURS: string;
-  S3_CDN_URL: string;
   API_KEYS?: string; // Comma-separated list of valid API keys
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
   TZ?: string; // Timezone for logging and folder creation (default: UTC)
-  BUCKET_NAME?: string; // R2 bucket name (for constructing CDN URL if S3_CDN_URL not provided)
 }
 
 // MCP message types

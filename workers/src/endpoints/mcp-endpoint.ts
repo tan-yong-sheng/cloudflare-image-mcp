@@ -9,7 +9,6 @@ import { ImageGeneratorService } from '../services/image-generator.js';
 export class MCPEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
-  private cdnUrl: string;
 
   // Per-request mode (derived from path)
   // - smart/multi: list_models, describe_model, run_models
@@ -22,7 +21,6 @@ export class MCPEndpoint {
 
   constructor(env: Env) {
     this.generator = new ImageGeneratorService(env);
-    this.cdnUrl = env.S3_CDN_URL || '';
     this.workerBaseUrl = ''; // Will be set from first request
 
 
@@ -398,9 +396,9 @@ export class MCPEndpoint {
       }];
     }
 
-    // Format response with full URL (use CDN URL if set, otherwise use worker proxy URL)
+    // Format response with full URL (use worker proxy URL)
     const textParts: string[] = [];
-    const baseUrl = this.cdnUrl || this.workerBaseUrl;
+    const baseUrl = this.workerBaseUrl;
     const fullUrl = (path: string) => path.startsWith('http') ? path : `${baseUrl}${path}`;
 
     // Helper to check if image has url (not b64_json)

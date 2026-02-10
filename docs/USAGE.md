@@ -210,18 +210,18 @@ Generated images are stored in Cloudflare R2 with automatic expiration.
 
 - **Bucket**: Bound as `IMAGE_BUCKET` (local dev via `workers/wrangler.toml`; CI generates config during deploy)
 - **Expiry**: 24 hours (configurable via `IMAGE_EXPIRY_HOURS`)
-- **Access**: Via CDN URL configured in `S3_CDN_URL` (optional)
+- **Access**: Via worker proxy URL (`/images/...`)
 
 ### Image URLs
 
 Images are accessible at:
 ```
-https://<S3_CDN_URL>/images/<year>/<month>/<id>.png
+https://<worker-url>/images/<year>-<month>-<day>/<id>.png
 ```
 
 Example:
 ```
-https://pub-images.example.com/images/2024/12/abc123-def456.png
+https://cloudflare-image-workers.your-subdomain.workers.dev/images/2024-12-25/abc123-def456.png
 ```
 
 ---
@@ -312,7 +312,6 @@ print(result['result']['content'][0]['text'])
 
 - Check worker logs: `npx wrangler deploy --log-level debug`
 - Verify R2 bucket is configured correctly
-- Ensure S3_CDN_URL points to a valid public endpoint
 
 ### MCP Connection Failed
 
@@ -323,5 +322,4 @@ print(result['result']['content'][0]['text'])
 ### Images Not Loading
 
 - Check if image has expired (24 hour TTL)
-- Verify R2 bucket public access is enabled
-- Confirm S3_CDN_URL is correctly configured
+- Verify R2 bucket is accessible through the worker

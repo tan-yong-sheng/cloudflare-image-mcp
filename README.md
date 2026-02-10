@@ -68,7 +68,7 @@ The repository includes automated deployment via GitHub Actions:
 1. Add secrets to your GitHub repository:
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
-   - `S3_CDN_URL` (optional)
+   - `API_KEYS` (optional - protects endpoints and frontend)
 
 2. Push to main branch or trigger workflow manually
 
