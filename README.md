@@ -12,7 +12,6 @@ OpenAI-compatible image generation API + Streamable HTTP MCP server powered by C
 - **Multiple Tasks**: Text-to-image, image-to-image (masked edits supported)
 - **Web Frontend**: Interactive UI for image generation
 - **R2 Storage**: Auto-expiring image storage with CDN
-- **Zero Infrastructure**: Deploys to Cloudflare Workers in seconds
 
 ## 📦 What's Included
 
