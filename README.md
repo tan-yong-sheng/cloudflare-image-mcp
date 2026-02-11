@@ -7,82 +7,134 @@ OpenAI-compatible image generation API + MCP server powered by Cloudflare Worker
 ## 🌟 Features
 
 - **OpenAI-Compatible API**: `/v1/images/generations` + `/v1/images/edits` endpoints
-- **MCP Protocol Support**:
-  - HTTP transport with SSE (streamable)
+- **MCP Protocol Support**: HTTP transport with SSE (streamable)
 - **10 Image Generation Models**: FLUX, SDXL, Stable Diffusion, and more
 - **Multiple Tasks**: Text-to-image, image-to-image (masked edits supported)
-- **Deployment**: Cloudflare Workers
 - **Web Frontend**: Interactive UI for image generation
 - **R2 Storage**: Auto-expiring image storage with CDN
+- **Zero Infrastructure**: Deploys to Cloudflare Workers in seconds
 
-## 📦 Architecture
+## 📦 What's Included
 
 ```
 cloudflare-image-mcp/
-├── workers/           # Cloudflare Workers deployment (HTTP MCP + API + UI)
-└── e2e/               # Playwright E2E tests (staging/production)
+├── workers/           # Cloudflare Worker (API + MCP + Frontend)
+└── e2e/               # Playwright E2E tests
 ```
+
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+
-- Cloudflare account (for API access)
-- R2 bucket (for image storage)
+1. **Deploy this MCP server** to your Cloudflare account (takes 5 minutes):
+   👉 **[Deployment Guide](docs/DEPLOY.md)**
 
-### Local Development
+2. Note your worker URL after deployment:
+   ```
+   https://cloudflare-image-workers.<your-subdomain>.workers.dev
+   ```
 
-```bash
-cd workers
-npm ci
-npx wrangler dev --remote
+3. If you set `API_KEYS` during deployment, you'll need the key for authentication.
+
+### MCP Client Configuration
+
+Below are the configuration guides for different MCP clients. This server uses **HTTP/SSE transport** (not stdio) since it runs on Cloudflare Workers.
+
+<details><summary>Claude Desktop</summary>
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "cloudflare-image": {
+      "url": "https://your-worker.workers.dev/mcp"
+    }
+  }
+}
 ```
 
-Then open:
-- Web UI: http://localhost:8787/
+If using API key authentication:
+```json
+{
+  "mcpServers": {
+    "cloudflare-image": {
+      "url": "https://your-worker.workers.dev/mcp?key=your-api-key"
+    }
+  }
+}
+```
+</details>
 
-### Deploy
+<details><summary>Claude Code</summary>
+
+Add the MCP server:
 
 ```bash
-cd workers
-npm ci
-npx wrangler deploy
+claude mcp add cloudflare-image https://your-worker.workers.dev/mcp
 ```
 
-### Cloudflare Workers Deployment (CI/CD)
-
-**Option 1: Manual Deployment (local wrangler.toml)**
-
+With API key:
 ```bash
-cd workers
-# Configure your local workers/wrangler.toml (bindings: IMAGE_BUCKET, AI)
-# Then deploy
-npx wrangler deploy
+claude mcp add cloudflare-image https://your-worker.workers.dev/mcp?key=your-api-key
 ```
+</details>
 
-**Option 2: Automated CI/CD (recommended)**
+<details><summary>Cursor</summary>
 
-The repository includes automated deployment via GitHub Actions:
+Go to: **Settings → Cursor Settings → MCP → Add new global MCP server**
 
-1. Add secrets to your GitHub repository:
-   - `CLOUDFLARE_API_TOKEN`
-   - `CLOUDFLARE_ACCOUNT_ID`
-   - `API_KEYS` (optional - protects endpoints and frontend)
+```json
+{
+  "mcpServers": {
+    "cloudflare-image": {
+      "url": "https://your-worker.workers.dev/mcp"
+    }
+  }
+}
+```
+</details>
 
-2. Push to main branch or trigger workflow manually
+<details><summary>Cline</summary>
 
-3. Workers automatically deployed to: `https://cloudflare-image-workers.*.workers.dev/`
+Open Cline → Click **MCP Servers** icon → **Installed** tab → **Advanced MCP Settings**
 
-See `docs/` for detailed setup instructions.
+Add to `cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "cloudflare-image": {
+      "url": "https://your-worker.workers.dev/mcp"
+    }
+  }
+}
+```
+</details>
+
+
+<details><summary>Other MCP Clients</summary>
+
+This server implements the **MCP HTTP/SSE transport**. Configure your client with:
+
+- **Transport**: HTTP/SSE (streamable)
+- **URL**: `https://your-worker.workers.dev/mcp`
+- **Auth** (if API_KEYS set): Add `?key=your-api-key` to the URL
+
+</details>
+
+---
 
 ## 📖 Usage
 
 ### OpenAI-Compatible API
 
 ```bash
-curl -X POST "http://localhost:3000/v1/images/generations" \
+curl -X POST "https://your-worker.workers.dev/v1/images/generations" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
   -d '{
     "model": "@cf/black-forest-labs/flux-1-schnell",
     "prompt": "A beautiful sunset over mountains",
@@ -91,6 +143,12 @@ curl -X POST "http://localhost:3000/v1/images/generations" \
   }'
 ```
 
+And it can be used for OpenWebUI's image generation feature:
+
+![OpenWebUI image generation](/static/img/openwebui-image-settings.png)
+
+
+
 ### MCP Tools
 
 **Available Tools:**
@@ -98,14 +156,27 @@ curl -X POST "http://localhost:3000/v1/images/generations" \
 - `describe_model` - Get model parameters and limits
 - `run_model` - Generate images
 
-**Workflow:**
-1. Call `list_models` to get available models
-2. Call `describe_model(model_id)` to understand parameters
-3. Call `run_model(model_id, prompt, ...)` to generate
+
+**Connect via MCP:**
+```json
+{
+  "mcpServers": {
+    "image-gen": {
+      "url": "https://your-worker.workers.dev/mcp"
+    }
+  }
+}
+```
+
+
 
 ### Web Frontend
 
-Open http://localhost:3000/ in your browser for an interactive UI.
+Open your worker URL in a browser for an interactive UI.
+
+![Frontend](/static/img/image-generation-frontend.png)
+
+---
 
 ## 🎨 Supported Models
 
@@ -122,70 +193,45 @@ Open http://localhost:3000/ in your browser for an interactive UI.
 | SD 1.5 Img2Img | image-to-image (img2img) | Runway ML |
 | SD 1.5 Inpainting | image-to-image (requires mask) | Runway ML |
 
-## 🧪 Testing
-
-E2E tests run against Workers deployments (staging/production).
-
-```bash
-npm run test:e2e:staging
-# or
-npm run test:e2e:production
-```
+---
 
 ## 📚 Documentation
 
-- [Usage Guide](docs/USAGE.md) - Detailed API usage
-- [Environment Setup](docs/CREDENTIALS_SETUP.md) - Required Cloudflare credentials
-- [Deployment Guide](docs/DEPLOY.md) - Production deployment
-- [MCP Guide](docs/MCP.md) - MCP tools and transports
-- [OpenAI-Compatible API](docs/API.md) - REST endpoints (`/v1/images/*`)
+| Document | Description |
+|----------|-------------|
+| [Deployment Guide](docs/DEPLOY.md) | **Step-by-step deployment instructions** |
+| [Credentials Setup](docs/CREDENTIALS_SETUP.md) | Environment variables and API tokens |
+| [Usage Guide](docs/USAGE.md) | Detailed API usage examples |
+| [MCP Guide](docs/MCP.md) | MCP protocol and tools reference |
+| [API Reference](docs/API.md) | REST endpoints documentation |
 
-## 🔧 Development
+---
 
-### Type check Workers
-
-```bash
-npm run build
-```
-
-### Run E2E tests
+## 🧪 Testing
 
 ```bash
+# Run E2E tests against staging/production
 npm run test:e2e:staging
-# or
 npm run test:e2e:production
 ```
 
-## 🌐 Deployment
+---
 
-This project deploys to **Cloudflare Workers**.
+## 🔧 Development
 
-### Automated Deployments
+```bash
+# Type check
+npm run build
 
-This repository includes CI/CD pipelines for automated deployments:
+# Run E2E tests
+npm run test:e2e:staging
+```
 
-- **Cloudflare Workers** - Auto-deploys on push to main
-
-See `docs/` for deployment instructions.
+---
 
 ## 📝 License
 
 MIT
-
-## 🤝 Contributing
-
-See [CONTRIB.md](docs/CONTRIB.md) for guidelines.
-
-### Adding New Models
-
-Want to add a new Cloudflare Workers AI text-to-image model? Use the Claude Code skill:
-
-```bash
-# In Claude Code:
-/add-cf-models docs/models/generations/{new-cf-model}.md
-```
-
-Or see `.claude/skills/add-cf-models/SKILL.md` for manual instructions.
 
 ---
 
@@ -193,4 +239,3 @@ Or see `.claude/skills/add-cf-models/SKILL.md` for manual instructions.
 - [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [Cloudflare R2](https://developers.cloudflare.com/r2/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- TypeScript + Node.js

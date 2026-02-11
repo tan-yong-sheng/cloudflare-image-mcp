@@ -1,87 +1,57 @@
-# 🌍 Environment Setup (Cloudflare Workers Only)
+# Environment Setup
 
-This project runs **only on Cloudflare Workers**.
+This page lists all environment variables used by this project.
+
+For **step-by-step deployment instructions**, see [DEPLOY.md](DEPLOY.md).
 
 ---
 
-## ✅ Required Environment Variables
+## Required for Deployment
 
-These **two variables are all you need** for deployment and CI:
+| Variable | Description | How to Get It |
+|----------|-------------|---------------|
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID | [Dashboard](https://dash.cloudflare.com) → Account Overview → right sidebar |
+| `CLOUDFLARE_API_TOKEN` | API token for deploying Workers | [Profile](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Custom token |
 
-| Variable                | Description                      |
-| ----------------------- | -------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID       |
-| `CLOUDFLARE_API_TOKEN`  | API token used to deploy Workers |
+### Required API Token Permissions
 
-Create a Cloudflare API Token (user-scoped) here:
-**[https://dash.cloudflare.com/](https://dash.cloudflare.com/)<CLOUDFLARE_ACCOUNT_ID>/api-tokens**
+Create a token with these **Account-scoped** permissions:
+
+| Scope | Permission |
+|-------|------------|
+| Account | Workers Scripts — Edit |
+| Account | Workers R2 Storage — Edit |
+| Account | Workers AI — Edit |
+| Account | Workers AI — Read |
+
+---
+
+## Optional Secrets
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `API_KEYS` | Protect endpoints with API key auth (comma-separated) | `mykey1,mykey2` |
+| `TZ` | Timezone for logging | `America/New_York` |
+
+---
+
+## Where to Set These
+
+### GitHub Actions (Recommended)
+
+Add as repository secrets:
+
+```
+https://github.com/YOUR_USERNAME/cloudflare-image-mcp/settings/secrets/actions
+```
+
+### Local Development
 
 ```bash
-export CLOUDFLARE_ACCOUNT_ID="<your-account-id>"
-export CLOUDFLARE_API_TOKEN="<your-api-token>"
+export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+export CLOUDFLARE_API_TOKEN="your-api-token"
 ```
 
 ---
 
-## 🚀 GitHub Actions Setup
-
-Store both values as **GitHub repository secrets** so CI can deploy automatically:
-
-```
-Settings → Secrets and variables → Actions → New repository secret
-```
-
-Used by:
-`.github/workflows/deploy-workers.yml`
-
----
-
-## 🔐 Required API Token Permissions
-
-Your `CLOUDFLARE_API_TOKEN` must be an **Account-scoped token** with these permissions:
-
-| Scope       | Permission                              |
-| ----------- | --------------------------------------- |
-| **Account** | Workers Scripts — **Edit**              |
-| **Account** | Workers KV Storage — **Edit**           |
-| **Account** | Workers R2 Storage — **Edit**           |
-| **Account** | Workers AI — **Edit**                   |
-| **Account** | Workers AI — **Read**                   |
-| **Account** | Workers Builds Configuration — **Edit** |
-| **Account** | Workers Observability — **Edit**        |
-| **Account** | Workers Tail — **Read**                 |
-| **Account** | Workers Agents Configuration — **Edit** |
-| **Account** | Containers — **Edit**                   |
-| **Account** | Cloudflare Pages — **Edit**             |
-| **Account** | Account Settings — **Read**             |
-| **Zone**    | Workers Routes — **Edit**               |
-
-You can add more permissions later if new features need them.
-
----
-
-## 🔎 Where to Find These Values
-
-| Item           | Where to get it                                |
-| -------------- | ---------------------------------------------- |
-| **Account ID** | Cloudflare Dashboard → Account Overview        |
-| **API Token**  | Cloudflare Dashboard → My Profile → API Tokens |
-
----
-
-## ⚙️ Optional Worker Secrets
-
-Not required for deployment, but useful for features:
-
-| Secret     | Purpose                                          |
-| ---------- | ------------------------------------------------ |
-| `API_KEYS` | Protect OpenAI + MCP endpoints (comma-separated) |
-| `TZ`       | Timezone for logs and file paths                 |
-
-You can also store these as **GitHub Secrets**.
-
----
-
-## 📚 Related Docs
-
-* `docs/DEPLOY.md` — Deployment workflow and `wrangler.toml` notes
+See [DEPLOY.md](DEPLOY.md) for the complete deployment guide.
