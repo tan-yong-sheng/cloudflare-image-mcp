@@ -129,14 +129,20 @@ export interface ImageMetadata {
   };
 }
 
+// AI account credentials for REST API calls
+export interface AIAccount {
+  account_id: string;
+  api_token: string;
+}
+
 // Environment interface
 export interface Env {
-  AI: Ai;
   IMAGE_BUCKET: R2Bucket;
   CLOUDFLARE_API_TOKEN: string;
   CLOUDFLARE_ACCOUNT_ID: string;
   IMAGE_EXPIRY_HOURS: string;
   API_KEYS?: string; // Comma-separated list of valid API keys
+  AI_ACCOUNTS?: string; // JSON array of {account_id, api_token} for multi-account AI inference
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
   TZ?: string; // Timezone for logging and folder creation (default: UTC)

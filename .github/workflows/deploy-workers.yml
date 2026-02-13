@@ -105,11 +105,6 @@ jobs:
           binding = "IMAGE_BUCKET"
           bucket_name = "cloudflare-image-mcp-images"
 
-          # Workers AI binding
-          [ai]
-          binding = "AI"
-          account_id = "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
-
           # Environment variables
           [vars]
           IMAGE_EXPIRY_HOURS = "24"
@@ -151,9 +146,16 @@ jobs:
           echo "${{ env.DEPLOYED_AT }}" | npx wrangler secret put DEPLOYED_AT --name ${{ env.WORKERS_NAME }}
           echo "${{ github.sha }}" | npx wrangler secret put COMMIT_SHA --name ${{ env.WORKERS_NAME }}
 
+          # Required: AI inference credentials (used by REST API to call Workers AI)
+          echo "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" | npx wrangler secret put CLOUDFLARE_ACCOUNT_ID --name ${{ env.WORKERS_NAME }}
+          echo "${{ secrets.CLOUDFLARE_API_TOKEN }}" | npx wrangler secret put CLOUDFLARE_API_TOKEN --name ${{ env.WORKERS_NAME }}
+
           # Optional runtime configuration
           if [ -n "${{ secrets.API_KEYS }}" ]; then
             echo "${{ secrets.API_KEYS }}" | npx wrangler secret put API_KEYS --name ${{ env.WORKERS_NAME }}
+          fi
+          if [ -n "${{ secrets.AI_ACCOUNTS }}" ]; then
+            echo "${{ secrets.AI_ACCOUNTS }}" | npx wrangler secret put AI_ACCOUNTS --name ${{ env.WORKERS_NAME }}
           fi
           if [ -n "${{ secrets.TZ }}" ]; then
             echo "${{ secrets.TZ }}" | npx wrangler secret put TZ --name ${{ env.WORKERS_NAME }}
@@ -227,6 +229,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Secrets Configured" >> $GITHUB_STEP_SUMMARY
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured' || '❌ Missing' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (multi-account)' || 'ℹ️ Not set (using deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup sensitive files
         if: always()

@@ -57,10 +57,11 @@ Click **New repository secret** and add these:
 
 | Secret Name | Value | Required |
 |-------------|-------|----------|
-| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare Account ID | ✅ Yes |
-| `CLOUDFLARE_API_TOKEN` | The API token you just created | ✅ Yes |
-| `API_KEYS` | Comma-separated list of API keys (e.g., `key1,key2,key3`) | ❌ Optional |
-| `TZ` | Your timezone (e.g., `America/New_York`, `Asia/Singapore`) | ❌ Optional |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare Account ID | Yes |
+| `CLOUDFLARE_API_TOKEN` | The API token you just created | Yes |
+| `API_KEYS` | Comma-separated list of API keys (e.g., `key1,key2,key3`) | Optional |
+| `AI_ACCOUNTS` | JSON array of `{"account_id","api_token"}` for multi-account AI inference (see [Credentials Setup](CREDENTIALS_SETUP.md#ai_accounts-format)) | Optional |
+| `TZ` | Your timezone (e.g., `America/New_York`, `Asia/Singapore`) | Optional |
 
 **Note on `API_KEYS`**: If set, all OpenAI API endpoints, MCP endpoints, and the web frontend will require authentication via the `Authorization: Bearer YOUR_KEY` header or `?key=YOUR_KEY` query parameter.
 

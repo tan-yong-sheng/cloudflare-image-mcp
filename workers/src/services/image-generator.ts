@@ -2,13 +2,13 @@
 // Image Generator Service - Routes to appropriate Cloudflare AI model
 // ============================================================================
 
-import type { Env, ModelConfig } from '../types.js';
+import type { Env, ModelConfig, AIAccount } from '../types.js';
 import { ParamParser } from './param-parser.js';
 import { R2StorageService } from './r2-storage.js';
 import { MODEL_CONFIGS } from '../config/models.js';
 
 export class ImageGeneratorService {
-  private ai: Ai;
+  private aiAccounts: AIAccount[];
   private storage: R2StorageService;
   private models: Map<string, ModelConfig>;
 
@@ -38,7 +38,6 @@ export class ImageGeneratorService {
         return { kind: 'binary', data: maybeImage };
       }
       if (maybeImage instanceof Uint8Array) {
-        // Uint8Array.buffer is typed as ArrayBufferLike; slice() produces an ArrayBuffer
         const copied = new Uint8Array(maybeImage);
         const buf = copied.buffer.slice(copied.byteOffset, copied.byteOffset + copied.byteLength);
         return { kind: 'binary', data: buf };
@@ -54,7 +53,6 @@ export class ImageGeneratorService {
       return { kind: 'binary', data: result };
     }
     if (result instanceof Uint8Array) {
-      // Uint8Array.buffer is typed as ArrayBufferLike; slice() produces an ArrayBuffer
       const copied = new Uint8Array(result);
       const buf = copied.buffer.slice(copied.byteOffset, copied.byteOffset + copied.byteLength);
       return { kind: 'binary', data: buf };
@@ -68,8 +66,6 @@ export class ImageGeneratorService {
   }
 
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    // Convert ArrayBuffer to base64 without Node Buffer.
-    // Use chunking to avoid quadratic string concatenation and stack issues.
     const bytes = new Uint8Array(buffer);
     const chunkSize = 0x8000; // 32KB
     let binary = '';
@@ -84,9 +80,117 @@ export class ImageGeneratorService {
   }
 
   constructor(env: Env) {
-    this.ai = env.AI;
     this.storage = new R2StorageService(env);
     this.models = new Map(Object.entries(MODEL_CONFIGS));
+
+    // Build AI accounts list:
+    // 1. AI_ACCOUNTS (JSON array) if set
+    // 2. Else fall back to CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
+    if (env.AI_ACCOUNTS) {
+      try {
+        this.aiAccounts = JSON.parse(env.AI_ACCOUNTS) as AIAccount[];
+        if (!Array.isArray(this.aiAccounts) || this.aiAccounts.length === 0) {
+          throw new Error('AI_ACCOUNTS must be a non-empty JSON array');
+        }
+        for (const acct of this.aiAccounts) {
+          if (!acct.account_id || !acct.api_token) {
+            throw new Error('Each AI_ACCOUNTS entry must have account_id and api_token');
+          }
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          throw new Error(`AI_ACCOUNTS is not valid JSON: ${e.message}`);
+        }
+        throw e;
+      }
+    } else {
+      this.aiAccounts = [{
+        account_id: env.CLOUDFLARE_ACCOUNT_ID,
+        api_token: env.CLOUDFLARE_API_TOKEN,
+      }];
+    }
+  }
+
+  /**
+   * Pick a random AI account for load distribution
+   */
+  private pickAccount(): AIAccount {
+    return this.aiAccounts[Math.floor(Math.random() * this.aiAccounts.length)];
+  }
+
+  /**
+   * Call Cloudflare Workers AI via REST API
+   */
+  private async runAI(
+    modelId: string,
+    payload: Record<string, any>,
+    model: ModelConfig,
+    images?: string[]
+  ): Promise<any> {
+    const account = this.pickAccount();
+    const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
+
+    let response: Response;
+
+    if (model.inputFormat === 'multipart') {
+      // Multipart form data (FLUX 2 models)
+      const form = new FormData();
+      for (const [key, value] of Object.entries(payload)) {
+        if (value !== undefined && value !== null && key !== 'image') {
+          form.append(key, String(value));
+        }
+      }
+
+      // Append image(s) as binary blobs if provided
+      if (images && images.length > 0) {
+        for (const img of images) {
+          const cleanedB64 = this.cleanBase64(img);
+          const bytes = this.base64ToUint8Array(cleanedB64);
+          form.append('image', new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
+        }
+      } else if (payload.image && typeof payload.image === 'string' && payload.image.length > 100) {
+        // Single image in payload (text-to-image with image param)
+        const cleanedB64 = this.cleanBase64(payload.image);
+        const bytes = this.base64ToUint8Array(cleanedB64);
+        form.append('image', new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
+      }
+
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${account.api_token}`,
+        },
+        body: form,
+      });
+    } else {
+      // JSON format
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${account.api_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Cloudflare AI API error (${response.status}): ${errorText}`);
+    }
+
+    // Determine response type from content-type header
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      // JSON response — may contain { result: { image: "base64..." } } or { result: "base64..." }
+      const json = await response.json() as any;
+      // Cloudflare REST API wraps result in { result: ... }
+      return json.result !== undefined ? json.result : json;
+    }
+
+    // Binary response (image/png, application/octet-stream, etc.)
+    return await response.arrayBuffer();
   }
 
   /**
@@ -124,55 +228,10 @@ export class ImageGeneratorService {
       // Build Cloudflare AI payload
       const payload = ParamParser.toCFPayload(params, model);
 
-      // Run the model
-      let result: any;
-      if (model.inputFormat === 'multipart') {
-        // FLUX 2 models require multipart form data
-        // Build multipart body as ReadableStream
-        const boundary = '----FormBoundary' + Math.random().toString(36).substring(2);
-        const parts: string[] = [];
+      // Run the model via REST API
+      const result = await this.runAI(model.id, payload, model);
 
-        for (const [key, value] of Object.entries(payload)) {
-          if (value !== undefined && value !== null) {
-            parts.push(`--${boundary}\r\n`);
-            if (key === 'image' && typeof value === 'string' && value.length > 100) {
-              // For image fields in img2img mode
-              const intArray = this.base64ToUint8Array(value);
-              parts.push(`Content-Disposition: form-data; name="${key}"\r\n`);
-              parts.push(`Content-Type: image/png\r\n\r\n`);
-              parts.push(String.fromCharCode(...intArray));
-              parts.push('\r\n');
-            } else {
-              parts.push(`Content-Disposition: form-data; name="${key}"\r\n\r\n`);
-              parts.push(`${String(value)}\r\n`);
-            }
-          }
-        }
-        parts.push(`--${boundary}--\r\n`);
-
-        const body = new TextEncoder().encode(parts.join(''));
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(body);
-            controller.close();
-          },
-        });
-
-        const contentType = `multipart/form-data; boundary=${boundary}`;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result = await (this.ai as any).run(model.id, {
-          multipart: {
-            body: stream,
-            contentType,
-          },
-        });
-      } else {
-        // Standard JSON format
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result = await (this.ai as any).run(model.id, payload);
-      }
-
-      // Extract image from response (base64 string OR binary stream/bytes)
+      // Extract image from response (base64 string OR binary)
       const extracted = await this.extractImageResult(result);
       if (!extracted) {
         return { success: false, error: 'No image in model response' };
@@ -315,39 +374,8 @@ export class ImageGeneratorService {
       // Build payload with image
       const payload = ParamParser.toCFPayload(params, model);
 
-      // Run the model
-      let result: any;
-      if (model.inputFormat === 'multipart') {
-        // Build multipart form data using FormData + Response serialization
-        const form = new FormData();
-        for (const [key, value] of Object.entries(payload)) {
-          if (value !== undefined && value !== null && key !== 'image') {
-            form.append(key, String(value));
-          }
-        }
-        // Append image(s) as binary blobs
-        for (const img of images) {
-          const cleanedB64 = this.cleanBase64(img);
-          const bytes = this.base64ToUint8Array(cleanedB64);
-          form.append('image', new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
-        }
-
-        // Use Response constructor to serialize FormData with proper boundary
-        const formResponse = new Response(form);
-        const formStream = formResponse.body;
-        const formContentType = formResponse.headers.get('content-type')!;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result = await (this.ai as any).run(model.id, {
-          multipart: {
-            body: formStream,
-            contentType: formContentType,
-          },
-        });
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result = await (this.ai as any).run(model.id, payload);
-      }
+      // Run the model via REST API (pass images for multipart handling)
+      const result = await this.runAI(model.id, payload, model, images);
 
       const extracted = await this.extractImageResult(result);
       if (!extracted) {
@@ -512,8 +540,9 @@ export class ImageGeneratorService {
       );
 
       const payload = ParamParser.toCFPayload(params, model);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (this.ai as any).run(model.id, payload);
+
+      // Run the model via REST API
+      const result = await this.runAI(model.id, payload, model);
 
       const extracted = await this.extractImageResult(result);
       if (!extracted) {

@@ -31,7 +31,23 @@ Create a token with these **Account-scoped** permissions:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `API_KEYS` | Protect endpoints with API key auth (comma-separated) | `mykey1,mykey2` |
+| `AI_ACCOUNTS` | Multi-account AI inference credentials (JSON array) | See below |
 | `TZ` | Timezone for logging | `America/New_York` |
+
+### `AI_ACCOUNTS` Format
+
+By default, the worker uses `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` for both deployment **and** AI inference. If you want to distribute AI inference across multiple Cloudflare accounts (e.g. for rate limit distribution), set `AI_ACCOUNTS` as a JSON array:
+
+```json
+[
+  { "account_id": "abc123...", "api_token": "token-for-account-1" },
+  { "account_id": "def456...", "api_token": "token-for-account-2" }
+]
+```
+
+Each entry needs an API token with **Workers AI Read + Edit** permissions for that account. The worker picks a random account per request for load distribution.
+
+If `AI_ACCOUNTS` is **not set**, the worker falls back to `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` for AI inference.
 
 ---
 
