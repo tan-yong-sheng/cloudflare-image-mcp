@@ -164,7 +164,8 @@ test.describe('MCP SDK Integration', () => {
         expect(schema).toHaveProperty('model_id', '@cf/black-forest-labs/flux-1-schnell');
         expect(schema).toHaveProperty('name');
         expect(schema).toHaveProperty('description');
-        expect(schema).toHaveProperty('parameters');
+        expect(schema).toHaveProperty('supported_task_types');
+        expect(schema).toHaveProperty('cf_params');
 
         console.log('✅ MCP describe_model returned schema for', schema.name);
       }
@@ -180,6 +181,7 @@ test.describe('MCP SDK Integration', () => {
       const result = await client.callTool({
         name: 'run_model',
         arguments: {
+          taskType: 'generations',
           prompt: 'A bright red apple on a wooden table',
           model_id: '@cf/black-forest-labs/flux-1-schnell',
           n: 1,
@@ -246,6 +248,7 @@ test.describe('MCP SDK Integration', () => {
       const result = await client.callTool({
         name: 'run_model',
         arguments: {
+          taskType: 'generations',
           prompt: 'A blue sky with clouds',
           model_id: '@cf/black-forest-labs/flux-1-schnell',
           n: 2,

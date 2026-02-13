@@ -143,7 +143,8 @@ test.describe('MCP Tools', () => {
       expect(schema).toHaveProperty('model_id', modelId);
       expect(schema).toHaveProperty('name');
       expect(schema).toHaveProperty('description');
-      expect(schema).toHaveProperty('parameters');
+      expect(schema).toHaveProperty('supported_task_types');
+      expect(schema).toHaveProperty('cf_params');
     }
   });
 
@@ -179,6 +180,7 @@ test.describe('MCP Tools', () => {
         params: {
           name: 'run_model',
           arguments: {
+            taskType: 'generations',
             prompt: 'A bright red apple on a wooden table',
             model_id: '@cf/black-forest-labs/flux-1-schnell',
             n: 1,
