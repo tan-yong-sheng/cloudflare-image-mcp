@@ -740,17 +740,13 @@ export class MCPEndpoint {
         type: 'string',
         description: 'Optional. Only for taskType="edits". Base64-encoded mask for inpainting. White areas edited, black preserved.',
       },
-      // Cloudflare-specific params (both task types)
+      // Cloudflare-specific params — keys vary by model AND taskType.
+      // Call describe_model to see cf_params.generations and cf_params.edits
+      // for the exact params available per mode.
       cf_params: {
         type: 'object',
-        description: 'Cloudflare Workers AI specific parameters. Use describe_model to discover which params a model supports.',
-        properties: {
-          steps: { type: 'number', description: 'Number of diffusion steps (model-dependent).' },
-          seed: { type: 'number', description: 'Random seed for reproducibility.' },
-          guidance: { type: 'number', description: 'Guidance scale (model-dependent).' },
-          negative_prompt: { type: 'string', description: 'Elements to avoid in the image.' },
-          strength: { type: 'number', description: 'Image-to-image transformation strength (0-1). Only for taskType="edits".' },
-        },
+        description: 'Cloudflare Workers AI specific parameters (e.g., steps, seed, guidance, strength). IMPORTANT: available params differ per model and per taskType. Call describe_model(model_id) to see cf_params.generations and cf_params.edits for exact keys.',
+        additionalProperties: true,
       },
     };
 
