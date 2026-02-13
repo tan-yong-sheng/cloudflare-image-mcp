@@ -84,30 +84,34 @@ export class ImageGeneratorService {
     this.models = new Map(Object.entries(MODEL_CONFIGS));
 
     // Build AI accounts list:
-    // 1. AI_ACCOUNTS (JSON array) if set
+    // 1. AI_ACCOUNTS (JSON array) if set and valid
     // 2. Else fall back to CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
+    const fallback = [{
+      account_id: env.CLOUDFLARE_ACCOUNT_ID,
+      api_token: env.CLOUDFLARE_API_TOKEN,
+    }];
+
     if (env.AI_ACCOUNTS) {
       try {
-        this.aiAccounts = JSON.parse(env.AI_ACCOUNTS) as AIAccount[];
-        if (!Array.isArray(this.aiAccounts) || this.aiAccounts.length === 0) {
-          throw new Error('AI_ACCOUNTS must be a non-empty JSON array');
-        }
-        for (const acct of this.aiAccounts) {
-          if (!acct.account_id || !acct.api_token) {
-            throw new Error('Each AI_ACCOUNTS entry must have account_id and api_token');
+        const parsed = JSON.parse(env.AI_ACCOUNTS) as AIAccount[];
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          console.warn('AI_ACCOUNTS is empty or not an array, falling back to deploy credentials');
+          this.aiAccounts = fallback;
+        } else {
+          const valid = parsed.every(a => a.account_id && a.api_token);
+          if (!valid) {
+            console.warn('AI_ACCOUNTS entries missing account_id/api_token, falling back to deploy credentials');
+            this.aiAccounts = fallback;
+          } else {
+            this.aiAccounts = parsed;
           }
         }
       } catch (e) {
-        if (e instanceof SyntaxError) {
-          throw new Error(`AI_ACCOUNTS is not valid JSON: ${e.message}`);
-        }
-        throw e;
+        console.warn(`AI_ACCOUNTS is not valid JSON (${e instanceof Error ? e.message : e}), falling back to deploy credentials`);
+        this.aiAccounts = fallback;
       }
     } else {
-      this.aiAccounts = [{
-        account_id: env.CLOUDFLARE_ACCOUNT_ID,
-        api_token: env.CLOUDFLARE_API_TOKEN,
-      }];
+      this.aiAccounts = fallback;
     }
   }
 

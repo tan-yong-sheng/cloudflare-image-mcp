@@ -154,8 +154,8 @@ jobs:
           if [ -n "${{ secrets.API_KEYS }}" ]; then
             echo "${{ secrets.API_KEYS }}" | npx wrangler secret put API_KEYS --name ${{ env.WORKERS_NAME }}
           fi
-          if [ -n "${{ secrets.AI_ACCOUNTS }}" ]; then
-            echo "${{ secrets.AI_ACCOUNTS }}" | npx wrangler secret put AI_ACCOUNTS --name ${{ env.WORKERS_NAME }}
+          if [ -n "$AI_ACCOUNTS_VALUE" ]; then
+            echo "$AI_ACCOUNTS_VALUE" | npx wrangler secret put AI_ACCOUNTS --name ${{ env.WORKERS_NAME }}
           fi
           if [ -n "${{ secrets.TZ }}" ]; then
             echo "${{ secrets.TZ }}" | npx wrangler secret put TZ --name ${{ env.WORKERS_NAME }}
@@ -163,6 +163,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AI_ACCOUNTS_VALUE: ${{ secrets.AI_ACCOUNTS }}
 
       - name: Derive Workers URL
         run: |
