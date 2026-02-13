@@ -605,7 +605,53 @@ export class MCPEndpoint {
       supportedTaskTypes.push('edits');
     }
 
-    // Build OpenAPI schema format
+    // Build cf_params split by taskType so the LLM knows exactly which
+    // params to use for each mode.
+    // Skip: prompt (top-level), image/image_b64/mask/mask_b64 (OpenAI-standard top-level fields)
+    const imageParamKeys = new Set(['prompt', 'image', 'image_b64', 'mask', 'mask_b64']);
+    const editsOnlyKeys = new Set(['strength']); // CF-specific params only valid for edits
+
+    const buildParamEntry = (param: any) => {
+      const entry: any = {
+        type: param.type,
+        cf_param: param.cfParam,
+        description: param.description || `Parameter: ${param.cfParam}`,
+      };
+      if (param.required) entry.required = true;
+      if (param.default !== undefined) entry.default = param.default;
+      if (param.min !== undefined) entry.minimum = param.min;
+      if (param.max !== undefined) entry.maximum = param.max;
+      if (param.step !== undefined) entry.step = param.step;
+      return entry;
+    };
+
+    // Generations cf_params: all non-image, non-edits-only params
+    const generationsCfParams: Record<string, any> = {};
+    // Edits cf_params: all non-image params (including edits-only like strength)
+    const editsCfParams: Record<string, any> = {};
+
+    for (const [key, param] of Object.entries(modelConfig.parameters)) {
+      if (imageParamKeys.has(key)) continue;
+
+      const entry = buildParamEntry(param as any);
+
+      if (!editsOnlyKeys.has(key)) {
+        generationsCfParams[key] = entry;
+      }
+
+      if (supportedTaskTypes.includes('edits')) {
+        editsCfParams[key] = entry;
+      }
+    }
+
+    const cfParams: Record<string, any> = {
+      generations: generationsCfParams,
+    };
+    if (supportedTaskTypes.includes('edits')) {
+      cfParams.edits = editsCfParams;
+    }
+
+    // Build schema
     const schema: any = {
       model_id: modelConfig.id,
       name: modelConfig.name,
@@ -616,36 +662,8 @@ export class MCPEndpoint {
       supported_task_types: supportedTaskTypes,
       edit_capabilities: modelConfig.editCapabilities || {},
       max_input_images: modelConfig.maxInputImages || 1,
-      cf_params: {},
+      cf_params: cfParams,
     };
-
-    for (const [key, param] of Object.entries(modelConfig.parameters)) {
-      // Skip prompt — it's a top-level field, not a cf_param
-      if (key === 'prompt') continue;
-
-      const cfParam = (param as any).cfParam;
-      schema.cf_params[key] = {
-        type: (param as any).type,
-        cf_param: cfParam,
-        description: (param as any).description || `Parameter: ${key}`,
-      };
-
-      if ((param as any).required) {
-        schema.cf_params[key].required = true;
-      }
-      if ((param as any).default !== undefined) {
-        schema.cf_params[key].default = (param as any).default;
-      }
-      if ((param as any).min !== undefined) {
-        schema.cf_params[key].minimum = (param as any).min;
-      }
-      if ((param as any).max !== undefined) {
-        schema.cf_params[key].maximum = (param as any).max;
-      }
-      if ((param as any).step !== undefined) {
-        schema.cf_params[key].step = (param as any).step;
-      }
-    }
 
     // Add limits
     if (modelConfig.limits) {
@@ -661,27 +679,22 @@ export class MCPEndpoint {
       };
     }
 
-    // Build cf_params example for next_step
-    const cfParamExamples: string[] = [];
+    // Build next_step examples with cf_params per taskType
+    const genKeys = Object.keys(generationsCfParams).slice(0, 3);
+    const genCfStr = genKeys.length > 0
+      ? `, cf_params={${genKeys.map(k => `"${k}": ...`).join(', ')}}`
+      : '';
 
-    // Include a few common optional keys (if present in model config)
-    const commonKeys = ['steps', 'num_steps', 'seed', 'width', 'height', 'guidance', 'negative_prompt'];
-    for (const key of commonKeys) {
-      if (Object.prototype.hasOwnProperty.call(modelConfig.parameters, key) && key !== 'prompt') {
-        cfParamExamples.push(`"${key}": ...`);
-      }
-      if (cfParamExamples.length >= 3) break;
+    const generationsExample = `run_model(taskType="generations", model_id="${modelConfig.id}", prompt="your prompt"${genCfStr})`;
+
+    let editsExample = '';
+    if (supportedTaskTypes.includes('edits')) {
+      const editKeys = Object.keys(editsCfParams).filter(k => editsOnlyKeys.has(k) || genKeys.includes(k)).slice(0, 3);
+      const editCfStr = editKeys.length > 0
+        ? `, cf_params={${editKeys.map(k => `"${k}": ...`).join(', ')}}`
+        : '';
+      editsExample = `\nFor image editing: run_model(taskType="edits", model_id="${modelConfig.id}", prompt="edit description", image="<base64>"${editCfStr})`;
     }
-
-    const cfParamsStr = cfParamExamples.length > 0
-      ? `, cf_params={${cfParamExamples.join(', ')}}`
-      : '';
-
-    // Add next_step guidance using new schema
-    const generationsExample = `run_model(taskType="generations", model_id="${modelConfig.id}", prompt="your prompt"${cfParamsStr})`;
-    const editsExample = supportedTaskTypes.includes('edits')
-      ? `\nFor image editing: run_model(taskType="edits", model_id="${modelConfig.id}", prompt="edit description", image="<base64>"${cfParamsStr})`
-      : '';
 
     schema.next_step = generationsExample + editsExample;
 
