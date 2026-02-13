@@ -258,13 +258,13 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Image-to-image transformation
+   * Image-to-image transformation (supports single or multiple input images)
    */
   async generateImageToImage(
     modelId: string,
     prompt: string | Record<string, any>,
-    imageData: string,
-    strength: number = 0.5,
+    imageData: string | string[],
+    strength?: number,
     explicitParams: Record<string, any> = {},
     returnBase64: boolean = false
   ): Promise<{
@@ -290,13 +290,27 @@ export class ImageGeneratorService {
       };
     }
 
+    // Handle multi-image: validate count against model limits
+    const images = Array.isArray(imageData) ? imageData : [imageData];
+    const maxInput = model.maxInputImages || 1;
+    if (images.length > maxInput) {
+      return {
+        success: false,
+        error: `Model ${modelId} supports up to ${maxInput} input image(s), got ${images.length}`,
+      };
+    }
+
     try {
+      // Build explicit params - only include strength if provided
+      const mergedExplicit: Record<string, any> = { ...explicitParams };
+      if (strength !== undefined) {
+        mergedExplicit.strength = strength;
+      }
+      // For single image, set image param for ParamParser
+      mergedExplicit.image = images[0];
+
       // Parse parameters with image
-      const params = ParamParser.parse(
-        prompt,
-        { ...explicitParams, image: imageData, strength },
-        model
-      );
+      const params = ParamParser.parse(prompt, mergedExplicit, model);
 
       // Build payload with image
       const payload = ParamParser.toCFPayload(params, model);
@@ -304,24 +318,30 @@ export class ImageGeneratorService {
       // Run the model
       let result: any;
       if (model.inputFormat === 'multipart') {
+        // Build multipart form data using FormData + Response serialization
         const form = new FormData();
         for (const [key, value] of Object.entries(payload)) {
-          if (value !== undefined && value !== null) {
-            // For image fields, convert base64 to array of integers (0-255)
-            if (key === 'image' && typeof value === 'string') {
-              const intArray = this.base64ToUint8Array(value);
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              form.append(key, intArray as any);
-            } else {
-              form.append(key, String(value));
-            }
+          if (value !== undefined && value !== null && key !== 'image') {
+            form.append(key, String(value));
           }
         }
+        // Append image(s) as binary blobs
+        for (const img of images) {
+          const cleanedB64 = this.cleanBase64(img);
+          const bytes = this.base64ToUint8Array(cleanedB64);
+          form.append('image', new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
+        }
+
+        // Use Response constructor to serialize FormData with proper boundary
+        const formResponse = new Response(form);
+        const formStream = formResponse.body;
+        const formContentType = formResponse.headers.get('content-type')!;
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         result = await (this.ai as any).run(model.id, {
           multipart: {
-            body: form,
-            contentType: 'multipart/form-data',
+            body: formStream,
+            contentType: formContentType,
           },
         });
       } else {
@@ -367,6 +387,95 @@ export class ImageGeneratorService {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
     }
+  }
+
+  /**
+   * Generate multiple output images from image-to-image transformation
+   */
+  async generateImageToImages(
+    modelId: string,
+    prompt: string | Record<string, any>,
+    imageData: string | string[],
+    n: number = 1,
+    explicitParams: Record<string, any> = {},
+    returnBase64: boolean = false
+  ): Promise<{
+    success: boolean;
+    images: Array<{ url: string; id: string } | { b64_json: string }>;
+    error?: string;
+  }> {
+    const results: Array<{ url: string; id: string } | { b64_json: string }> = [];
+
+    for (let i = 0; i < n; i++) {
+      const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
+      const result = await this.generateImageToImage(
+        modelId,
+        prompt,
+        imageData,
+        explicitParams.strength,
+        { ...explicitParams, seed },
+        returnBase64
+      );
+
+      if (result.success) {
+        if (returnBase64 && result.base64Data) {
+          results.push({ b64_json: result.base64Data });
+        } else if (result.imageUrl) {
+          results.push({ url: result.imageUrl, id: result.imageId! });
+        } else {
+          return { success: false, images: results, error: 'No image data returned' };
+        }
+      } else {
+        return { success: false, images: results, error: result.error };
+      }
+    }
+
+    return { success: true, images: results };
+  }
+
+  /**
+   * Generate multiple inpainted images
+   */
+  async generateInpaints(
+    modelId: string,
+    prompt: string,
+    imageData: string,
+    maskData: string,
+    n: number = 1,
+    explicitParams: Record<string, any> = {},
+    returnBase64: boolean = false
+  ): Promise<{
+    success: boolean;
+    images: Array<{ url: string; id: string } | { b64_json: string }>;
+    error?: string;
+  }> {
+    const results: Array<{ url: string; id: string } | { b64_json: string }> = [];
+
+    for (let i = 0; i < n; i++) {
+      const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
+      const result = await this.generateInpaint(
+        modelId,
+        prompt,
+        imageData,
+        maskData,
+        { ...explicitParams, seed },
+        returnBase64
+      );
+
+      if (result.success) {
+        if (returnBase64 && result.base64Data) {
+          results.push({ b64_json: result.base64Data });
+        } else if (result.imageUrl) {
+          results.push({ url: result.imageUrl, id: result.imageId! });
+        } else {
+          return { success: false, images: results, error: 'No image data returned' };
+        }
+      } else {
+        return { success: false, images: results, error: result.error };
+      }
+    }
+
+    return { success: true, images: results };
   }
 
   /**

@@ -17,13 +17,19 @@ export interface OpenAIGenerationRequest {
 // OpenAI-compatible image edit request
 export interface OpenAIEditRequest {
   model: string;
-  image: string; // base64 or URL
+  image: string | string[]; // base64 or URL, or array for multi-image (FLUX 2)
   mask?: string; // base64 or URL
   prompt: string;
   n?: number;
   size?: string;
   response_format?: 'url' | 'b64_json';
   user?: string;
+  // Cloudflare-specific extensions (also extractable via --key=value in prompt)
+  steps?: number;
+  seed?: number;
+  guidance?: number;
+  negative_prompt?: string;
+  strength?: number;
 }
 
 // OpenAI-compatible image variation request
@@ -64,6 +70,7 @@ export interface ModelConfig {
   editCapabilities?: {
     mask?: 'supported' | 'required';
   };
+  maxInputImages?: number; // Max input images for multi-reference (e.g. FLUX 2 supports up to 4)
   parameters: Record<string, ParamConfig>;
   limits: {
     maxPromptLength: number;

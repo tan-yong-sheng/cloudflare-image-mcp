@@ -39,6 +39,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     inputFormat: 'multipart',
     responseFormat: 'base64',
     supportedTasks: ['text-to-image', 'image-to-image'],
+    maxInputImages: 4,
     parameters: {
       prompt: { cfParam: 'prompt', type: 'string', required: true },
       steps: { cfParam: 'steps', type: 'integer', default: 4, min: 1, max: 50 },
@@ -67,6 +68,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     inputFormat: 'multipart',
     responseFormat: 'base64',
     supportedTasks: ['text-to-image', 'image-to-image'],
+    maxInputImages: 4,
     parameters: {
       prompt: { cfParam: 'prompt', type: 'string', required: true },
       steps: { cfParam: 'steps', type: 'integer', default: 20, min: 1, max: 50 },
@@ -95,6 +97,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     inputFormat: 'multipart',
     responseFormat: 'base64',
     supportedTasks: ['text-to-image', 'image-to-image'],
+    maxInputImages: 4,
     parameters: {
       prompt: { cfParam: 'prompt', type: 'string', required: true },
       steps: { cfParam: 'steps', type: 'integer', default: 25, min: 1, max: 50 },

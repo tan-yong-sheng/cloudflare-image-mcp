@@ -166,51 +166,94 @@ export class OpenAIEndpoint {
 
   /**
    * POST /v1/images/edits
-   * Image editing / masked edits (OpenAI-compatible)
+   * Image editing / img2img / multi-image (OpenAI-compatible)
+   * Supports --key=value params embedded in prompt for CF-specific params
    */
   private async handleEdits(request: Request): Promise<Response> {
     const contentType = request.headers.get('content-type') || '';
 
-    let imageData: string;
+    let imageDataArr: string[] = [];
     let maskData: string | undefined;
     let prompt: string;
     let modelId: string;
     let n: number;
-    let size: string;
     let returnBase64 = false;
+
+    // Collect only explicitly-provided params (undefined = not provided,
+    // so --key=value in prompt can fill gaps via ParamParser)
+    const explicitParams: Record<string, any> = {};
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      const imageFile = formData.get('image') as File | null;
-      const maskFile = formData.get('mask') as File | null;
 
-      // Convert File objects to base64 strings
-      imageData = await fileToBase64(imageFile) || '';
+      // Support both single "image" and array "image[]" fields (OpenAI style)
+      const allEntries = formData.getAll('image') as (File | string)[];
+      const arrayEntries = formData.getAll('image[]') as (File | string)[];
+      const imageEntries = [...allEntries, ...arrayEntries];
+
+      for (const entry of imageEntries) {
+        if (entry instanceof File) {
+          const b64 = await fileToBase64(entry);
+          if (b64) imageDataArr.push(b64);
+        } else if (typeof entry === 'string' && entry.length > 0) {
+          imageDataArr.push(entry);
+        }
+      }
+
+      const maskFile = formData.get('mask') as File | null;
       maskData = await fileToBase64(maskFile);
 
       prompt = formData.get('prompt') as string;
       modelId = (formData.get('model') as string) || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = parseInt(formData.get('n') as string) || 1;
-      size = (formData.get('size') as string) || '1024x1024';
-
-      // OpenAI-compatible: response_format supports url | b64_json
       returnBase64 = formData.get('response_format') === 'b64_json';
+
+      // Extract optional CF-specific params from form data (only if provided)
+      const sizeVal = formData.get('size') as string | null;
+      if (sizeVal) explicitParams.size = sizeVal;
+
+      const stepsVal = formData.get('steps') as string | null;
+      if (stepsVal) explicitParams.steps = parseInt(stepsVal);
+
+      const seedVal = formData.get('seed') as string | null;
+      if (seedVal) explicitParams.seed = parseInt(seedVal);
+
+      const guidanceVal = formData.get('guidance') as string | null;
+      if (guidanceVal) explicitParams.guidance = parseFloat(guidanceVal);
+
+      const negPromptVal = formData.get('negative_prompt') as string | null;
+      if (negPromptVal) explicitParams.negative_prompt = negPromptVal;
+
+      const strengthVal = formData.get('strength') as string | null;
+      if (strengthVal) explicitParams.strength = parseFloat(strengthVal);
     } else {
       const body = await request.json();
       const req = body as OpenAIEditRequest;
-      // JSON form can supply either image/mask or image_b64/mask_b64.
-      imageData = (req as any).image ?? (req as any).image_b64;
+
+      // Support single image string or array of images
+      const rawImage = (req as any).image ?? (req as any).image_b64;
+      if (Array.isArray(rawImage)) {
+        imageDataArr = rawImage.filter((img: any) => typeof img === 'string' && img.length > 0);
+      } else if (typeof rawImage === 'string' && rawImage.length > 0) {
+        imageDataArr = [rawImage];
+      }
+
       maskData = (req as any).mask ?? (req as any).mask_b64;
       prompt = req.prompt;
       modelId = req.model || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = req.n || 1;
-      size = req.size || '1024x1024';
-
-      // OpenAI-compatible: response_format supports url | b64_json
       returnBase64 = req.response_format === 'b64_json';
+
+      // Extract optional CF-specific params from JSON body (only if provided)
+      if (req.size !== undefined) explicitParams.size = req.size;
+      if (req.steps !== undefined) explicitParams.steps = req.steps;
+      if (req.seed !== undefined) explicitParams.seed = req.seed;
+      if (req.guidance !== undefined) explicitParams.guidance = req.guidance;
+      if (req.negative_prompt !== undefined) explicitParams.negative_prompt = req.negative_prompt;
+      if (req.strength !== undefined) explicitParams.strength = req.strength;
     }
 
-    if (!imageData || !prompt) {
+    if (imageDataArr.length === 0 || !prompt) {
       return new Response(JSON.stringify({
         error: { message: 'image and prompt are required', type: 'invalid_request_error' },
       }), {
@@ -219,28 +262,20 @@ export class OpenAIEndpoint {
       });
     }
 
+    const count = Math.min(n, 8);
 
-    // Generate edit
+    // Route to appropriate service method
     let result;
     if (maskData) {
-      // Inpainting
-      result = await this.generator.generateInpaint(
-        modelId,
-        prompt,
-        imageData,
-        maskData,
-        { size, n },
-        returnBase64
+      // Inpainting (masked edit) — single image only
+      result = await this.generator.generateInpaints(
+        modelId, prompt, imageDataArr[0], maskData, count, explicitParams, returnBase64
       );
     } else {
-      // Image-to-image
-      result = await this.generator.generateImageToImage(
-        modelId,
-        prompt,
-        imageData,
-        0.5, // Default strength
-        { size, n },
-        returnBase64
+      // Image-to-image — pass single string or array depending on count
+      const imageInput = imageDataArr.length === 1 ? imageDataArr[0] : imageDataArr;
+      result = await this.generator.generateImageToImages(
+        modelId, prompt, imageInput, count, explicitParams, returnBase64
       );
     }
 
@@ -253,18 +288,24 @@ export class OpenAIEndpoint {
       });
     }
 
-    // OpenAI spec: return only the requested format field (url OR b64_json)
-    const origin = new URL(request.url).origin;
+    // Build OpenAI-compatible response (same pattern as handleGenerations)
+    let responseData;
+    if (returnBase64) {
+      responseData = result.images.map((img) => ({
+        b64_json: 'b64_json' in img ? img.b64_json : '',
+      }));
+    } else {
+      const origin = new URL(request.url).origin;
+      responseData = result.images.map((img) => {
+        const url = 'url' in img ? img.url : '';
+        const absoluteUrl = url.startsWith('/') ? new URL(url, origin).toString() : url;
+        return { url: absoluteUrl };
+      });
+    }
+
     const response: OpenAIImageResponse = {
       created: Math.floor(Date.now() / 1000),
-      data: returnBase64
-        ? [{ b64_json: (result as any).base64Data || '' }]
-        : [{
-          url: (() => {
-            const url = (result as any).imageUrl || '';
-            return url.startsWith('/') ? new URL(url, origin).toString() : url;
-          })(),
-        }],
+      data: responseData,
     };
 
     return new Response(JSON.stringify(response), {
@@ -275,38 +316,71 @@ export class OpenAIEndpoint {
   /**
    * POST /v1/images/variations
    * Image variations (OpenAI-compatible)
+   * Supports --key=value params embedded in prompt for CF-specific params
    */
   private async handleVariations(request: Request): Promise<Response> {
     const contentType = request.headers.get('content-type') || '';
 
-    let imageData: string;
+    let imageDataArr: string[] = [];
     let modelId: string;
     let n: number;
-    let size: string;
     let returnBase64 = false;
+    const explicitParams: Record<string, any> = {};
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      const imageFile = formData.get('image') as File | null;
 
-      // Convert File object to base64 string
-      imageData = await fileToBase64(imageFile) || '';
+      // Support both single "image" and array "image[]" fields
+      const allEntries = formData.getAll('image') as (File | string)[];
+      const arrayEntries = formData.getAll('image[]') as (File | string)[];
+      const imageEntries = [...allEntries, ...arrayEntries];
+
+      for (const entry of imageEntries) {
+        if (entry instanceof File) {
+          const b64 = await fileToBase64(entry);
+          if (b64) imageDataArr.push(b64);
+        } else if (typeof entry === 'string' && entry.length > 0) {
+          imageDataArr.push(entry);
+        }
+      }
 
       modelId = (formData.get('model') as string) || '@cf/black-forest-labs/flux-2-klein-4b';
       n = parseInt(formData.get('n') as string) || 1;
-      size = (formData.get('size') as string) || '1024x1024';
       returnBase64 = formData.get('response_format') === 'b64_json';
+
+      const sizeVal = formData.get('size') as string | null;
+      if (sizeVal) explicitParams.size = sizeVal;
+
+      const stepsVal = formData.get('steps') as string | null;
+      if (stepsVal) explicitParams.steps = parseInt(stepsVal);
+
+      const seedVal = formData.get('seed') as string | null;
+      if (seedVal) explicitParams.seed = parseInt(seedVal);
+
+      const strengthVal = formData.get('strength') as string | null;
+      if (strengthVal) explicitParams.strength = parseFloat(strengthVal);
     } else {
       const body = await request.json();
       const req = body as OpenAIVariationRequest;
-      imageData = req.image;
+
+      const rawImage = req.image;
+      if (Array.isArray(rawImage)) {
+        imageDataArr = rawImage.filter((img: any) => typeof img === 'string' && img.length > 0);
+      } else if (typeof rawImage === 'string' && rawImage.length > 0) {
+        imageDataArr = [rawImage];
+      }
+
       modelId = req.model || '@cf/black-forest-labs/flux-2-klein-4b';
       n = req.n || 1;
-      size = req.size || '1024x1024';
       returnBase64 = req.response_format === 'b64_json';
+
+      if (req.size !== undefined) explicitParams.size = req.size;
+      if ((req as any).steps !== undefined) explicitParams.steps = (req as any).steps;
+      if ((req as any).seed !== undefined) explicitParams.seed = (req as any).seed;
+      if ((req as any).strength !== undefined) explicitParams.strength = (req as any).strength;
     }
 
-    if (!imageData) {
+    if (imageDataArr.length === 0) {
       return new Response(JSON.stringify({
         error: { message: 'image is required', type: 'invalid_request_error' },
       }), {
@@ -315,14 +389,20 @@ export class OpenAIEndpoint {
       });
     }
 
+    const count = Math.min(n, 8);
 
-    // Generate variation (uses image-to-image with empty prompt)
-    const result = await this.generator.generateImageToImage(
+    // Default strength for variations (more faithful to original)
+    if (explicitParams.strength === undefined) {
+      explicitParams.strength = 0.7;
+    }
+
+    const imageInput = imageDataArr.length === 1 ? imageDataArr[0] : imageDataArr;
+    const result = await this.generator.generateImageToImages(
       modelId,
       '', // Empty prompt for variations
-      imageData,
-      0.7, // Lower strength for more faithful variations
-      { size, n },
+      imageInput,
+      count,
+      explicitParams,
       returnBase64
     );
 
@@ -335,18 +415,24 @@ export class OpenAIEndpoint {
       });
     }
 
-    // OpenAI spec: return only the requested format field (url OR b64_json)
-    const origin = new URL(request.url).origin;
+    // Build OpenAI-compatible response
+    let responseData;
+    if (returnBase64) {
+      responseData = result.images.map((img) => ({
+        b64_json: 'b64_json' in img ? img.b64_json : '',
+      }));
+    } else {
+      const origin = new URL(request.url).origin;
+      responseData = result.images.map((img) => {
+        const url = 'url' in img ? img.url : '';
+        const absoluteUrl = url.startsWith('/') ? new URL(url, origin).toString() : url;
+        return { url: absoluteUrl };
+      });
+    }
+
     const response: OpenAIImageResponse = {
       created: Math.floor(Date.now() / 1000),
-      data: returnBase64
-        ? [{ b64_json: (result as any).base64Data || '' }]
-        : [{
-          url: (() => {
-            const url = (result as any).imageUrl || '';
-            return url.startsWith('/') ? new URL(url, origin).toString() : url;
-          })(),
-        }],
+      data: responseData,
     };
 
     return new Response(JSON.stringify(response), {

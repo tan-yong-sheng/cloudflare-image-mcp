@@ -309,6 +309,7 @@ export class MCPEndpoint {
 
   /**
    * Handle run_model tool call
+   * Routes to text-to-image (generations) or image-to-image (edits) based on input
    */
   private async handleRunModels(args: any): Promise<any[]> {
     const {
@@ -320,6 +321,9 @@ export class MCPEndpoint {
       seed,
       guidance,
       negative_prompt,
+      image,
+      mask,
+      strength,
     } = args || {};
 
     if (!prompt) {
@@ -373,20 +377,52 @@ export class MCPEndpoint {
       }];
     }
 
-    const numImages = n || 1;
+    const numImages = Math.min(n || 1, 8);
+    const explicitParams: Record<string, any> = {};
+    if (size !== undefined) explicitParams.size = size;
+    if (steps !== undefined) explicitParams.steps = steps;
+    if (seed !== undefined) explicitParams.seed = seed;
+    if (guidance !== undefined) explicitParams.guidance = guidance;
+    if (negative_prompt !== undefined) explicitParams.negative_prompt = negative_prompt;
+    if (strength !== undefined) explicitParams.strength = strength;
 
-    const result = await this.generator.generateImages(
-      model_id,
-      prompt,
-      Math.min(numImages, 8),
-      {
-        size,
-        steps,
-        seed,
-        guidance,
-        negative_prompt,
+    let result;
+
+    if (image) {
+      // Image edit mode: route to img2img or inpainting
+      // Support single image string or array of images
+      const imageInput = Array.isArray(image) ? image : image;
+
+      if (mask) {
+        // Inpainting with mask
+        const singleImage = Array.isArray(image) ? image[0] : image;
+        result = await this.generator.generateInpaints(
+          model_id,
+          prompt,
+          singleImage,
+          mask,
+          numImages,
+          explicitParams
+        );
+      } else {
+        // Image-to-image transformation
+        result = await this.generator.generateImageToImages(
+          model_id,
+          prompt,
+          imageInput,
+          numImages,
+          explicitParams
+        );
       }
-    );
+    } else {
+      // Text-to-image mode (original behavior)
+      result = await this.generator.generateImages(
+        model_id,
+        prompt,
+        numImages,
+        explicitParams
+      );
+    }
 
     if (!result.success) {
       return [{
@@ -404,19 +440,21 @@ export class MCPEndpoint {
     // Helper to check if image has url (not b64_json)
     const hasUrl = (img: { url?: string; b64_json?: string }): img is { url: string } => 'url' in img && !!img.url;
 
+    const modeLabel = image ? (mask ? 'Inpainted' : 'Edited') : 'Generated';
+
     if (result.images.length === 1) {
       const img = result.images[0];
-      textParts.push(`Image generated successfully!\n`);
+      textParts.push(`Image ${modeLabel.toLowerCase()} successfully!\n`);
       if (hasUrl(img)) {
-        textParts.push(`![Generated Image](${fullUrl(img.url)})`);
+        textParts.push(`![${modeLabel} Image](${fullUrl(img.url)})`);
       } else {
-        textParts.push(`Image generated (base64 data available)`);
+        textParts.push(`Image ${modeLabel.toLowerCase()} (base64 data available)`);
       }
     } else {
-      textParts.push(`Generated ${result.images.length} images:\n\n`);
+      textParts.push(`${modeLabel} ${result.images.length} images:\n\n`);
       result.images.forEach((img, i) => {
         if (hasUrl(img)) {
-          textParts.push(`Image ${i + 1}: ![Generated Image ${i + 1}](${fullUrl(img.url)})\n`);
+          textParts.push(`Image ${i + 1}: ![${modeLabel} Image ${i + 1}](${fullUrl(img.url)})\n`);
         } else {
           textParts.push(`Image ${i + 1}: (base64 data available)\n`);
         }
@@ -518,6 +556,7 @@ export class MCPEndpoint {
       response_format: modelConfig.responseFormat,
       supported_tasks: modelConfig.supportedTasks,
       edit_capabilities: modelConfig.editCapabilities || {},
+      max_input_images: modelConfig.maxInputImages || 1,
       parameters: {},
     };
 
@@ -608,14 +647,25 @@ export class MCPEndpoint {
       {
         name: 'run_model',
         description: this.defaultModel
-          ? `Generate images using the default model (${this.defaultModel}). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.`
-          : 'Generate images using the model specified via ?model= on /mcp/simple. Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.',
+          ? `Generate or edit images using the default model (${this.defaultModel}). Supports two modes: (1) Text-to-image: provide prompt only, (2) Image editing: provide prompt + image (base64). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.`
+          : 'Generate or edit images using the model specified via ?model= on /mcp/simple. Supports two modes: (1) Text-to-image: provide prompt only, (2) Image editing: provide prompt + image (base64). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.',
         inputSchema: {
           type: 'object',
           properties: {
             prompt: {
               type: 'string',
               description: 'Prompt with optional --key=value flags. Canonical channel for model parameters. Example: "a cat --steps=20 --seed=42 --width=1024 --height=1024".',
+            },
+            image: {
+              oneOf: [
+                { type: 'string' },
+                { type: 'array', items: { type: 'string' } },
+              ],
+              description: 'Input image(s) for image editing (base64 encoded). Single string or array of up to 4 strings for multi-reference models (FLUX 2). When provided, switches to /v1/images/edits mode.',
+            },
+            mask: {
+              type: 'string',
+              description: 'Mask image for inpainting (base64 encoded). White areas will be edited, black areas preserved. Only used with image parameter.',
             },
             n: {
               type: 'number',
@@ -642,6 +692,10 @@ export class MCPEndpoint {
             negative_prompt: {
               type: 'string',
               description: 'Elements to avoid in the image',
+            },
+            strength: {
+              type: 'number',
+              description: 'Image-to-image transformation strength (0-1). Lower = more faithful to original.',
             },
           },
           required: ['prompt'],
@@ -653,7 +707,7 @@ export class MCPEndpoint {
     const mode2Tools = [
       {
         name: 'run_model',
-        description: 'Generate images with a specific model. REQUIRED WORKFLOW: (1) First call list_models to get available model_ids, (2) Then ALWAYS call describe_model(model_id) to discover what parameters that specific model accepts (different models support different parameters like steps, guidance, width, height, etc.), (3) Finally call run_model with the model_id and embed the model-specific parameters you discovered in step 2 as --key=value flags in the prompt (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42"). DO NOT skip describe_model - it reveals which parameters are valid for your chosen model. Parameters vary significantly between models and using unsupported parameters may cause errors or be ignored.',
+        description: 'Generate or edit images with a specific model. Supports two modes: (1) Text-to-image: provide prompt only (/v1/images/generations), (2) Image editing: provide prompt + image (/v1/images/edits). REQUIRED WORKFLOW: (1) First call list_models to get available model_ids, (2) Then ALWAYS call describe_model(model_id) to discover what parameters that specific model accepts (different models support different parameters like steps, guidance, width, height, etc.), (3) Finally call run_model with the model_id and embed the model-specific parameters you discovered in step 2 as --key=value flags in the prompt (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42"). DO NOT skip describe_model - it reveals which parameters are valid for your chosen model. Parameters vary significantly between models and using unsupported parameters may cause errors or be ignored.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -664,6 +718,17 @@ export class MCPEndpoint {
             model_id: {
               type: 'string',
               description: 'Exact model_id from list_models output (format: @cf/{provider}/{model_name})',
+            },
+            image: {
+              oneOf: [
+                { type: 'string' },
+                { type: 'array', items: { type: 'string' } },
+              ],
+              description: 'Input image(s) for image editing (base64 encoded). Single string or array of up to 4 strings for multi-reference models (FLUX 2). When provided, switches to /v1/images/edits mode.',
+            },
+            mask: {
+              type: 'string',
+              description: 'Mask image for inpainting (base64 encoded). White areas will be edited, black areas preserved. Only used with image parameter.',
             },
             n: {
               type: 'number',
@@ -690,6 +755,10 @@ export class MCPEndpoint {
             negative_prompt: {
               type: 'string',
               description: 'Elements to avoid in the image',
+            },
+            strength: {
+              type: 'number',
+              description: 'Image-to-image transformation strength (0-1). Lower = more faithful to original.',
             },
           },
           required: ['prompt', 'model_id'],
