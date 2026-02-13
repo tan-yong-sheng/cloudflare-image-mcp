@@ -6,6 +6,31 @@
 import type { Env, OpenAIGenerationRequest, OpenAIEditRequest, OpenAIVariationRequest, OpenAIImageResponse } from '../types.js';
 import { ImageGeneratorService } from '../services/image-generator.js';
 
+/**
+ * Convert ArrayBuffer to base64 string
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000; // 32KB
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...(chunk as unknown as number[]));
+  }
+
+  return btoa(binary);
+}
+
+/**
+ * Read a File/Blob from FormData and convert to base64 string
+ */
+async function fileToBase64(file: File | Blob | null): Promise<string | undefined> {
+  if (!file) return undefined;
+  const arrayBuffer = await file.arrayBuffer();
+  return arrayBufferToBase64(arrayBuffer);
+}
+
 export class OpenAIEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
@@ -156,8 +181,13 @@ export class OpenAIEndpoint {
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      imageData = formData.get('image') as string;
-      maskData = (formData.get('mask') as string) || undefined;
+      const imageFile = formData.get('image') as File | null;
+      const maskFile = formData.get('mask') as File | null;
+
+      // Convert File objects to base64 strings
+      imageData = await fileToBase64(imageFile) || '';
+      maskData = await fileToBase64(maskFile);
+
       prompt = formData.get('prompt') as string;
       modelId = (formData.get('model') as string) || '@cf/stabilityai/stable-diffusion-xl-base-1.0';
       n = parseInt(formData.get('n') as string) || 1;
@@ -257,7 +287,11 @@ export class OpenAIEndpoint {
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      imageData = formData.get('image') as string;
+      const imageFile = formData.get('image') as File | null;
+
+      // Convert File object to base64 string
+      imageData = await fileToBase64(imageFile) || '';
+
       modelId = (formData.get('model') as string) || '@cf/black-forest-labs/flux-2-klein-4b';
       n = parseInt(formData.get('n') as string) || 1;
       size = (formData.get('size') as string) || '1024x1024';
