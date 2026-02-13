@@ -309,23 +309,37 @@ export class MCPEndpoint {
 
   /**
    * Handle run_model tool call
-   * Routes to text-to-image (generations) or image-to-image (edits) based on input
+   * Routes based on taskType: "generations" (text-to-image) or "edits" (image editing)
    */
   private async handleRunModels(args: any): Promise<any[]> {
     const {
+      taskType,
       prompt,
       model_id: requestedModelId,
       n,
       size,
-      steps,
-      seed,
-      guidance,
-      negative_prompt,
       image,
       mask,
-      strength,
+      cf_params,
     } = args || {};
 
+    // ── Validate taskType ──
+    if (!taskType) {
+      return [{
+        type: 'text',
+        text: 'Error: taskType is required. Use "generations" for text-to-image or "edits" for image editing.',
+        isError: true,
+      }];
+    }
+    if (taskType !== 'generations' && taskType !== 'edits') {
+      return [{
+        type: 'text',
+        text: `Error: Invalid taskType "${taskType}". Must be "generations" or "edits".`,
+        isError: true,
+      }];
+    }
+
+    // ── Validate prompt ──
     if (!prompt) {
       return [{
         type: 'text',
@@ -334,8 +348,30 @@ export class MCPEndpoint {
       }];
     }
 
-    // Single-model endpoint (/mcp/simple): do not allow arbitrary model selection.
-    // Multi-model endpoints (/mcp, /mcp/smart): model_id is required.
+    // ── Validate edits-specific fields ──
+    if (taskType === 'edits' && !image) {
+      return [{
+        type: 'text',
+        text: 'Error: image is required when taskType is "edits".',
+        isError: true,
+      }];
+    }
+    if (taskType === 'generations' && image) {
+      return [{
+        type: 'text',
+        text: 'Error: image cannot be used with taskType "generations". Use taskType "edits" for image editing.',
+        isError: true,
+      }];
+    }
+    if (taskType === 'generations' && mask) {
+      return [{
+        type: 'text',
+        text: 'Error: mask cannot be used with taskType "generations". Use taskType "edits" for inpainting.',
+        isError: true,
+      }];
+    }
+
+    // ── Resolve model_id ──
     let model_id: string | null = null;
 
     if (this.isMode1) {
@@ -367,7 +403,7 @@ export class MCPEndpoint {
       }
     }
 
-    // Validate model_id exists
+    // ── Validate model exists ──
     const modelConfig = this.generator.getModelConfig(model_id);
     if (!modelConfig) {
       return [{
@@ -377,24 +413,40 @@ export class MCPEndpoint {
       }];
     }
 
+    // ── Validate model supports the requested task ──
+    if (taskType === 'edits' && !modelConfig.supportedTasks.includes('image-to-image')) {
+      return [{
+        type: 'text',
+        text: `Error: Model ${model_id} does not support image editing. Use taskType "generations" or choose a model that supports image-to-image.`,
+        isError: true,
+      }];
+    }
+
+    // ── Build explicitParams from OpenAI-standard fields + cf_params ──
     const numImages = Math.min(n || 1, 8);
     const explicitParams: Record<string, any> = {};
     if (size !== undefined) explicitParams.size = size;
-    if (steps !== undefined) explicitParams.steps = steps;
-    if (seed !== undefined) explicitParams.seed = seed;
-    if (guidance !== undefined) explicitParams.guidance = guidance;
-    if (negative_prompt !== undefined) explicitParams.negative_prompt = negative_prompt;
-    if (strength !== undefined) explicitParams.strength = strength;
 
+    // Merge cf_params (steps, seed, guidance, negative_prompt, strength)
+    if (cf_params && typeof cf_params === 'object') {
+      // Validate strength is only used with edits
+      if (cf_params.strength !== undefined && taskType === 'generations') {
+        return [{
+          type: 'text',
+          text: 'Error: cf_params.strength cannot be used with taskType "generations". Use taskType "edits" for image editing.',
+          isError: true,
+        }];
+      }
+      for (const [key, value] of Object.entries(cf_params)) {
+        if (value !== undefined) explicitParams[key] = value;
+      }
+    }
+
+    // ── Execute ──
     let result;
 
-    if (image) {
-      // Image edit mode: route to img2img or inpainting
-      // Support single image string or array of images
-      const imageInput = Array.isArray(image) ? image : image;
-
+    if (taskType === 'edits') {
       if (mask) {
-        // Inpainting with mask
         const singleImage = Array.isArray(image) ? image[0] : image;
         result = await this.generator.generateInpaints(
           model_id,
@@ -405,7 +457,7 @@ export class MCPEndpoint {
           explicitParams
         );
       } else {
-        // Image-to-image transformation
+        const imageInput = Array.isArray(image) ? image : image;
         result = await this.generator.generateImageToImages(
           model_id,
           prompt,
@@ -415,7 +467,6 @@ export class MCPEndpoint {
         );
       }
     } else {
-      // Text-to-image mode (original behavior)
       result = await this.generator.generateImages(
         model_id,
         prompt,
@@ -432,15 +483,13 @@ export class MCPEndpoint {
       }];
     }
 
-    // Format response with full URL (use worker proxy URL)
+    // ── Format response ──
     const textParts: string[] = [];
     const baseUrl = this.workerBaseUrl;
     const fullUrl = (path: string) => path.startsWith('http') ? path : `${baseUrl}${path}`;
-
-    // Helper to check if image has url (not b64_json)
     const hasUrl = (img: { url?: string; b64_json?: string }): img is { url: string } => 'url' in img && !!img.url;
 
-    const modeLabel = image ? (mask ? 'Inpainted' : 'Edited') : 'Generated';
+    const modeLabel = taskType === 'edits' ? (mask ? 'Inpainted' : 'Edited') : 'Generated';
 
     if (result.images.length === 1) {
       const img = result.images[0];
@@ -496,14 +545,18 @@ export class MCPEndpoint {
     }
 
     const output = {
-      models: sortedModels.map((m) => ({
-        model_id: m.id,
-        name: m.name,
-        description: m.description,
-        provider: m.provider,
-        supported_image_sizes: m.supportedSizes,
-        task_types: m.taskTypes,
-      })),
+      models: sortedModels.map((m) => {
+        const taskTypes: string[] = ['generations'];
+        if (m.taskTypes.includes('image-to-image')) taskTypes.push('edits');
+        return {
+          model_id: m.id,
+          name: m.name,
+          description: m.description,
+          provider: m.provider,
+          supported_image_sizes: m.supportedSizes,
+          supported_task_types: taskTypes,
+        };
+      }),
       edit_capabilities: editCapabilitiesMap,
       next_step: 'call describe_model(model_id="<model_id from list_models>")',
     };
@@ -546,6 +599,12 @@ export class MCPEndpoint {
       }];
     }
 
+    // Map supportedTasks to taskType enum values
+    const supportedTaskTypes: string[] = ['generations']; // all models support text-to-image
+    if (modelConfig.supportedTasks.includes('image-to-image')) {
+      supportedTaskTypes.push('edits');
+    }
+
     // Build OpenAPI schema format
     const schema: any = {
       model_id: modelConfig.id,
@@ -554,34 +613,37 @@ export class MCPEndpoint {
       provider: modelConfig.provider,
       input_format: modelConfig.inputFormat,
       response_format: modelConfig.responseFormat,
-      supported_tasks: modelConfig.supportedTasks,
+      supported_task_types: supportedTaskTypes,
       edit_capabilities: modelConfig.editCapabilities || {},
       max_input_images: modelConfig.maxInputImages || 1,
-      parameters: {},
+      cf_params: {},
     };
 
     for (const [key, param] of Object.entries(modelConfig.parameters)) {
+      // Skip prompt — it's a top-level field, not a cf_param
+      if (key === 'prompt') continue;
+
       const cfParam = (param as any).cfParam;
-      schema.parameters[key] = {
+      schema.cf_params[key] = {
         type: (param as any).type,
         cf_param: cfParam,
         description: (param as any).description || `Parameter: ${key}`,
       };
 
       if ((param as any).required) {
-        schema.parameters[key].required = true;
+        schema.cf_params[key].required = true;
       }
       if ((param as any).default !== undefined) {
-        schema.parameters[key].default = (param as any).default;
+        schema.cf_params[key].default = (param as any).default;
       }
       if ((param as any).min !== undefined) {
-        schema.parameters[key].minimum = (param as any).min;
+        schema.cf_params[key].minimum = (param as any).min;
       }
       if ((param as any).max !== undefined) {
-        schema.parameters[key].maximum = (param as any).max;
+        schema.cf_params[key].maximum = (param as any).max;
       }
       if ((param as any).step !== undefined) {
-        schema.parameters[key].step = (param as any).step;
+        schema.cf_params[key].step = (param as any).step;
       }
     }
 
@@ -599,41 +661,97 @@ export class MCPEndpoint {
       };
     }
 
-    // Build params string for next_step (exclude prompt since it's added separately)
-    // Canonical parameter channel is prompt-embedded flags ("... --key=value").
-    const paramStrings: string[] = [];
+    // Build cf_params example for next_step
+    const cfParamExamples: string[] = [];
 
-    // 1) Include any required non-prompt params
-    for (const [key, param] of Object.entries(modelConfig.parameters)) {
-      const p = param as any;
-      if (p.required && key !== 'prompt') {
-        paramStrings.push(`--${key}=value`);
+    // Include a few common optional keys (if present in model config)
+    const commonKeys = ['steps', 'num_steps', 'seed', 'width', 'height', 'guidance', 'negative_prompt'];
+    for (const key of commonKeys) {
+      if (Object.prototype.hasOwnProperty.call(modelConfig.parameters, key) && key !== 'prompt') {
+        cfParamExamples.push(`"${key}": ...`);
       }
+      if (cfParamExamples.length >= 3) break;
     }
 
-    // 2) If there are no required non-prompt params, include a few common optional flags (if present)
-    if (paramStrings.length === 0) {
-      const commonOptionalKeys = ['steps', 'num_steps', 'seed', 'width', 'height', 'guidance', 'negative_prompt', 'strength'];
-      for (const key of commonOptionalKeys) {
-        if (Object.prototype.hasOwnProperty.call(modelConfig.parameters, key)) {
-          paramStrings.push(`--${key}=value`);
-        }
-        if (paramStrings.length >= 4) break;
-      }
-    }
+    const cfParamsStr = cfParamExamples.length > 0
+      ? `, cf_params={${cfParamExamples.join(', ')}}`
+      : '';
 
-    const paramsStr = paramStrings.join(' ');
+    // Add next_step guidance using new schema
+    const generationsExample = `run_model(taskType="generations", model_id="${modelConfig.id}", prompt="your prompt"${cfParamsStr})`;
+    const editsExample = supportedTaskTypes.includes('edits')
+      ? `\nFor image editing: run_model(taskType="edits", model_id="${modelConfig.id}", prompt="edit description", image="<base64>"${cfParamsStr})`
+      : '';
 
-    // Add next_step guidance (preferred: embed params in prompt as flags)
-    const nextStep = `call run_model(model_id="${modelConfig.id}" prompt="your prompt here${paramsStr ? ' ' + paramsStr : ''}")`;
-
-    // Add next_step to schema
-    schema.next_step = nextStep;
+    schema.next_step = generationsExample + editsExample;
 
     return [{
       type: 'text',
       text: JSON.stringify(schema, null, 2),
     }];
+  }
+
+  /**
+   * Shared run_model input schema properties (used by both mode1 and mode2)
+   */
+  private getRunModelSchema(requireModelId: boolean): any {
+    const properties: any = {
+      taskType: {
+        type: 'string',
+        enum: ['generations', 'edits'],
+        description: 'Task type. "generations" for text-to-image, "edits" for image editing/inpainting.',
+      },
+      prompt: {
+        type: 'string',
+        description: 'Text prompt describing the desired image. Supports --key=value flags for model-specific parameters (e.g., "a cat --steps=20 --width=1024").',
+      },
+      n: {
+        type: 'number',
+        description: 'Number of images to generate (1-8).',
+        minimum: 1,
+        maximum: 8,
+      },
+      size: {
+        type: 'string',
+        description: 'Image size (e.g., "1024x1024").',
+      },
+      // Edits-only (OpenAI-standard)
+      image: {
+        oneOf: [
+          { type: 'string' },
+          { type: 'array', items: { type: 'string' } },
+        ],
+        description: 'Required when taskType="edits". Base64-encoded input image(s). Array of up to 4 for multi-reference models (FLUX 2).',
+      },
+      mask: {
+        type: 'string',
+        description: 'Optional. Only for taskType="edits". Base64-encoded mask for inpainting. White areas edited, black preserved.',
+      },
+      // Cloudflare-specific params (both task types)
+      cf_params: {
+        type: 'object',
+        description: 'Cloudflare Workers AI specific parameters. Use describe_model to discover which params a model supports.',
+        properties: {
+          steps: { type: 'number', description: 'Number of diffusion steps (model-dependent).' },
+          seed: { type: 'number', description: 'Random seed for reproducibility.' },
+          guidance: { type: 'number', description: 'Guidance scale (model-dependent).' },
+          negative_prompt: { type: 'string', description: 'Elements to avoid in the image.' },
+          strength: { type: 'number', description: 'Image-to-image transformation strength (0-1). Only for taskType="edits".' },
+        },
+      },
+    };
+
+    const required = ['taskType', 'prompt'];
+
+    if (requireModelId) {
+      properties.model_id = {
+        type: 'string',
+        description: 'Exact model_id from list_models output (format: @cf/{provider}/{model_name}).',
+      };
+      required.push('model_id');
+    }
+
+    return { type: 'object', properties, required };
   }
 
   /**
@@ -647,59 +765,9 @@ export class MCPEndpoint {
       {
         name: 'run_model',
         description: this.defaultModel
-          ? `Generate or edit images using the default model (${this.defaultModel}). Supports two modes: (1) Text-to-image: provide prompt only, (2) Image editing: provide prompt + image (base64). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.`
-          : 'Generate or edit images using the model specified via ?model= on /mcp/simple. Supports two modes: (1) Text-to-image: provide prompt only, (2) Image editing: provide prompt + image (base64). Canonical parameter channel: embed model parameters directly in the prompt as --key=value flags (e.g., "a cat --steps=20 --seed=42 --width=1024 --height=1024"). If you need to inspect model-specific supported keys, use /mcp or /mcp/smart to call list_models + describe_model.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            prompt: {
-              type: 'string',
-              description: 'Prompt with optional --key=value flags. Canonical channel for model parameters. Example: "a cat --steps=20 --seed=42 --width=1024 --height=1024".',
-            },
-            image: {
-              oneOf: [
-                { type: 'string' },
-                { type: 'array', items: { type: 'string' } },
-              ],
-              description: 'Input image(s) for image editing (base64 encoded). Single string or array of up to 4 strings for multi-reference models (FLUX 2). When provided, switches to /v1/images/edits mode.',
-            },
-            mask: {
-              type: 'string',
-              description: 'Mask image for inpainting (base64 encoded). White areas will be edited, black areas preserved. Only used with image parameter.',
-            },
-            n: {
-              type: 'number',
-              description: 'Number of images to generate (1-8)',
-              minimum: 1,
-              maximum: 8,
-            },
-            size: {
-              type: 'string',
-              description: 'Image size (e.g., 1024x1024)',
-            },
-            steps: {
-              type: 'number',
-              description: 'Number of diffusion steps (model-dependent)',
-            },
-            seed: {
-              type: 'number',
-              description: 'Random seed for reproducibility',
-            },
-            guidance: {
-              type: 'number',
-              description: 'Guidance scale (1-30, model-dependent)',
-            },
-            negative_prompt: {
-              type: 'string',
-              description: 'Elements to avoid in the image',
-            },
-            strength: {
-              type: 'number',
-              description: 'Image-to-image transformation strength (0-1). Lower = more faithful to original.',
-            },
-          },
-          required: ['prompt'],
-        },
+          ? `Generate or edit images using model ${this.defaultModel}. Set taskType to "generations" for text-to-image or "edits" for image editing. Use cf_params for model-specific parameters. Use /mcp or /mcp/smart for model discovery.`
+          : 'Generate or edit images using the model specified via ?model= on /mcp/simple. Set taskType to "generations" for text-to-image or "edits" for image editing. Use cf_params for model-specific parameters.',
+        inputSchema: this.getRunModelSchema(false),
       },
     ];
 
@@ -707,66 +775,12 @@ export class MCPEndpoint {
     const mode2Tools = [
       {
         name: 'run_model',
-        description: 'Generate or edit images with a specific model. Supports two modes: (1) Text-to-image: provide prompt only (/v1/images/generations), (2) Image editing: provide prompt + image (/v1/images/edits). REQUIRED WORKFLOW: (1) First call list_models to get available model_ids, (2) Then ALWAYS call describe_model(model_id) to discover what parameters that specific model accepts (different models support different parameters like steps, guidance, width, height, etc.), (3) Finally call run_model with the model_id and embed the model-specific parameters you discovered in step 2 as --key=value flags in the prompt (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42"). DO NOT skip describe_model - it reveals which parameters are valid for your chosen model. Parameters vary significantly between models and using unsupported parameters may cause errors or be ignored.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            prompt: {
-              type: 'string',
-              description: 'Text prompt. Preferred: embed parameters as flags in the prompt using --key=value (e.g., "a cat --steps=20 --width=1024 --height=1024 --seed=42").',
-            },
-            model_id: {
-              type: 'string',
-              description: 'Exact model_id from list_models output (format: @cf/{provider}/{model_name})',
-            },
-            image: {
-              oneOf: [
-                { type: 'string' },
-                { type: 'array', items: { type: 'string' } },
-              ],
-              description: 'Input image(s) for image editing (base64 encoded). Single string or array of up to 4 strings for multi-reference models (FLUX 2). When provided, switches to /v1/images/edits mode.',
-            },
-            mask: {
-              type: 'string',
-              description: 'Mask image for inpainting (base64 encoded). White areas will be edited, black areas preserved. Only used with image parameter.',
-            },
-            n: {
-              type: 'number',
-              description: 'Number of images to generate (1-8)',
-              minimum: 1,
-              maximum: 8,
-            },
-            size: {
-              type: 'string',
-              description: 'Image size (e.g., 1024x1024)',
-            },
-            steps: {
-              type: 'number',
-              description: 'Number of diffusion steps (model-dependent)',
-            },
-            seed: {
-              type: 'number',
-              description: 'Random seed for reproducibility',
-            },
-            guidance: {
-              type: 'number',
-              description: 'Guidance scale (1-30, model-dependent)',
-            },
-            negative_prompt: {
-              type: 'string',
-              description: 'Elements to avoid in the image',
-            },
-            strength: {
-              type: 'number',
-              description: 'Image-to-image transformation strength (0-1). Lower = more faithful to original.',
-            },
-          },
-          required: ['prompt', 'model_id'],
-        },
+        description: 'Generate or edit images with a specific model. Set taskType to "generations" for text-to-image or "edits" for image editing. REQUIRED WORKFLOW: (1) call list_models, (2) call describe_model(model_id) to discover supported cf_params, (3) call run_model. DO NOT skip describe_model — parameters vary between models.',
+        inputSchema: this.getRunModelSchema(true),
       },
       {
         name: 'list_models',
-        description: 'STEP 1: List all available image generation models with their model_ids and supported task types (text-to-image, image-to-image, etc.). Returns JSON object. After calling this, you MUST call describe_model for your chosen model_id before using run_model.',
+        description: 'STEP 1: List all available image generation models with their model_ids and supported task types (text-to-image, image-to-image). After calling this, you MUST call describe_model for your chosen model_id before using run_model.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -774,13 +788,13 @@ export class MCPEndpoint {
       },
       {
         name: 'describe_model',
-        description: 'STEP 2 (REQUIRED): Get the complete parameter schema for a specific model. This reveals ALL available parameters (steps, guidance, width, height, seed, negative_prompt, etc.) with their types, ranges, and defaults. Each model has different supported parameters - you MUST call this before run_model to know which --key=value flags you can use. Call list_models first to get valid model_ids, unless the user explicitly provided a model_id in the form "@cf/{provider}/{model_name}".',
+        description: 'STEP 2 (REQUIRED): Get the complete parameter schema for a specific model. Reveals ALL available cf_params (steps, guidance, width, height, seed, etc.) with types, ranges, and defaults. Each model supports different parameters. Call list_models first to get valid model_ids.',
         inputSchema: {
           type: 'object',
           properties: {
             model_id: {
               type: 'string',
-              description: 'Exact model_id from list_models output',
+              description: 'Exact model_id from list_models output.',
             },
           },
           required: ['model_id'],
