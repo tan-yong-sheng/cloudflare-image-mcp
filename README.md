@@ -179,6 +179,8 @@ Open your worker URL in a browser for an interactive UI.
 
 ## 🎨 Supported Models
 
+📋 **[Detailed Model Specifications →](docs/models/generation/README.md)** — Full parameter reference, feature comparison, and capability matrix.
+
 | Model | Tasks | Provider |
 |-------|-------|----------|
 | FLUX.1 [schnell] | text-to-image | Black Forest Labs |
