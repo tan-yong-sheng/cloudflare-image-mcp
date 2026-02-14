@@ -17,6 +17,10 @@ This document describes all available image generation models in the Cloudflare 
 | `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Stable Diffusion XL Base 1.0 | Stability AI | High-quality diffusion model | ✅ | ✅ | ✅ |
 | `@cf/bytedance/stable-diffusion-xl-lightning` | SDXL Lightning | Bytedance | Lightning-fast SDXL model for high-quality 1024px images | ✅ | ❌ | ❌ |
 | `@cf/lykon/dreamshaper-8-lcm` | Dreamshaper 8 LCM | Lykon | Enhanced photorealistic SD model with LCM acceleration | ✅ | ✅ | ❌ |
+| `@cf/leonardo/lucid-origin` | Lucid Origin | Leonardo.AI | Most adaptable and prompt-responsive model | ✅ | ❌ | ❌ |
+| `@cf/leonardo/phoenix-1.0` | Phoenix 1.0 | Leonardo.AI | Model with exceptional prompt adherence and coherent text | ✅ | ❌ | ❌ |
+| `@cf/runwayml/stable-diffusion-v1-5-img2img` | SD 1.5 Img2Img | Runway ML | Stable Diffusion for image-to-image transformations | ❌ | ✅ | ✅ |
+| `@cf/runwayml/stable-diffusion-v1-5-inpainting` | SD 1.5 Inpainting | Runway ML | Stable Diffusion for masked edits (requires mask) | ❌ | ✅ | Required |
 
 ---
 
@@ -221,18 +225,141 @@ Photorealistic model with LCM (Latent Consistency Model) acceleration.
 
 ---
 
+### Leonardo.AI Models
+
+#### Lucid Origin
+
+Leonardo.AI's most adaptable and prompt-responsive model.
+
+| Attribute | Value |
+|-----------|-------|
+| **Input Format** | JSON |
+| **Response Format** | Base64 |
+| **API Version** | 2 |
+| **Max Prompt Length** | 2048 characters |
+| **Supported Sizes** | 512x512, 768x768, 1024x1024, 1280x720, 720x1280 |
+| **Min Dimensions** | 256x256 |
+| **Max Dimensions** | 2500x2500 |
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Range | Description |
+|-----------|------|----------|---------|-------|-------------|
+| `prompt` | string | ✅ | — | — | Text description of the image |
+| `guidance` | number | ❌ | 4.5 | 0-10 | Prompt adherence strength |
+| `seed` | integer | ❌ | null | — | Random seed for reproducibility |
+| `width` | integer | ❌ | 1120 | 256-2500 | Image width in pixels (step: 64) |
+| `height` | integer | ❌ | 1120 | 256-2500 | Image height in pixels (step: 64) |
+| `num_steps` | integer | ❌ | 4 | 1-40 | Diffusion steps |
+
+---
+
+#### Phoenix 1.0
+
+Leonardo.AI model with exceptional prompt adherence and coherent text.
+
+| Attribute | Value |
+|-----------|-------|
+| **Input Format** | JSON |
+| **Response Format** | Binary |
+| **API Version** | 2 |
+| **Max Prompt Length** | 2048 characters |
+| **Supported Sizes** | 512x512, 768x768, 1024x1024, 1280x1280 |
+| **Min Dimensions** | 256x256 |
+| **Max Dimensions** | 2048x2048 |
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Range | Description |
+|-----------|------|----------|---------|-------|-------------|
+| `prompt` | string | ✅ | — | — | Text description of the image |
+| `guidance` | number | ❌ | 2 | 2-10 | Prompt adherence strength |
+| `seed` | integer | ❌ | null | — | Random seed for reproducibility |
+| `width` | integer | ❌ | 1024 | 256-2048 | Image width in pixels (step: 64) |
+| `height` | integer | ❌ | 1024 | 256-2048 | Image height in pixels (step: 64) |
+| `num_steps` | integer | ❌ | 25 | 1-50 | Diffusion steps |
+| `negative_prompt` | string | ❌ | "" | — | Elements to avoid in the image |
+
+---
+
+### Runway ML Models (Stable Diffusion 1.5)
+
+#### SD 1.5 Img2Img
+
+Classic Stable Diffusion model for image-to-image transformations.
+
+| Attribute | Value |
+|-----------|-------|
+| **Input Format** | JSON |
+| **Response Format** | Binary |
+| **API Version** | 2 |
+| **Max Prompt Length** | 2048 characters |
+| **Supported Sizes** | 256x256, 512x512, 768x768, 1024x1024 |
+| **Min Dimensions** | 256x256 |
+| **Max Dimensions** | 2048x2048 |
+| **Mask Support** | ✅ Supported |
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Range | Description |
+|-----------|------|----------|---------|-------|-------------|
+| `prompt` | string | ✅ | — | — | Text description of the image |
+| `negative_prompt` | string | ❌ | "" | — | Elements to avoid in the image |
+| `width` | integer | ❌ | 512 | 256-2048 | Image width in pixels (step: 64) |
+| `height` | integer | ❌ | 512 | 256-2048 | Image height in pixels (step: 64) |
+| `image_b64` | string | ❌ | null | — | Input image for img2img (base64) |
+| `mask_b64` | string | ❌ | null | — | Mask for masked edits (base64) |
+| `num_steps` | integer | ❌ | 20 | 1-20 | Diffusion steps |
+| `strength` | number | ❌ | 1 | 0-1 | Img2img transformation strength |
+| `guidance` | number | ❌ | 7.5 | 1-30 | Prompt adherence strength |
+| `seed` | integer | ❌ | null | — | Random seed for reproducibility |
+
+---
+
+#### SD 1.5 Inpainting
+
+Stable Diffusion model specifically designed for masked edits. **Requires a mask.**
+
+| Attribute | Value |
+|-----------|-------|
+| **Input Format** | JSON |
+| **Response Format** | Binary |
+| **API Version** | 2 |
+| **Max Prompt Length** | 2048 characters |
+| **Supported Sizes** | 256x256, 512x512, 768x768, 1024x1024 |
+| **Min Dimensions** | 256x256 |
+| **Max Dimensions** | 2048x2048 |
+| **Mask Support** | ⚠️ **Required** |
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Range | Description |
+|-----------|------|----------|---------|-------|-------------|
+| `prompt` | string | ✅ | — | — | Text description of the image |
+| `negative_prompt` | string | ❌ | "" | — | Elements to avoid in the image |
+| `width` | integer | ❌ | 512 | 256-2048 | Image width in pixels (step: 64) |
+| `height` | integer | ❌ | 512 | 256-2048 | Image height in pixels (step: 64) |
+| `image_b64` | string | ❌ | null | — | Input image for img2img (base64) |
+| `mask_b64` | string | ❌ | null | — | **Mask for masked edits (base64)** |
+| `num_steps` | integer | ❌ | 20 | 1-20 | Diffusion steps |
+| `strength` | number | ❌ | 1 | 0-1 | Img2img transformation strength |
+| `guidance` | number | ❌ | 7.5 | 1-30 | Prompt adherence strength |
+| `seed` | integer | ❌ | null | — | Random seed for reproducibility |
+
+---
+
 ## Feature Comparison Matrix
 
-| Feature | FLUX.1<br>schnell | FLUX.2<br>klein 4B | FLUX.2<br>dev | FLUX.2<br>klein 9B | SDXL<br>Base | SDXL<br>Lightning | Dreamshaper<br>8 LCM |
-|---------|:-----------------:|:------------------:|:-------------:|:------------------:|:------------:|:-----------------:|:--------------------:|
-| Text-to-Image | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Image-to-Image | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Mask/Inpainting | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| Multi-Reference | ❌ | ✅ (4) | ✅ (4) | ✅ (4) | ❌ | ❌ | ❌ |
-| Negative Prompt | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Guidance Scale | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Strength Control | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
-| Configurable Size | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Feature | FLUX.1<br>schnell | FLUX.2<br>klein 4B | FLUX.2<br>dev | FLUX.2<br>klein 9B | SDXL<br>Base | SDXL<br>Lightning | Dreamshaper<br>8 LCM | Lucid<br>Origin | Phoenix<br>1.0 | SD 1.5<br>Img2Img | SD 1.5<br>Inpainting |
+|---------|:-----------------:|:------------------:|:-------------:|:------------------:|:------------:|:-----------------:|:--------------------:|:---------------:|:--------------:|:-----------------:|:--------------------:|
+| Text-to-Image | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Image-to-Image | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Mask/Inpainting | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ⚠️ Required |
+| Multi-Reference | ❌ | ✅ (4) | ✅ (4) | ✅ (4) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Negative Prompt | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Guidance Scale | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Strength Control | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Configurable Size | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
@@ -242,6 +369,7 @@ Photorealistic model with LCM (Latent Consistency Model) acceleration.
 
 Models returning Base64-encoded images:
 - All FLUX models (`@cf/black-forest-labs/*`)
+- Lucid Origin (`@cf/leonardo/lucid-origin`)
 
 The response includes the image data as a base64 string in the JSON response body.
 
@@ -251,6 +379,9 @@ Models returning raw binary image data:
 - Stable Diffusion XL Base 1.0
 - SDXL Lightning
 - Dreamshaper 8 LCM
+- Phoenix 1.0
+- SD 1.5 Img2Img
+- SD 1.5 Inpainting
 
 These models return the image directly as binary content with appropriate `Content-Type` headers.
 
@@ -265,6 +396,10 @@ Models accepting JSON payloads:
 - Stable Diffusion XL Base 1.0
 - SDXL Lightning
 - Dreamshaper 8 LCM
+- Lucid Origin
+- Phoenix 1.0
+- SD 1.5 Img2Img
+- SD 1.5 Inpainting
 
 Send parameters as a JSON object in the request body.
 
@@ -284,5 +419,6 @@ These models support uploading multiple reference images (up to 4) along with te
 - All models support seeds for reproducible generation
 - Width and height must be multiples of 64 (where configurable)
 - The `strength` parameter controls how much the original image is preserved in img2img transformations (0 = no change, 1 = complete replacement)
-- Mask support is currently only available on Stable Diffusion XL Base 1.0
+- SD 1.5 Inpainting **requires** a mask - it cannot be used without one
+- Mask support is available on SDXL Base 1.0, SD 1.5 Img2Img, and SD 1.5 Inpainting
 - Multi-reference support (up to 4 images) is exclusive to FLUX.2 models
