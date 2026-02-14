@@ -112,54 +112,6 @@ The file `.github/workflows/deploy-workers.yml` handles everything:
 
 ---
 
-## 🖥️ Local Development (Optional)
-
-If you want to test locally before deploying:
-
-```bash
-cd workers
-npm ci
-npx wrangler dev --remote
-```
-
-Then open:
-- Web UI: http://localhost:8787/
-- API: http://localhost:8787/v1/images/generations
-
-### Local Dev Notes
-
-You may need to configure a **preview R2 bucket** for local development:
-
-1. Create a dev bucket in Cloudflare R2
-2. Edit `workers/wrangler.toml` and add:
-
-```toml
-[[r2_buckets]]
-binding = "IMAGE_BUCKET"
-bucket_name = "your-production-bucket"
-preview_bucket_name = "your-dev-bucket"  # Add this line
-```
-
----
-
-## 🔧 Manual Deploy (Alternative)
-
-If you prefer not to use GitHub Actions:
-
-```bash
-cd workers
-npm ci
-
-# Set your credentials as environment variables
-export CLOUDFLARE_ACCOUNT_ID="your-account-id"
-export CLOUDFLARE_API_TOKEN="your-api-token"
-
-# Deploy
-npx wrangler deploy
-```
-
----
-
 ## 📋 Troubleshooting
 
 | Issue | Solution |
