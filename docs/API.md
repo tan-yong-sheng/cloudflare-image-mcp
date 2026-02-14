@@ -7,7 +7,7 @@ Cloudflare Image MCP provides OpenAI-compatible REST API endpoints for image gen
 ## Base URL
 
 - **Local/Docker**: `http://localhost:3000`
-- **Cloudflare Workers**: `https://cloudflare-image-workers.tanyongsheng-net.workers.dev`
+- **Cloudflare Workers**: `https://cloudflare-image-workers.<your-subdomain>.workers.dev`
 
 ## Authentication
 
