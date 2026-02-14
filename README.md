@@ -142,11 +142,11 @@ curl -X POST "https://your-worker.workers.dev/v1/images/generations" \
   }'
 ```
 
-And it can be used for OpenWebUI's image generation feature:
+And it can be used for OpenWebUI's image generation feature and image edits feature:
 
 ![OpenWebUI image generation](/static/img/openwebui-image-settings.png)
 
-
+![OpenWebUI image_edits](https://github.com/user-attachments/assets/874b85a5-71ec-47c3-9ad8-d64dd18d236d)
 
 ### MCP Tools
 
