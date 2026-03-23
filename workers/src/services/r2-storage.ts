@@ -62,6 +62,9 @@ export class R2StorageService {
       customMetadata: {
         model: fullMetadata.model,
         prompt: fullMetadata.prompt.substring(0, 500), // Truncate for metadata
+        size: fullMetadata.parameters.size,
+        steps: String(fullMetadata.parameters.steps),
+        seed: String(fullMetadata.parameters.seed),
         createdAt: String(fullMetadata.createdAt),
         expiresAt: String(fullMetadata.expiresAt),
       },
