@@ -62,9 +62,9 @@ export class R2StorageService {
       customMetadata: {
         model: fullMetadata.model,
         prompt: fullMetadata.prompt.substring(0, 500), // Truncate for metadata
-        size: fullMetadata.parameters.size,
-        steps: String(fullMetadata.parameters.steps),
-        seed: String(fullMetadata.parameters.seed),
+        ...(fullMetadata.parameters.size != null && { size: fullMetadata.parameters.size }),
+        ...(fullMetadata.parameters.steps != null && { steps: String(fullMetadata.parameters.steps) }),
+        ...(fullMetadata.parameters.seed != null && { seed: String(fullMetadata.parameters.seed) }),
         createdAt: String(fullMetadata.createdAt),
         expiresAt: String(fullMetadata.expiresAt),
       },
@@ -103,7 +103,11 @@ export class R2StorageService {
       prompt: custom.prompt,
       createdAt: parseInt(custom.createdAt, 10),
       expiresAt: parseInt(custom.expiresAt, 10),
-      parameters: {},
+      parameters: {
+        size: custom.size ? custom.size : undefined,
+        steps: custom.steps ? parseInt(custom.steps, 10) : undefined,
+        seed: custom.seed ? parseInt(custom.seed, 10) : undefined,
+      },
     };
 
     return {
