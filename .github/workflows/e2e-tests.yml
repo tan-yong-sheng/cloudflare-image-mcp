@@ -335,8 +335,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
           cache-dependency-path: workers/package-lock.json
 
       - name: Install Wrangler
