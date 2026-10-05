@@ -1,0 +1,20 @@
+# Lefthook config — local git hooks for this repo.
+# Install hooks: `npx lefthook install` (also runs via `npm run prepare`).
+# Skip hooks when needed: `LEFTHOOK=0 git commit ...`
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: prettier (staged files)
+      glob:
+        - "*.{js,cjs,mjs,ts,tsx,json,md,yml,yaml,html,css}"
+      run: npx --no-install prettier --ignore-unknown --write {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: false
+  jobs:
+    # E2E tests are intentionally NOT here: they need a live backend
+    # (TEST_BASE_URL + /health). CI (.github/workflows/e2e-tests.yml) covers them.
+    - name: workers typecheck
+      run: cd workers && { test -d node_modules || npm ci; } && npm run check

@@ -1,0 +1,13 @@
+node_modules
+dist
+workers/dist
+workers/node_modules
+e2e/node_modules
+e2e/playwright-report
+e2e/test-results
+e2e/blob-report
+coverage
+*.min.js
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
