@@ -5,17 +5,17 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Test environment'
+        description: "Test environment"
         required: true
-        default: 'staging'
+        default: "staging"
         type: choice
         options:
           - staging
           - production
       test_pattern:
-        description: 'Test file pattern (e.g., tests/api/mcp/mcp-sdk.spec.ts)'
+        description: "Test file pattern (e.g., tests/api/mcp/mcp-sdk.spec.ts)"
         required: false
-        default: ''
+        default: ""
         type: string
       full_matrix:
         description: 'Include @slow generation tests (E2E_SLOW=1)'
@@ -23,32 +23,34 @@ on:
         default: false
         type: boolean
       custom_url:
-        description: 'Custom Workers URL (optional - overrides auto-constructed URL)'
+        description: "Custom Workers URL (optional - overrides auto-constructed URL)"
         required: false
-        default: ''
+        default: ""
         type: string
 
-  # Run on PRs that modify workers/ or e2e/
+  # Merge gate: full matrix runs on release-integration PRs to main,
+  # where the fast PR check (pr-checks.yml) is insufficient signal.
+  # Feature PRs skip E2E (add the `e2e` label for an opt-in full run).
   pull_request:
     branches:
       - main
     paths:
-      - 'workers/**'
-      - 'e2e/**'
-      - '.github/workflows/e2e-tests.yml'
-      - 'package.json'
+      - "workers/**"
+      - "e2e/**"
+      - ".github/workflows/e2e-tests.yml"
+      - "package.json"
 
   workflow_call:
     inputs:
       environment:
-        description: 'Test environment'
+        description: "Test environment"
         required: false
-        default: 'staging'
+        default: "staging"
         type: string
       test_pattern:
-        description: 'Test file pattern'
+        description: "Test file pattern"
         required: false
-        default: ''
+        default: ""
         type: string
       full_matrix:
         description: 'Include @slow generation tests (E2E_SLOW=1)'
@@ -58,11 +60,20 @@ on:
 
 env:
   NODE_VERSION: '24'
-
 jobs:
   deploy_staging:
     name: Deploy staging (for E2E)
-    if: (inputs.environment || 'staging') == 'staging' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
+    # Skip on feature PRs: full E2E is the merge gate for
+    # release-integration branches (prerelease/*, release/*) and
+    # opt-in runs labeled `e2e`. Fast feedback lives in pr-checks.yml.
+    if: >-
+      (inputs.environment || 'staging') == 'staging' &&
+      (github.event_name != 'pull_request' ||
+      startsWith(github.head_ref, 'prerelease/') ||
+      startsWith(github.head_ref, 'release/') ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')) &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
     uses: ./.github/workflows/deploy-workers.yml
     with:
       environment: staging
@@ -72,7 +83,17 @@ jobs:
     name: E2E Tests (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
     needs: [deploy_staging]
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository)) && ((inputs.environment || 'staging') != 'staging' || needs.deploy_staging.result == 'success')
+    # Same merge-gate guard as deploy_staging; non-gated feature PRs
+    # skip without failure so the suite stays non-blocking there.
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' ||
+      startsWith(github.head_ref, 'prerelease/') ||
+      startsWith(github.head_ref, 'release/') ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')) &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository)) &&
+      ((inputs.environment || 'staging') != 'staging' || needs.deploy_staging.result == 'success')
     environment: ${{ inputs.environment || 'staging' }}
     permissions:
       contents: read
@@ -162,7 +183,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Install E2E dependencies
         run: |
@@ -173,7 +195,6 @@ jobs:
         run: |
           cd e2e
           npx playwright install --with-deps chromium
-
 
       - name: Smoke check /health
         run: |
@@ -299,7 +320,9 @@ jobs:
   cleanup-staging:
     name: Cleanup Staging Worker
     needs: [deploy_staging, e2e-tests]
-    if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy_staging.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
+    # Only runs when deploy_staging ran (merge-gate or opt-in PRs).
+    # Skipped feature PRs never deploy, so there is nothing to delete.
+    if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy_staging.result == 'success' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'prerelease/') || startsWith(github.head_ref, 'release/') || contains(github.event.pull_request.labels.*.name, 'e2e')) && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     environment: staging
     permissions:
