@@ -14,6 +14,7 @@ import {
   RunModelMultiSchema,
   RunModelSingleSchema,
   DescribeModelSchema,
+  EmptySchema,
   type RunModelMultiArgs,
   type RunModelSingleArgs,
   type DescribeModelArgs,
@@ -58,9 +59,8 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
           : 'Generate or edit images using the model specified via ?model= on /mcp/simple. Set taskType to "generations" for text-to-image or "edits" for image editing. Use cf_params for model-specific parameters.',
         inputSchema: RunModelSingleSchema,
       },
-      async (args: RunModelSingleArgs) => ({
-        content: await handleRunModel(ctx, args, defaultModel),
-      })
+      async (args) =>
+        handleRunModel(ctx, args as RunModelSingleArgs, defaultModel)
     );
   } else {
     server.registerTool(
@@ -70,9 +70,7 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
           'Generate or edit images with a specific model. Set taskType to "generations" for text-to-image or "edits" for image editing. REQUIRED WORKFLOW: (1) call list_models, (2) call describe_model(model_id) to discover supported cf_params, (3) call run_model. DO NOT skip describe_model — parameters vary between models.',
         inputSchema: RunModelMultiSchema,
       },
-      async (args: RunModelMultiArgs) => ({
-        content: await handleRunModel(ctx, args, null),
-      })
+      async (args) => handleRunModel(ctx, args as RunModelMultiArgs, null)
     );
 
     server.registerTool(
@@ -80,9 +78,9 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
       {
         description:
           "STEP 1: List all available image generation models with their model_ids and supported task types (text-to-image, image-to-image). After calling this, you MUST call describe_model for your chosen model_id before using run_model.",
-        inputSchema: z.object({}),
+        inputSchema: EmptySchema,
       },
-      async () => ({ content: await handleListModels(ctx) })
+      async () => handleListModels(ctx)
     );
 
     server.registerTool(
@@ -92,9 +90,7 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
           "STEP 2 (REQUIRED): Get the complete parameter schema for a specific model. Reveals ALL available cf_params (steps, guidance, width, height, seed, etc.) with types, ranges, and defaults. Each model supports different parameters. Call list_models first to get valid model_ids.",
         inputSchema: DescribeModelSchema,
       },
-      async (args: DescribeModelArgs) => ({
-        content: await handleDescribeModel(ctx, args),
-      })
+      async (args) => handleDescribeModel(ctx, args as DescribeModelArgs)
     );
   }
 

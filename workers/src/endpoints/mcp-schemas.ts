@@ -3,6 +3,8 @@
 // ============================================================================
 // The SDK validates tool arguments against these schemas before the handler
 // runs (invalid input -> standard JSON-RPC error, never a hand-built one).
+// Schemas are ZodRawShape records (the SDK v2 registerTool form); the
+// ZodObject wrappers below exist only for callback argument typing.
 // Cloudflare-specific parameters vary per model AND task type, so they stay
 // an open object here; exact keys come from describe_model at runtime.
 
@@ -10,7 +12,7 @@ import * as z from "zod";
 
 export const TaskTypeSchema = z.enum(["generations", "edits"]);
 
-export const RunModelBaseSchema = z.object({
+const RunModelBaseShape = {
   taskType: TaskTypeSchema.describe(
     'Task type. "generations" for text-to-image, "edits" for image editing/inpainting.'
   ),
@@ -42,23 +44,32 @@ export const RunModelBaseSchema = z.object({
         "Available params differ per model and per taskType. " +
         "Call describe_model(model_id) for the exact keys."
     ),
-});
+};
 
-/** Schema for multi-model endpoints (/mcp, /mcp/smart): model_id required. */
-export const RunModelMultiSchema = RunModelBaseSchema.extend({
+/** Shape for multi-model endpoints (/mcp, /mcp/smart): model_id required. */
+export const RunModelMultiShape = {
+  ...RunModelBaseShape,
   model_id: z
     .string()
     .describe(
       "Exact model_id from list_models output (format: @cf/{provider}/{model_name})."
     ),
-});
+};
 
-/** Schema for the single-model endpoint (/mcp/simple): model comes from ?model=. */
-export const RunModelSingleSchema = RunModelBaseSchema;
+/** Shape for the single-model endpoint (/mcp/simple): model comes from ?model=. */
+export const RunModelSingleShape = RunModelBaseShape;
 
-export const DescribeModelSchema = z.object({
+export const DescribeModelShape = {
   model_id: z.string().describe("Exact model_id from list_models output."),
-});
+};
+
+// Object wrappers: the SDK v2 standard-schema overload accepts ZodObject
+// input schemas (StandardSchemaWithJSON); raw shapes hit the deprecated
+// legacy overload instead.
+export const RunModelMultiSchema = z.object(RunModelMultiShape);
+export const RunModelSingleSchema = z.object(RunModelSingleShape);
+export const DescribeModelSchema = z.object(DescribeModelShape);
+export const EmptySchema = z.object({});
 
 export type RunModelMultiArgs = z.infer<typeof RunModelMultiSchema>;
 export type RunModelSingleArgs = z.infer<typeof RunModelSingleSchema>;

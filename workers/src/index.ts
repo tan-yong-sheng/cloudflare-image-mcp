@@ -29,7 +29,21 @@ export default {
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers":
         "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID, MCP-Transport",
-      "Access-Control-Expose-Headers": "Mcp-Session-Id",
+      "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
+    };
+
+    // Apply the worker CORS headers onto a response built elsewhere
+    // (SDK handler, auth challenge) so browser clients can read it.
+    const withCors = (response: Response): Response => {
+      const headers = new Headers(response.headers);
+      for (const [key, value] of Object.entries(corsHeaders)) {
+        headers.set(key, value);
+      }
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
     };
 
     // Handle OPTIONS preflight
@@ -42,7 +56,9 @@ export default {
       if (requiresAuth(path, request.method)) {
         const authResult = authenticateRequest(request, env);
         if (!authResult.authenticated) {
-          return createUnauthorizedResponse(authResult.error, request);
+          return withCors(
+            createUnauthorizedResponse(authResult.error, request)
+          );
         }
       }
 
@@ -141,12 +157,14 @@ export default {
             : "multi-model";
         const defaultModel =
           mode === "single-model" ? url.searchParams.get("model") : null;
-        return handleMcpRequest(request, {
-          env,
-          baseUrl: url.protocol + "//" + url.host,
-          mode,
-          defaultModel,
-        });
+        return withCors(
+          await handleMcpRequest(request, {
+            env,
+            baseUrl: url.protocol + "//" + url.host,
+            mode,
+            defaultModel,
+          })
+        );
       }
 
       // Route: API endpoints

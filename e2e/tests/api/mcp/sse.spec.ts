@@ -49,6 +49,10 @@ test.describe("MCP SSE Transport", () => {
 
     expect(response.status()).toBe(200);
     expect(response.headers()["access-control-allow-origin"]).toBe("*");
+    // SDK and auth-challenge responses must carry CORS so browser clients
+    // can read them (regression: GET /mcp once lost the header).
+    const mcpGet = await request.get("/mcp");
+    expect(mcpGet.headers()["access-control-allow-origin"]).toBe("*");
     // MCP transport headers must be allow-listed for browser clients.
     expect(response.headers()["access-control-allow-headers"]).toContain(
       "Mcp-Protocol-Version"

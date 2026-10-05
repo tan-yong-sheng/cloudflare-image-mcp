@@ -243,15 +243,14 @@ test.describe("MCP SDK Integration", () => {
         },
       });
 
-      // Should return error in content (SDK schema validation)
+      // Should return error at result level (SDK schema validation)
       expect(result).toBeDefined();
+      expect(result).toHaveProperty("isError", true);
       const content = result.content as TextContent[];
       expect(content).toBeDefined();
 
       if (content.length > 0) {
         const textContent = content[0];
-        // Server returns error as text content with isError flag
-        // (surfaced at result level via SDK clients).
         expect(textContent.text).toContain("model_id");
 
         console.log("✅ MCP error handling works:", textContent.text);

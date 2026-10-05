@@ -169,11 +169,12 @@ test.describe("MCP Tools", () => {
     expect(body).toHaveProperty("result");
     expect(body.result).toHaveProperty("content");
 
+    expect(body.result).toHaveProperty("isError", true);
+    expect(body.result).toHaveProperty("content");
+
     const content = body.result.content[0];
     // The SDK validates tool arguments against the registered schema and
     // reports violations as a tool-level error (message names the schema).
-    // NOTE: `isError` surfaces at the result level via SDK clients; the raw
-    // content block carries only type+text.
     expect(content.text).toContain("model_id");
   });
 
@@ -232,6 +233,8 @@ test.describe("MCP Tools", () => {
     expect(body).toHaveProperty("result");
     expect(body.result).toHaveProperty("content");
 
+    expect(body.result).toHaveProperty("isError", true);
+
     const content = body.result.content[0];
     expect(content.text).toContain("prompt");
   });
@@ -254,6 +257,8 @@ test.describe("MCP Tools", () => {
 
     expect(body).toHaveProperty("result");
     expect(body.result).toHaveProperty("content");
+
+    expect(body.result).toHaveProperty("isError", true);
 
     const content = body.result.content[0];
     expect(content.text).toContain("model_id");

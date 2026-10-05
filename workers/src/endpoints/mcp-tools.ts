@@ -10,7 +10,24 @@ import { ImageGeneratorService } from "../services/image-generator.js";
 export interface ToolContent {
   type: "text";
   text: string;
+}
+
+/**
+ * MCP CallToolResult shape: `isError` lives on the result object, not on
+ * content blocks (clients read result.isError to detect tool failure).
+ * (The SDK fills the 2026-era `resultType` envelope itself; callbacks
+ * return the plain CallToolResult shape.)
+ */
+/**
+ * Handler return contract, mirroring the SDK CallToolResult content model
+ * (text blocks only in this codebase): result-level `isError` plus an
+ * index-signature escape hatch for the SDK 2026-era envelope fields
+ * (`resultType`, `_meta`) the transport manages on the wire.
+ */
+export interface ToolResult {
+  content: ToolContent[];
   isError?: boolean;
+  [key: string]: unknown;
 }
 
 export interface ToolsContext {
@@ -30,8 +47,12 @@ function hasUrl(img: {
   return "url" in img && !!img.url;
 }
 
-function error(text: string): ToolContent[] {
-  return [{ type: "text", text, isError: true }];
+function error(text: string): ToolResult {
+  return { content: [{ type: "text", text }], isError: true };
+}
+
+function ok(text: string): ToolResult {
+  return { content: [{ type: "text", text }] };
 }
 
 /**
@@ -52,7 +73,7 @@ export async function handleRunModel(
     cf_params?: Record<string, unknown>;
   },
   defaultModel: string | null
-): Promise<ToolContent[]> {
+): Promise<ToolResult> {
   const { taskType, prompt, n, size, image, mask, cf_params } = args;
   let model_id = args.model_id ?? null;
 
@@ -208,15 +229,13 @@ export async function handleRunModel(
     });
   }
 
-  return [{ type: "text", text: textParts.join("\n") }];
+  return ok(textParts.join("\n"));
 }
 
 /**
  * Handle list_models tool call.
  */
-export async function handleListModels(
-  ctx: ToolsContext
-): Promise<ToolContent[]> {
+export async function handleListModels(ctx: ToolsContext): Promise<ToolResult> {
   const models = ctx.generator.listModels();
 
   const sortedModels = [...models].sort((a, b) => {
@@ -249,7 +268,7 @@ export async function handleListModels(
     next_step: 'call describe_model(model_id="<model_id from list_models>")',
   };
 
-  return [{ type: "text", text: JSON.stringify(output, null, 2) }];
+  return ok(JSON.stringify(output, null, 2));
 }
 
 /**
@@ -258,7 +277,7 @@ export async function handleListModels(
 export async function handleDescribeModel(
   ctx: ToolsContext,
   args: { model_id?: string }
-): Promise<ToolContent[]> {
+): Promise<ToolResult> {
   const { model_id } = args;
 
   if (!model_id) {
@@ -417,5 +436,5 @@ export async function handleDescribeModel(
 
   schema.next_step = generationsExample + editsExample;
 
-  return [{ type: "text", text: JSON.stringify(schema, null, 2) }];
+  return ok(JSON.stringify(schema, null, 2));
 }
