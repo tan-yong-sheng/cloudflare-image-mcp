@@ -239,6 +239,54 @@ test.describe("MCP Tools", () => {
     expect(content.text).toContain("prompt");
   });
 
+  test("tools/call run_model with mask and image array rejects explicitly", async ({
+    request,
+  }) => {
+    const body = await postMcp(request, "/mcp/message", {
+      jsonrpc: "2.0",
+      id: 14,
+      method: "tools/call",
+      params: {
+        name: "run_model",
+        arguments: {
+          taskType: "edits",
+          prompt: "edit this",
+          model_id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+          image: ["aGVsbG8=", "d29ybGQ="],
+          mask: "bWFzaw==",
+        },
+      },
+    });
+
+    // Inpainting takes exactly one image: arrays must be rejected, never
+    // silently truncated to the first element.
+    expect(body.result).toHaveProperty("isError", true);
+    expect(body.result.content[0].text).toContain("single image");
+  });
+
+  test("tools/call run_model with fractional n is rejected", async ({
+    request,
+  }) => {
+    const body = await postMcp(request, "/mcp/message", {
+      jsonrpc: "2.0",
+      id: 15,
+      method: "tools/call",
+      params: {
+        name: "run_model",
+        arguments: {
+          taskType: "generations",
+          prompt: "a cat",
+          model_id: "@cf/black-forest-labs/flux-1-schnell",
+          n: 1.5,
+        },
+      },
+    });
+
+    // The schema requires an integer count (1-8).
+    expect(body.result).toHaveProperty("isError", true);
+    expect(body.result.content[0].text).toContain("n");
+  });
+
   test("tools/call run_model without model_id returns error", async ({
     request,
   }) => {

@@ -7,7 +7,6 @@
 // multi-model (/mcp, /mcp/smart) and single-model (/mcp/simple?model=...).
 
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
-import * as z from "zod";
 import type { Env } from "../types.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
 import {
@@ -100,6 +99,8 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
 /**
  * Serve one MCP HTTP request via the official SDK handler.
  * Stateless: the server factory builds a fresh McpServer per request.
+ * Transport failures are mapped to the MCP error contract (HTTP 200 +
+ * JSON-RPC error) so they never escape as a bare HTTP 500.
  */
 export async function handleMcpRequest(
   request: Request,
@@ -108,6 +109,20 @@ export async function handleMcpRequest(
   const handler = createMcpHandler(() => buildMcpServer(deps));
   try {
     return await handler.fetch(request);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`MCP transport failed: ${message}`);
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32603, message: "Internal error" },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } finally {
     await handler.close().catch(() => {});
   }

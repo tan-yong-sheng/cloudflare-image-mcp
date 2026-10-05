@@ -19,6 +19,7 @@ const RunModelBaseShape = {
   prompt: z.string().describe("Text prompt describing the desired image."),
   n: z
     .number()
+    .int()
     .min(1)
     .max(8)
     .optional()

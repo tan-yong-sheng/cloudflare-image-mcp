@@ -170,11 +170,17 @@ export async function handleRunModel(
 
   if (taskType === "edits") {
     if (mask) {
-      const singleImage = Array.isArray(image) ? image[0] : image;
+      // Inpainting takes exactly one image: reject arrays explicitly
+      // rather than silently dropping all but the first element.
+      if (Array.isArray(image)) {
+        return error(
+          "Error: mask can only be used with a single image. Pass one base64 image (not an array), or drop mask for multi-reference edits."
+        );
+      }
       result = await ctx.generator.generateInpaints(
         model_id,
         prompt,
-        singleImage as string,
+        image as string,
         mask,
         numImages,
         explicitParams as Record<string, any>
