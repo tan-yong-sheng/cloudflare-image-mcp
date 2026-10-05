@@ -31,6 +31,7 @@ cloudflare-image-mcp/
    👉 **[Deployment Guide](docs/DEPLOY.md)**
 
 2. Note your worker URL after deployment:
+
    ```
    https://cloudflare-image-workers.<your-subdomain>.workers.dev
    ```
@@ -56,15 +57,18 @@ Add to your `claude_desktop_config.json`:
 ```
 
 If using API key authentication:
+
 ```json
 {
   "mcpServers": {
     "cloudflare-image": {
-      "url": "https://your-worker.workers.dev/mcp?key=your-api-key"
+      "url": "https://your-worker.workers.dev/mcp",
+      "headers": { "Authorization": "Bearer YOUR_KEY" }
     }
   }
 }
 ```
+
 </details>
 
 <details><summary>Claude Code</summary>
@@ -76,9 +80,11 @@ claude mcp add cloudflare-image https://your-worker.workers.dev/mcp
 ```
 
 With API key:
+
 ```bash
-claude mcp add cloudflare-image https://your-worker.workers.dev/mcp?key=your-api-key
+claude mcp add cloudflare-image https://your-worker.workers.dev/mcp --header "Authorization: Bearer YOUR_KEY"
 ```
+
 </details>
 
 <details><summary>Cursor</summary>
@@ -94,6 +100,7 @@ Go to: **Settings → Cursor Settings → MCP → Add new global MCP server**
   }
 }
 ```
+
 </details>
 
 <details><summary>Cline</summary>
@@ -111,8 +118,8 @@ Add to `cline_mcp_settings.json`:
   }
 }
 ```
-</details>
 
+</details>
 
 <details><summary>Other MCP Clients</summary>
 
@@ -120,7 +127,7 @@ This server implements the **MCP HTTP/SSE transport**. Configure your client wit
 
 - **Transport**: HTTP/SSE (streamable)
 - **URL**: `https://your-worker.workers.dev/mcp`
-- **Auth** (if API_KEYS set): Add `?key=your-api-key` to the URL
+- **Auth** (if API_KEYS set): send `Authorization: Bearer YOUR_KEY` header
 
 </details>
 
@@ -151,12 +158,13 @@ And it can be used for OpenWebUI's image generation feature and image edits feat
 ### MCP Tools
 
 **Available Tools:**
+
 - `list_models` - List all available models
 - `describe_model` - Get model parameters and limits
 - `run_model` - Generate images
 
-
 **Connect via MCP:**
+
 ```json
 {
   "mcpServers": {
@@ -166,8 +174,6 @@ And it can be used for OpenWebUI's image generation feature and image edits feat
   }
 }
 ```
-
-
 
 ### Web Frontend
 
@@ -181,30 +187,29 @@ Open your worker URL in a browser for an interactive UI.
 
 📋 **[Detailed Model Specifications →](docs/models/generation/README.md)** — Full parameter reference, feature comparison, and capability matrix.
 
-| Model | Tasks | Provider |
-|-------|-------|----------|
-| FLUX.1 [schnell] | text-to-image | Black Forest Labs |
-| FLUX.2 [klein] | text-to-image, image-to-image | Black Forest Labs |
-| FLUX.2 [dev] | text-to-image, image-to-image | Black Forest Labs |
-| SDXL Base 1.0 | text-to-image, image-to-image (img2img + masked edits) | Stability AI |
-| SDXL Lightning | text-to-image | ByteDance |
-| Dreamshaper 8 LCM | text-to-image, image-to-image (img2img) | Lykon |
-| Lucid Origin | text-to-image | Leonardo |
-| Phoenix 1.0 | text-to-image | Leonardo |
-| SD 1.5 Img2Img | image-to-image (img2img) | Runway ML |
-| SD 1.5 Inpainting | image-to-image (requires mask) | Runway ML |
+| Model             | Tasks                                                  | Provider          |
+| ----------------- | ------------------------------------------------------ | ----------------- |
+| FLUX.1 [schnell]  | text-to-image                                          | Black Forest Labs |
+| FLUX.2 [klein]    | text-to-image, image-to-image                          | Black Forest Labs |
+| FLUX.2 [dev]      | text-to-image, image-to-image                          | Black Forest Labs |
+| SDXL Base 1.0     | text-to-image, image-to-image (img2img + masked edits) | Stability AI      |
+| SDXL Lightning    | text-to-image                                          | ByteDance         |
+| Dreamshaper 8 LCM | text-to-image, image-to-image (img2img)                | Lykon             |
+| Lucid Origin      | text-to-image                                          | Leonardo          |
+| Phoenix 1.0       | text-to-image                                          | Leonardo          |
+| SD 1.5 Img2Img    | image-to-image (img2img)                               | Runway ML         |
+| SD 1.5 Inpainting | image-to-image (requires mask)                         | Runway ML         |
 
 ---
 
 ## 📚 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Deployment Guide](docs/DEPLOY.md) | **Step-by-step deployment instructions** |
-| [Credentials Setup](docs/CREDENTIALS_SETUP.md) | Environment variables and API tokens |
-| [Usage Guide](docs/USAGE.md) | Detailed API usage examples |
-| [MCP Guide](docs/MCP.md) | MCP protocol and tools reference |
-| [API Reference](docs/API.md) | REST endpoints documentation |
+| Document                                       | Description                              |
+| ---------------------------------------------- | ---------------------------------------- |
+| [Deployment Guide](docs/DEPLOY.md)             | **Step-by-step deployment instructions** |
+| [Credentials Setup](docs/CREDENTIALS_SETUP.md) | Environment variables and API tokens     |
+| [MCP Guide](docs/MCP.md)                       | MCP protocol and tools reference         |
+| [API Reference](docs/API.md)                   | REST endpoints documentation             |
 
 ---
 
@@ -237,6 +242,7 @@ MIT
 ---
 
 **Built with:**
+
 - [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [Cloudflare R2](https://developers.cloudflare.com/r2/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)

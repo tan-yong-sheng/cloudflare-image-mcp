@@ -4,7 +4,8 @@ This document describes the E2E testing infrastructure for Cloudflare Image MCP.
 
 ## Overview
 
-E2E tests ensure the API works correctly across both local and Cloudflare Workers deployments. Tests use Playwright to validate:
+E2E tests run against **deployed** Workers (staging/production) — they need a
+live backend (`TEST_BASE_URL` + `/health`). Tests use Playwright to validate:
 
 - OpenAI-compatible endpoints (`/v1/images/*`)
 - MCP endpoints (`/mcp/*`)
@@ -15,17 +16,11 @@ E2E tests ensure the API works correctly across both local and Cloudflare Worker
 
 ```
 e2e/
-├── tests/
+├── tests/api/
 │   ├── health.spec.ts           # Health checks
-│   ├── openai/
-│   │   ├── models.spec.ts       # /v1/models tests
-│   │   ├── generations.spec.ts  # /v1/images/generations tests
-│   │   ├── edits.spec.ts        # /v1/images/edits tests
-│   │   └── variations.spec.ts   # /v1/images/variations tests
-│   └── mcp/
-│       ├── initialize.spec.ts   # MCP initialization
-│       ├── tools.spec.ts        # MCP tools tests
-│       └── sse.spec.ts          # MCP SSE transport
+│   ├── openai/                  # /v1/* tests (models, generations, edits, variations, SDK)
+│   └── mcp/                     # MCP tests (initialize, tools, SSE, SDK)
+├── lib/                         # target.ts (TEST_TARGET/TEST_BASE_URL), auth.ts
 ├── playwright.config.ts         # Playwright configuration
 ├── global-setup.ts              # Global test setup
 ├── global-teardown.ts           # Global test teardown
@@ -38,31 +33,32 @@ e2e/
 
 ```bash
 cd e2e
-npm install
+npm ci
 npx playwright install --with-deps
 ```
 
 ### Workers Testing
 
 ```bash
-# Deploy to Workers first
-cd workers && npm run deploy
+# From the repo root; tests target staging by default
+npm run test:e2e:staging
+npm run test:e2e:production
 
-# Run tests against Workers
-TEST_TARGET=staging npm test
+# Or with an explicit backend URL
+cd e2e && TEST_BASE_URL=https://<your-worker>.workers.dev npx playwright test
 ```
 
 ### Specific Test Files
 
 ```bash
 # Test OpenAI endpoints only
-npx playwright test tests/openai
+npx playwright test tests/api/openai
 
 # Test MCP endpoints only
-npx playwright test tests/mcp
+npx playwright test tests/api/mcp
 
 # Test specific file
-npx playwright test tests/openai/generations.spec.ts
+npx playwright test tests/api/openai/generations.spec.ts
 ```
 
 ### Debugging
@@ -85,12 +81,12 @@ npx playwright show-report
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TEST_TARGET` | Target environment: `staging` or `production` | `staging` |
-| `TEST_BASE_URL` | Base URL for testing | (auto-constructed) |
-| `TEST_TIMEOUT` | Test timeout in ms | `60000` |
-| `CI` | Running in CI environment | `false` |
+| Variable        | Description                                   | Default            |
+| --------------- | --------------------------------------------- | ------------------ |
+| `TEST_TARGET`   | Target environment: `staging` or `production` | `staging`          |
+| `TEST_BASE_URL` | Base URL for testing                          | (auto-constructed) |
+| `TEST_TIMEOUT`  | Test timeout in ms                            | `60000`            |
+| `CI`            | Running in CI environment                     | `false`            |
 
 ### Playwright Configuration
 
@@ -98,11 +94,11 @@ Edit `e2e/playwright.config.ts` to customize:
 
 ```typescript
 export default defineConfig({
-  workers: process.env.CI ? 1 : undefined,  // Parallel tests
-  retries: process.env.CI ? 2 : 0,          // Retry on failure
+  workers: process.env.CI ? 1 : undefined, // Parallel tests
+  retries: process.env.CI ? 2 : 0, // Retry on failure
   reporter: [
-    ['html'],                               // HTML report
-    ['junit', { outputFile: 'junit-results.xml' }],  // JUnit for CI
+    ["html"], // HTML report
+    ["junit", { outputFile: "junit-results.xml" }], // JUnit for CI
   ],
 });
 ```
@@ -112,22 +108,22 @@ export default defineConfig({
 ### Basic Test Structure
 
 ```typescript
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-test.describe('Feature', () => {
-  test('should do something @api', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
+test.describe("Feature", () => {
+  test("should do something @api", async ({ request }) => {
+    const response = await request.post("/v1/images/generations", {
       data: {
-        prompt: 'A test image',
-        model: '@cf/black-forest-labs/flux-1-schnell',
+        prompt: "A test image",
+        model: "@cf/black-forest-labs/flux-1-schnell",
       },
     });
 
     expect(response.status()).toBe(200);
 
     const body = await response.json();
-    expect(body).toHaveProperty('data');
-    expect(body.data[0]).toHaveProperty('url');
+    expect(body).toHaveProperty("data");
+    expect(body.data[0]).toHaveProperty("url");
   });
 });
 ```
@@ -145,7 +141,8 @@ Use small base64 images for testing edits/variations:
 
 ```typescript
 // 1x1 pixel red PNG
-const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const TEST_IMAGE_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 ```
 
 ## CI/CD Integration
@@ -154,19 +151,10 @@ const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQ
 
 The E2E workflow (`.github/workflows/e2e-tests.yml`) runs on:
 
-1. **Pull Requests** - Tests local changes
-2. **Manual Dispatch** - Test specific deployments
+1. **Pull requests** touching `workers/` or `e2e/` — tests the deployed staging worker
+2. **Manual dispatch** (`workflow_dispatch`) — test staging, production, or a custom URL
 
-### Workflow Triggers
-
-```yaml
-on:
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      environment: { staging, production }
-```
+Optional input: `test_pattern` (e.g. `tests/api/mcp/mcp-sdk.spec.ts`) to run a subset.
 
 ### Test Artifacts
 
@@ -220,8 +208,11 @@ curl https://cloudflare-image-workers.<account_id>.workers.dev/health
 Verify Workers deployment:
 
 ```bash
-curl https://cloudflare-image-workers.*.workers.dev/health
+curl https://cloudflare-image-workers.<account_id>.workers.dev/health
 ```
+
+The suite fails fast against `https://example.invalid`-style placeholder URLs —
+this means no real `TEST_BASE_URL` was provided (see `e2e/lib/target.ts`).
 
 ### Browser Installation Issues
 
@@ -241,11 +232,11 @@ npx playwright install --with-deps
 6. **Skip unavailable features gracefully**:
 
 ```typescript
-test('feature test', async ({ request }) => {
-  const response = await request.post('/endpoint');
+test("feature test", async ({ request }) => {
+  const response = await request.post("/endpoint");
 
   if (response.status() === 404) {
-    test.skip(true, 'Feature not available');
+    test.skip(true, "Feature not available");
     return;
   }
 

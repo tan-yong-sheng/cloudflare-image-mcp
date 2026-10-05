@@ -20,26 +20,17 @@ https://github.com/tan-yong-sheng/cloudflare-image-mcp → YourAccount/cloudflar
 
 You need **2 values** from your Cloudflare dashboard:
 
-| Credential | Where to Find It |
-|------------|------------------|
-| **Account ID** | [Cloudflare Dashboard](https://dash.cloudflare.com) → Right sidebar on any domain |
-| **API Token** | [Cloudflare Dashboard](https://dash.cloudflare.com) → My Profile → API Tokens → Create Token |
+| Credential     | Where to Find It                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| **Account ID** | [Cloudflare Dashboard](https://dash.cloudflare.com) → Right sidebar on any domain            |
+| **API Token**  | [Cloudflare Dashboard](https://dash.cloudflare.com) → My Profile → API Tokens → Create Token |
 
 #### Creating Your API Token
 
 1. Go to [API Tokens](https://dash.cloudflare.com/profile/api-tokens) in your Cloudflare profile
 2. Click **Create Token** → **Custom token**
-3. Configure these settings:
-
-| Setting | Value |
-|---------|-------|
-| Token name | `Cloudflare Image MCP Deploy` |
-| Permissions | `Account` → `Workers Scripts` → `Edit` |
-| | `Account` → `Workers R2 Storage` → `Edit` |
-| | `Account` → `Workers AI` → `Edit` |
-| | `Account` → `Workers AI` → `Read` |
-| Account Resources | Include: `<your account>` |
-
+3. Token name: `Cloudflare Image MCP Deploy`; account resources: your account.
+   Required permissions — see [Credentials Setup](CREDENTIALS_SETUP.md#required-api-token-permissions).
 4. Click **Continue to summary** → **Create Token**
 5. **Copy the token immediately** (you won't see it again!)
 
@@ -53,17 +44,13 @@ Go to your forked repository and add the credentials:
 https://github.com/YOUR_USERNAME/cloudflare-image-mcp/settings/secrets/actions
 ```
 
-Click **New repository secret** and add these:
+Click **New repository secret** and add `CLOUDFLARE_ACCOUNT_ID` (required) and
+`CLOUDFLARE_API_TOKEN` (required). Optional secrets (`API_KEYS`, `AI_ACCOUNTS`, `TZ`)
+— see [Credentials Setup](CREDENTIALS_SETUP.md#optional-secrets).
 
-| Secret Name | Value | Required |
-|-------------|-------|----------|
-| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare Account ID | Yes |
-| `CLOUDFLARE_API_TOKEN` | The API token you just created | Yes |
-| `API_KEYS` | Comma-separated list of API keys (e.g., `key1,key2,key3`) | Optional |
-| `AI_ACCOUNTS` | JSON array of `{"account_id","api_token"}` for multi-account AI inference (see [Credentials Setup](CREDENTIALS_SETUP.md#ai_accounts-format)) | Optional |
-| `TZ` | Your timezone (e.g., `America/New_York`, `Asia/Singapore`) | Optional |
-
-**Note on `API_KEYS`**: If set, all OpenAI API endpoints, MCP endpoints, and the web frontend will require authentication via the `Authorization: Bearer YOUR_KEY` header or `?key=YOUR_KEY` query parameter.
+**Note on `API_KEYS`**: if set, all OpenAI API endpoints, MCP endpoints, and the
+web frontend require `Authorization: Bearer <key>`. The frontend prompts for the
+key in a login modal and sends it as a Bearer header.
 
 ---
 
@@ -95,7 +82,7 @@ Test it:
 curl https://<your-worker-url>/health
 ```
 
-You should see: `{"status":"ok"}`
+You should see `{"status":"healthy", ...}` with version, timezone, and `authEnabled`.
 
 ---
 
@@ -114,17 +101,17 @@ The file `.github/workflows/deploy-workers.yml` handles everything:
 
 ## 📋 Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| `Authentication error` | Check that `CLOUDFLARE_API_TOKEN` has the correct permissions |
-| `R2 bucket not found` | Create an R2 bucket named `image-generation` in your Cloudflare dashboard, or update `bucket_name` in the workflow |
-| `Workers AI not enabled` | Go to Cloudflare Dashboard → AI → Workers AI and accept the terms |
-| `Deployment failed` | Check the Actions logs for specific error messages |
+| Issue                    | Solution                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `Authentication error`   | Check that `CLOUDFLARE_API_TOKEN` has the correct permissions                                                      |
+| `R2 bucket not found`    | Create an R2 bucket named `image-generation` in your Cloudflare dashboard, or update `bucket_name` in the workflow |
+| `Workers AI not enabled` | Go to Cloudflare Dashboard → AI → Workers AI and accept the terms                                                  |
+| `Deployment failed`      | Check the Actions logs for specific error messages                                                                 |
 
 ---
 
 ## 🔗 Next Steps
 
-- **Read the [Usage Guide](USAGE.md)** - Learn how to use the API
+- **Read the [API Reference](API.md)** - REST endpoints and parameters
 - **Read the [MCP Guide](MCP.md)** - Connect via MCP protocol
 - **Customize the worker name** - Edit `name = "cloudflare-image-workers"` in the deploy workflow or wrangler.toml
