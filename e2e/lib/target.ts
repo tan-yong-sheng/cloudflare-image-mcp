@@ -6,44 +6,44 @@
  * - production: Production Workers deployment
  */
 
-export type TestTarget = 'staging' | 'production';
+export type TestTarget = "staging" | "production";
 
 export interface TargetConfig {
   name: TestTarget;
   baseURL: string;
   requiresAuth: boolean;
-  authType: 'none' | 'apikey' | 'cloudflare';
+  authType: "none" | "apikey" | "cloudflare";
 }
 
 /**
  * Get target configuration based on environment
  */
 export function getTargetConfig(): TargetConfig {
-  const target = (process.env.TEST_TARGET || 'staging') as TestTarget;
+  const target = (process.env.TEST_TARGET || "staging") as TestTarget;
 
   switch (target) {
-    case 'production':
+    case "production":
       return {
-        name: 'production',
-        baseURL: process.env.TEST_BASE_URL || '',
+        name: "production",
+        baseURL: process.env.TEST_BASE_URL || "",
         requiresAuth: true,
-        authType: 'apikey',
+        authType: "apikey",
       };
 
-    case 'staging':
+    case "staging":
       return {
-        name: 'staging',
-        baseURL: process.env.TEST_BASE_URL || '',
+        name: "staging",
+        baseURL: process.env.TEST_BASE_URL || "",
         requiresAuth: true,
-        authType: 'apikey',
+        authType: "apikey",
       };
 
     default:
       return {
-        name: 'staging',
-        baseURL: process.env.TEST_BASE_URL || '',
+        name: "staging",
+        baseURL: process.env.TEST_BASE_URL || "",
         requiresAuth: true,
-        authType: 'apikey',
+        authType: "apikey",
       };
   }
 }
@@ -67,23 +67,24 @@ export function getBaseURL(): string {
   }
 
   // For staging/production, construct URL from account ID
-  if (config.name === 'staging' || config.name === 'production') {
+  if (config.name === "staging" || config.name === "production") {
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     if (!accountId) {
       // Allow local execution without any env by falling back to a placeholder.
       // CI/workflow should provide CLOUDFLARE_ACCOUNT_ID or TEST_BASE_URL.
-      return 'https://example.invalid';
+      return "https://example.invalid";
     }
 
-    const workerName = config.name === 'staging'
-      ? 'cloudflare-image-workers-staging'
-      : 'cloudflare-image-workers';
+    const workerName =
+      config.name === "staging"
+        ? "cloudflare-image-workers-staging"
+        : "cloudflare-image-workers";
 
     return `https://${workerName}.${accountId}.workers.dev`;
   }
 
   // Should never reach here because staging/production must be handled above.
-  throw new Error('Unexpected TEST_TARGET configuration');
+  throw new Error("Unexpected TEST_TARGET configuration");
 }
 
 /**
@@ -91,6 +92,18 @@ export function getBaseURL(): string {
  */
 export function requiresAuth(): boolean {
   return getTargetConfig().requiresAuth;
+}
+
+/**
+ * Get the effective API key (single or first of comma-separated list).
+ * CI typically derives API_KEY_EFFECTIVE and exports it as API_KEY.
+ */
+export function getApiKey(): string | undefined {
+  return (
+    process.env.API_KEY?.trim() ||
+    process.env.API_KEYS?.split(",")[0]?.trim() ||
+    undefined
+  );
 }
 
 /**
@@ -103,11 +116,10 @@ export function getAuthHeaders(): Record<string, string> {
     return {};
   }
 
-  // Support either a single API_KEY or a comma-separated API_KEYS.
-  // CI typically derives API_KEY_EFFECTIVE and exports it as API_KEY.
-  const apiKey = process.env.API_KEY?.trim() || process.env.API_KEYS?.split(',')[0]?.trim();
+  // Same key source as getApiKey above.
+  const apiKey = getApiKey();
   if (apiKey) {
-    return { 'Authorization': `Bearer ${apiKey}` };
+    return { Authorization: `Bearer ${apiKey}` };
   }
 
   return {};

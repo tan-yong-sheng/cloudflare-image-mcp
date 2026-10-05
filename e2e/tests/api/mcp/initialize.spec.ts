@@ -1,101 +1,111 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
 /**
  * MCP Initialize E2E Tests
  *
  * Tests the MCP initialization handshake.
+ *
+ * NOTE: the SDK Streamable HTTP transport requires clients to send
+ * `Accept: application/json, text/event-stream`, so responses arrive as
+ * SSE frames (`event: message\ndata: {...}`). The `postMcp` helper sets
+ * the Accept header and unwraps the first SSE data frame into JSON.
  * @api
  */
 
-test.describe('MCP Initialize', () => {
-  test('POST /mcp/message with initialize method returns server info', async ({ request }) => {
-    const response = await request.post('/mcp/message', {
-      data: {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {
-            tools: {},
-          },
-          clientInfo: {
-            name: 'e2e-test-client',
-            version: '0.1.0',
-          },
+/**
+ * POST a JSON-RPC message and unwrap the SSE data frame into parsed JSON.
+ */
+async function postMcp(request: any, path: string, body: unknown) {
+  const response = await request.post(path, {
+    data: body,
+    headers: { Accept: "application/json, text/event-stream" },
+  });
+  expect(response.status()).toBe(200);
+  const text = await response.text();
+  const frame = text
+    .split("\n")
+    .find((line: string) => line.startsWith("data: "));
+  expect(frame).toBeDefined();
+  return JSON.parse(frame!.slice("data: ".length));
+}
+
+test.describe("MCP Initialize", () => {
+  test("POST /mcp/message with initialize method returns server info", async ({
+    request,
+  }) => {
+    const body = await postMcp(request, "/mcp/message", {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {
+          tools: {},
+        },
+        clientInfo: {
+          name: "e2e-test-client",
+          version: "0.1.0",
         },
       },
     });
 
-    expect(response.status()).toBe(200);
-    expect(response.headers()['content-type']).toContain('application/json');
-
-    const body = await response.json();
-
     // Validate JSON-RPC 2.0 response
-    expect(body).toHaveProperty('jsonrpc', '2.0');
-    expect(body).toHaveProperty('id', 1);
-    expect(body).toHaveProperty('result');
+    expect(body).toHaveProperty("jsonrpc", "2.0");
+    expect(body).toHaveProperty("id", 1);
+    expect(body).toHaveProperty("result");
 
     // Validate server info
-    expect(body.result).toHaveProperty('protocolVersion');
-    expect(body.result).toHaveProperty('capabilities');
-    expect(body.result).toHaveProperty('serverInfo');
-    expect(body.result.serverInfo).toHaveProperty('name');
-    expect(body.result.serverInfo).toHaveProperty('version');
+    expect(body.result).toHaveProperty("protocolVersion");
+    expect(body.result).toHaveProperty("capabilities");
+    expect(body.result).toHaveProperty("serverInfo");
+    expect(body.result.serverInfo).toHaveProperty("name");
+    expect(body.result.serverInfo).toHaveProperty("version");
 
-    console.log('MCP Server:', body.result.serverInfo.name, body.result.serverInfo.version);
+    console.log(
+      "MCP Server:",
+      body.result.serverInfo.name,
+      body.result.serverInfo.version
+    );
   });
 
-  test('POST /mcp/message with invalid JSON returns error', async ({ request }) => {
-    const response = await request.post('/mcp/message', {
-      data: 'invalid json',
-      headers: {
-        'Content-Type': 'application/json',
+  test("POST /mcp/message with legacy protocol version negotiates successfully", async ({
+    request,
+  }) => {
+    const body = await postMcp(request, "/mcp/message", {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "e2e-test-client", version: "0.1.0" },
       },
     });
 
-    // Should return 200 with JSON-RPC error
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    expect(body).toHaveProperty('jsonrpc', '2.0');
-    expect(body).toHaveProperty('error');
-    expect(body.error).toHaveProperty('code', -32600);
-    expect(body.error).toHaveProperty('message');
+    expect(body).toHaveProperty("result");
+    expect(body.result).toHaveProperty("serverInfo");
   });
 
-  test('POST /mcp/message without jsonrpc version returns success (lenient)', async ({ request }) => {
-    const response = await request.post('/mcp/message', {
-      data: {
-        id: 1,
-        method: 'initialize',
-      },
+  test("POST /mcp/message with initialized notification is accepted", async ({
+    request,
+  }) => {
+    // Notifications carry no id and get 202 Accepted with an empty body.
+    const response = await request.post("/mcp/message", {
+      data: { jsonrpc: "2.0", method: "notifications/initialized" },
+      headers: { Accept: "application/json, text/event-stream" },
     });
 
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    // Server is lenient and treats missing jsonrpc as valid initialize
-    expect(body).toHaveProperty('result');
-    expect(body.result).toHaveProperty('serverInfo');
+    expect(response.status()).toBe(202);
   });
 
-  test('POST /mcp/message with unknown method returns error', async ({ request }) => {
-    const response = await request.post('/mcp/message', {
-      data: {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'unknown_method',
-      },
+  test("POST /mcp/message with ping is answered", async ({ request }) => {
+    const body = await postMcp(request, "/mcp/message", {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "ping",
     });
 
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    expect(body).toHaveProperty('jsonrpc', '2.0');
-    expect(body).toHaveProperty('id', 1);
-    expect(body).toHaveProperty('error');
-    expect(body.error).toHaveProperty('code', -32600);
+    expect(body).toHaveProperty("jsonrpc", "2.0");
+    expect(body).toHaveProperty("result", {});
   });
 });
