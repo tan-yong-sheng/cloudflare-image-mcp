@@ -1,0 +1,34 @@
+{
+  "rules": [
+    {
+      "path": "workers/src/endpoints/*.ts",
+      "rule": "Error responses must use the surface's envelope: OpenAI REST endpoints return { error: { message, type, param?, code: null } } with type invalid_request_error for 400 and api_error for 500; never return bare { error: '...' }. MCP/JSON-RPC errors (mcp-endpoint.ts) must always return HTTP 200 with { jsonrpc:'2.0', id, error:{code,message} }. Never let throw cross an endpoint boundary — map via errorResponse/catch. Extract messages with `error instanceof Error ? error.message : String(error)`. Type-only imports must use `import type`; relative imports keep the `.js` extension.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "workers/src/middleware/*.ts",
+      "rule": "Auth changes must go through requiresAuth + authenticateRequest + createUnauthorizedResponse (see CODING_STANDARDS.md Auth idiom). New routes are protected by default; only OPTIONS, /, /index.html, /health, /images/*, /api/internal/models are public. Flag open-by-default bypasses and missing WWW-Authenticate: Bearer on 401s. Type-only imports must use `import type`; relative imports keep the `.js` extension.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "workers/src/services/*.ts",
+      "rule": "Parameter validation must go through ParamParser with modelConfig.limits clamping (maxSteps, min/max w/h); do not hand-roll bounds checks. Validation throws plain Error for endpoints to map to 400 — services must not build HTTP responses. Logging: console.error for failed ops, console.warn for degraded-config fallback only, console.log for cron summary only; no request logging. Type-only imports must use `import type`; relative imports keep the `.js` extension.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "workers/src/config/*",
+      "rule": "workers/src/config/models.json is the source of truth; models.ts must mirror it exactly. Flag any model field present in one but not the other.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "workers/src/**/*.ts",
+      "rule": "Type imports must use `import type` (not plain `import`); relative imports must keep the `.js` extension. Flag plain type-only imports and extensionless relative imports.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/*",
+      "rule": "Secrets (API keys, tokens, account IDs) must never appear in code, config, or docs — only via env bindings / `wrangler secret put`. Never commit generated workers/wrangler.toml (gitignored local template; CI generates and deletes it).",
+      "merge_system_rule": true
+    }
+  ]
+}
