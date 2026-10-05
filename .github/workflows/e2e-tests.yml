@@ -31,14 +31,13 @@ on:
   # Merge gate: full matrix runs on release-integration PRs to main,
   # where the fast PR check (pr-checks.yml) is insufficient signal.
   # Feature PRs skip E2E (add the `e2e` label for an opt-in full run).
+  # Note: no `paths` filter here — it would also filter `labeled`
+  # events, silently blocking the opt-in label. Job-level `if` guards
+  # below are the real scoping mechanism; non-gated PRs skip in seconds.
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
-    paths:
-      - "workers/**"
-      - "e2e/**"
-      - ".github/workflows/e2e-tests.yml"
-      - "package.json"
 
   workflow_call:
     inputs:
