@@ -18,7 +18,7 @@ on:
         default: ""
         type: string
       full_matrix:
-        description: 'Include @slow generation tests (E2E_SLOW=1)'
+        description: "Include @slow generation tests (E2E_SLOW=1)"
         required: false
         default: false
         type: boolean
@@ -52,13 +52,13 @@ on:
         default: ""
         type: string
       full_matrix:
-        description: 'Include @slow generation tests (E2E_SLOW=1)'
+        description: "Include @slow generation tests (E2E_SLOW=1)"
         required: false
         default: false
         type: boolean
 
 env:
-  NODE_VERSION: '24'
+  NODE_VERSION: "24"
 jobs:
   deploy_staging:
     name: Deploy staging (for E2E)
@@ -219,10 +219,14 @@ jobs:
       - name: Run E2E tests
         run: |
           cd e2e
+          # Merge-gate PRs (prerelease/*, release/*, `e2e` label) always run
+          # the full matrix: pull_request events cannot set inputs, so an
+          # unset full_matrix on a PR means "gated run", not "caller wants
+          # contract-only". Dispatch/call keep caller control via the input.
           if [ -n "${{ inputs.test_pattern }}" ]; then
             echo "Running specific test pattern: ${{ inputs.test_pattern }} (with E2E_SLOW=1 so @slow targets are reachable)"
             E2E_SLOW=1 npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
-          elif [ "${{ inputs.full_matrix }}" = "true" ]; then
+          elif [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ inputs.full_matrix }}" = "true" ]; then
             echo "Running full matrix (E2E_SLOW=1): contract + @slow generation tests"
             E2E_SLOW=1 npx playwright test --reporter=list,junit,html
           else
