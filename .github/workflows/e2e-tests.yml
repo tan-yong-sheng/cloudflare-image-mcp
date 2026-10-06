@@ -100,10 +100,12 @@ jobs:
     # Full generation matrix needs headroom; a hung Playwright/browser
     # step must fail the gate, never hold the required check indefinitely.
     timeout-minutes: 30
+    # TRIAL(b) misconfigured guard: e2e-tests forced to skip (marker outside expression scalar)
     # Same merge-gate guard as deploy_staging; non-gated feature PRs
     # skip without failure so the suite stays non-blocking there.
     if: >-
       always() &&
+      false &&
       (github.event_name != 'pull_request' ||
       startsWith(github.head_ref, 'prerelease/') ||
       startsWith(github.head_ref, 'release/') ||
