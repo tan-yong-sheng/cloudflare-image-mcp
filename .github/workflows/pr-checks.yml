@@ -5,15 +5,12 @@ name: PR Checks
 # no secrets — this is the entire <3 min trick.
 
 on:
+  # No `paths` filter by design: as a required status check, a skipped
+  # run stays pending forever and blocks unrelated PRs. The job is
+  # ~1-2 min, so always running costs nothing and stays correct.
   pull_request:
     branches:
       - main
-    paths:
-      - "workers/**"
-      - ".github/workflows/pr-checks.yml"
-      - "package.json"
-      - ".prettierrc"
-      - ".prettierignore"
 
 concurrency:
   group: pr-${{ github.ref }}
@@ -28,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # 5x headroom over the <3 min budget; a stalled gate must fail,
+    # never hold the required check indefinitely.
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

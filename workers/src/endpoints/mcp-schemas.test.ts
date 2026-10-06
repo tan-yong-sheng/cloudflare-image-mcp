@@ -40,6 +40,16 @@ describe("RunModelMultiSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  test("rejects empty image array", () => {
+    const result = RunModelMultiSchema.safeParse({
+      taskType: "edits",
+      prompt: "add a hat",
+      model_id: "@cf/black-forest-labs/flux-2-klein-4b",
+      image: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
   test("accepts edits with image array and cf_params", () => {
     const result = RunModelMultiSchema.safeParse({
       taskType: "edits",
