@@ -44,7 +44,7 @@ test.describe('OpenAI Image Edits API', () => {
     }
   });
 
-  test('POST /v1/images/edits with image and mask for masked edits', async ({ request }) => {
+  test('POST /v1/images/edits with image and mask for masked edits @slow', async ({ request }) => {
     const model = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 
     const response = await request.post('/v1/images/edits', {
@@ -112,7 +112,7 @@ test.describe('OpenAI Image Edits API', () => {
     expect(response.status()).toBe(400);
   });
 
-  test('POST /v1/images/edits accepts multipart/form-data', async ({ request }) => {
+  test('POST /v1/images/edits accepts multipart/form-data @slow', async ({ request }) => {
     // Create a FormData-like structure for the test
     const boundary = '----TestBoundary' + Math.random().toString(36).substring(2);
 
@@ -157,7 +157,7 @@ test.describe('OpenAI Image Edits API', () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('POST /v1/images/edits respects size parameter', async ({ request }) => {
+  test('POST /v1/images/edits respects size parameter @slow', async ({ request }) => {
     const sizes = ['512x512', '1024x1024'];
 
     for (const size of sizes) {

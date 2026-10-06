@@ -26,7 +26,7 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 1. FLUX-1 schnell — text-to-image (fastest model)
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-1 schnell: /v1/images/generations returns valid image URL', async ({ request }) => {
+  test('FLUX-1 schnell: /v1/images/generations returns valid image URL @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A red circle on a white background',
@@ -59,7 +59,7 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 2. FLUX-2 klein 4B — text-to-image
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-2 klein 4B: /v1/images/generations returns valid image URL', async ({ request }) => {
+  test('FLUX-2 klein 4B: /v1/images/generations returns valid image URL @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A blue square on a grey background',
@@ -85,7 +85,7 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 3. FLUX-2 klein 4B — image editing (/v1/images/edits)
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-2 klein 4B: /v1/images/edits with image returns valid result', async ({ request }) => {
+  test('FLUX-2 klein 4B: /v1/images/edits with image returns valid result @slow', async ({ request }) => {
     const response = await request.post('/v1/images/edits', {
       data: {
         image: TINY_IMAGE_B64,
@@ -117,7 +117,7 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 4. FLUX-2 dev — text-to-image (b64_json format)
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-2 dev: /v1/images/generations returns b64_json', async ({ request }) => {
+  test('FLUX-2 dev: /v1/images/generations returns b64_json @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A yellow triangle on a dark background',

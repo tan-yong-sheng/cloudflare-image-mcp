@@ -188,7 +188,7 @@ test.describe("MCP SDK Integration", () => {
     }
   });
 
-  test("MCP SDK can call run_model tool", async ({ baseURL }) => {
+  test("MCP SDK can call run_model tool @slow", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
@@ -260,7 +260,7 @@ test.describe("MCP SDK Integration", () => {
     }
   });
 
-  test("MCP SDK can generate multiple images", async ({ baseURL }) => {
+  test("MCP SDK can generate multiple images @slow", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {

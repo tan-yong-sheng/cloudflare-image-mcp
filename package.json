@@ -13,6 +13,7 @@
     "test": "npm run test:e2e",
     "test:e2e": "cd e2e && npm test",
     "test:e2e:staging": "cd e2e && TEST_TARGET=staging npm test",
+    "test:e2e:slow": "cd e2e && E2E_SLOW=1 npm test",
     "test:e2e:production": "cd e2e && TEST_TARGET=production npm test",
     "clean": "rm -rf e2e/test-results e2e/playwright-report"
   },

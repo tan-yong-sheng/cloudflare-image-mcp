@@ -51,7 +51,7 @@ test.describe('OpenAI Image Variations API', () => {
     expect(body.error.message.toLowerCase()).toContain('image');
   });
 
-  test('POST /v1/images/variations respects n parameter', async ({ request }) => {
+  test('POST /v1/images/variations respects n parameter @slow', async ({ request }) => {
     const response = await request.post('/v1/images/variations', {
       data: {
         image: TEST_IMAGE_BASE64,

@@ -17,6 +17,11 @@ on:
         required: false
         default: ''
         type: string
+      full_matrix:
+        description: 'Include @slow generation tests (E2E_SLOW=1)'
+        required: false
+        default: false
+        type: boolean
       custom_url:
         description: 'Custom Workers URL (optional - overrides auto-constructed URL)'
         required: false
@@ -45,9 +50,14 @@ on:
         required: false
         default: ''
         type: string
+      full_matrix:
+        description: 'Include @slow generation tests (E2E_SLOW=1)'
+        required: false
+        default: false
+        type: boolean
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
 
 jobs:
   deploy_staging:
@@ -192,11 +202,17 @@ jobs:
           if [ -n "${{ inputs.test_pattern }}" ]; then
             echo "Running specific test pattern: ${{ inputs.test_pattern }}"
             npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
+          elif [ "${{ inputs.full_matrix }}" = "true" ]; then
+            echo "Running full matrix (E2E_SLOW=1): contract + @slow generation tests"
+            E2E_SLOW=1 npx playwright test --reporter=list,junit,html
           else
-            echo "Running all E2E tests"
+            echo "Running fast contract tests (@slow generation tests skipped; use full_matrix to include)"
             npx playwright test --reporter=list,junit,html
           fi
         env:
+          # E2E_SLOW=1 opts into @slow generation tests; default (unset)
+          # runs the fast contract suite. Set by the full_matrix input.
+          E2E_SLOW: ${{ inputs.full_matrix && '1' || '' }}
           # NOTE: TEST_BASE_URL is derived at runtime via $GITHUB_ENV.
           # Do not override it here with ${{ env.TEST_BASE_URL }} (expressions are evaluated before runtime env updates).
           API_KEY: ${{ env.API_KEY_EFFECTIVE }}
@@ -296,7 +312,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: workers/package-lock.json
 

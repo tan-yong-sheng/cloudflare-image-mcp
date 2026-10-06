@@ -23,11 +23,18 @@ const authHeaders = getAuthHeaders();
 // Timeout configuration
 const timeout = parseInt(process.env.TEST_TIMEOUT || '60000');
 
+// Slow tests make real Workers AI calls (15-90s each on cold workers).
+// Default runs skip them: `E2E_SLOW=1` opts into the full matrix
+// (release branches, manual dispatch). One smoke test per surface stays
+// untagged so the credential chain is still proven on every run.
+const runSlow = process.env.E2E_SLOW === '1';
+
 console.log(`🎯 E2E Test Configuration:`);
 console.log(`   Target: ${targetConfig.name}`);
 console.log(`   Base URL: ${baseURL}`);
 console.log(`   Auth Required: ${targetConfig.requiresAuth}`);
 console.log(`   Auth Headers Present: ${Object.keys(authHeaders).length > 0}`);
+console.log(`   Slow generation tests: ${runSlow ? 'included (E2E_SLOW=1)' : 'skipped (set E2E_SLOW=1 for full matrix)'}`);
 
 export default defineConfig({
   testDir: './tests',
@@ -40,6 +47,15 @@ export default defineConfig({
 
   // Retry on CI only
   retries: process.env.CI ? 2 : 0,
+
+  // Skip @slow tests (real image generation) unless explicitly opted in.
+  // This keeps PR runs to ~1min of contract tests; release/manual runs set
+  // E2E_SLOW=1 for the full matrix with a matching timeout budget.
+  grepInvert: runSlow ? undefined : /@slow/,
+
+  // Generous per-test timeout: slow runs need it for cold workers,
+  // fast runs are unaffected (their tests finish in ms).
+  timeout: runSlow ? 180000 : 60000,
 
   // Opt out of parallel tests on CI (resource intensive image generation)
   workers: process.env.CI ? 1 : undefined,

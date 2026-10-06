@@ -13,7 +13,7 @@ test.describe('OpenAI API Compliance', () => {
   // Default test model (fastest for testing)
   const TEST_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
-  test('response with url format contains only url field', async ({ request }) => {
+  test('response with url format contains only url field @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A red apple on a wooden table',
@@ -54,7 +54,7 @@ test.describe('OpenAI API Compliance', () => {
     expect(image).not.toHaveProperty('revised_prompt');
   });
 
-  test('response with b64_json format contains only b64_json field', async ({ request }) => {
+  test('response with b64_json format contains only b64_json field @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A blue sky with white clouds',
@@ -96,7 +96,7 @@ test.describe('OpenAI API Compliance', () => {
     expect(image).not.toHaveProperty('revised_prompt');
   });
 
-  test('default response format is url and contains only url field', async ({ request }) => {
+  test('default response format is url and contains only url field @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A simple geometric shape',
@@ -117,7 +117,7 @@ test.describe('OpenAI API Compliance', () => {
     expect(image).not.toHaveProperty('b64_json');
   });
 
-  test('multiple images each have only url field', async ({ request }) => {
+  test('multiple images each have only url field @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A cat sleeping on a couch',
@@ -142,7 +142,7 @@ test.describe('OpenAI API Compliance', () => {
     }
   });
 
-  test('edits endpoint returns only url field', async ({ request }) => {
+  test('edits endpoint returns only url field @slow', async ({ request }) => {
     // Note: This test requires an actual image. For compliance testing,
     // we just verify the response structure is correct.
     // Skip if image editing is not available
@@ -177,7 +177,7 @@ test.describe('OpenAI API Compliance', () => {
     // If it fails (400/500), that's ok - we're testing response format, not functionality
   });
 
-  test('variations endpoint returns only url field', async ({ request }) => {
+  test('variations endpoint returns only url field @slow', async ({ request }) => {
     const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
     const response = await request.post('/v1/images/variations', {
@@ -207,7 +207,7 @@ test.describe('OpenAI API Compliance', () => {
     // If it fails (400/500), that's ok - we're testing response format, not functionality
   });
 
-  test('response structure matches OpenAI spec exactly', async ({ request }) => {
+  test('response structure matches OpenAI spec exactly @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A simple test image',
@@ -238,7 +238,7 @@ test.describe('OpenAI API Compliance', () => {
     expect(Array.isArray(body.data)).toBe(true);
   });
 
-  test('b64_json response structure matches OpenAI spec exactly', async ({ request }) => {
+  test('b64_json response structure matches OpenAI spec exactly @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A simple test image',
@@ -257,7 +257,7 @@ test.describe('OpenAI API Compliance', () => {
     expect(Object.keys(image)).toEqual(['b64_json']);
   });
 
-  test('OpenWebUI compatibility: no null values in response', async ({ request }) => {
+  test('OpenWebUI compatibility: no null values in response @slow', async ({ request }) => {
     // OpenWebUI's Python code fails with 'NoneType' object has no attribute 'lower'
     // when null values are present in the response
 
