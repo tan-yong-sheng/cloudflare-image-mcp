@@ -9,6 +9,12 @@ import { MODEL_CONFIGS } from '../config/models.js';
 
 export class ImageGeneratorService {
   private aiAccounts: AIAccount[];
+  /**
+   * Which credential pool is active (observability label only, never a secret value):
+   * 'AI_ACCOUNTS' when multi-account inference is configured, 'fallback' when
+   * using the deploy credentials (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).
+   */
+  private credentialSource: 'AI_ACCOUNTS' | 'fallback' = 'fallback';
   private storage: R2StorageService;
   private models: Map<string, ModelConfig>;
 
@@ -104,22 +110,31 @@ export class ImageGeneratorService {
             this.aiAccounts = fallback;
           } else {
             this.aiAccounts = parsed;
+            this.credentialSource = 'AI_ACCOUNTS';
           }
         }
-      } catch (e) {
-        console.warn(`AI_ACCOUNTS is not valid JSON (${e instanceof Error ? e.message : e}), falling back to deploy credentials`);
+      } catch {
+        console.warn('AI_ACCOUNTS is not valid JSON, falling back to deploy credentials');
         this.aiAccounts = fallback;
       }
     } else {
       this.aiAccounts = fallback;
+    }
+
+    // Observability: name the active inference path (counts only, never values).
+    if (this.credentialSource === 'AI_ACCOUNTS') {
+      console.warn(`AI inference path: AI_ACCOUNTS with ${this.aiAccounts.length} account(s)`);
+    } else {
+      console.warn('AI inference path: fallback to deploy credentials');
     }
   }
 
   /**
    * Pick a random AI account for load distribution
    */
-  private pickAccount(): AIAccount {
-    return this.aiAccounts[Math.floor(Math.random() * this.aiAccounts.length)];
+  private pickAccount(): { account: AIAccount; index: number } {
+    const index = Math.floor(Math.random() * this.aiAccounts.length);
+    return { account: this.aiAccounts[index], index };
   }
 
   /**
@@ -131,7 +146,11 @@ export class ImageGeneratorService {
     model: ModelConfig,
     images?: string[]
   ): Promise<any> {
-    const account = this.pickAccount();
+    const { account, index } = this.pickAccount();
+    // Credential source tag for observability (never a secret value).
+    const credentialTag = this.credentialSource === 'AI_ACCOUNTS'
+      ? `AI_ACCOUNTS[${index}]`
+      : 'fallback deploy credential';
     const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
 
     let response: Response;
@@ -180,7 +199,7 @@ export class ImageGeneratorService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Cloudflare AI API error (${response.status}): ${errorText}`);
+      throw new Error(`Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${errorText}`);
     }
 
     // Determine response type from content-type header
