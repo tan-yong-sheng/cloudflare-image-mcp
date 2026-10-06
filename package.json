@@ -23,7 +23,6 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
     "lefthook": "^2.1.16",
     "prettier": "^3.6.2"
   }

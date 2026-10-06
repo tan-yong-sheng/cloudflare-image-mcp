@@ -82,6 +82,9 @@ jobs:
     name: E2E Tests (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
     needs: [deploy_staging]
+    # Full generation matrix needs headroom; a hung Playwright/browser
+    # step must fail the gate, never hold the required check indefinitely.
+    timeout-minutes: 30
     # Same merge-gate guard as deploy_staging; non-gated feature PRs
     # skip without failure so the suite stays non-blocking there.
     if: >-
@@ -323,6 +326,9 @@ jobs:
   cleanup-staging:
     name: Cleanup Staging Worker
     needs: [deploy_staging, e2e-tests]
+    # Single wrangler delete call; bound it so a hung delete cannot hold
+    # the merge check running after E2E completes.
+    timeout-minutes: 10
     # Only runs when deploy_staging ran (merge-gate or opt-in PRs).
     # Skipped feature PRs never deploy, so there is nothing to delete.
     if: always() && (inputs.environment || 'staging') == 'staging' && needs.deploy_staging.result == 'success' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'prerelease/') || startsWith(github.head_ref, 'release/') || contains(github.event.pull_request.labels.*.name, 'e2e')) && (github.event_name != 'pull_request' || (github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository))
