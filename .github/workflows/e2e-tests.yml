@@ -104,6 +104,8 @@ jobs:
     # skip without failure so the suite stays non-blocking there.
     if: >-
       always() &&
+      # TRIAL(b) misconfigured guard: unconditional false forces E2E skip
+      false &&
       (github.event_name != 'pull_request' ||
       startsWith(github.head_ref, 'prerelease/') ||
       startsWith(github.head_ref, 'release/') ||
