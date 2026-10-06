@@ -264,6 +264,28 @@ test.describe("MCP Tools", () => {
     expect(body.result.content[0].text).toContain("single image");
   });
 
+  test("tools/call run_model with empty image array is rejected", async ({
+    request,
+  }) => {
+    const body = await postMcp(request, "/mcp/message", {
+      jsonrpc: "2.0",
+      id: 16,
+      method: "tools/call",
+      params: {
+        name: "run_model",
+        arguments: {
+          taskType: "edits",
+          prompt: "edit this",
+          model_id: "@cf/black-forest-labs/flux-2-dev",
+          image: [],
+        },
+      },
+    });
+
+    // Schema requires a non-empty image input (string or 1-4 refs).
+    expect(body.result).toHaveProperty("isError", true);
+  });
+
   test("tools/call run_model with fractional n is rejected", async ({
     request,
   }) => {

@@ -26,7 +26,7 @@ const RunModelBaseShape = {
     .describe("Number of images to generate (1-8)."),
   size: z.string().optional().describe('Image size (e.g., "1024x1024").'),
   image: z
-    .union([z.string(), z.array(z.string())])
+    .union([z.string(), z.array(z.string()).min(1).max(4)])
     .optional()
     .describe(
       'Required when taskType="edits". Base64-encoded input image(s). Array of up to 4 for multi-reference models.'

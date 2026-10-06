@@ -200,8 +200,8 @@ jobs:
         run: |
           cd e2e
           if [ -n "${{ inputs.test_pattern }}" ]; then
-            echo "Running specific test pattern: ${{ inputs.test_pattern }}"
-            npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
+            echo "Running specific test pattern: ${{ inputs.test_pattern }} (with E2E_SLOW=1 so @slow targets are reachable)"
+            E2E_SLOW=1 npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
           elif [ "${{ inputs.full_matrix }}" = "true" ]; then
             echo "Running full matrix (E2E_SLOW=1): contract + @slow generation tests"
             E2E_SLOW=1 npx playwright test --reporter=list,junit,html

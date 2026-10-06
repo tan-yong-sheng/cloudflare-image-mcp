@@ -112,10 +112,17 @@ export async function handleMcpRequest(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`MCP transport failed: ${message}`);
+    // Echo the request ID when determinable so clients can correlate the
+    // failure (null only when the body is unreadable, e.g. parse errors).
+    const body = await request.clone().json().catch(() => null);
+    const id =
+      body && typeof body === "object" && "id" in body
+        ? (body as { id: unknown }).id ?? null
+        : null;
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",
-        id: null,
+        id,
         error: { code: -32603, message: "Internal error" },
       }),
       {

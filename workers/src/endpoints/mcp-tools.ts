@@ -5,7 +5,7 @@
 // produce MCP content blocks. Transport-agnostic so both SDK server
 // factories (and unit harnesses) share one implementation.
 
-import { ImageGeneratorService } from "../services/image-generator.js";
+import type { ImageGeneratorService } from "../services/image-generator.js";
 
 export interface ToolContent {
   type: "text";
