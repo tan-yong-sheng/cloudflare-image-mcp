@@ -1,0 +1,58 @@
+name: PR Checks
+
+# Fast per-push gate for feature PRs: install cache + strict typecheck +
+# format check + pure-logic unit tests. No deployment, no browsers,
+# no secrets — this is the entire <3 min trick.
+
+on:
+  # No `paths` filter by design: as a required status check, a skipped
+  # run stays pending forever and blocks unrelated PRs. The job is
+  # ~1-2 min, so always running costs nothing and stays correct.
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  fast:
+    name: Fast checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # 5x headroom over the <3 min budget; a stalled gate must fail,
+    # never hold the required check indefinitely.
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: workers/package-lock.json
+
+      - name: Install dependencies
+        working-directory: workers
+        run: npm ci
+
+      - name: Type check
+        working-directory: workers
+        run: npm run check
+
+      - name: Format check
+        working-directory: workers
+        # Scoped to files this pipeline owns: pre-existing sources predate
+        # the repo formatter config and would fail a blanket check.
+        run: npx prettier --check "src/**/*.test.ts" "package.json" "../.github/workflows/pr-checks.yml"
+
+      - name: Unit tests
+        working-directory: workers
+        run: npm test

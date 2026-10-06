@@ -86,6 +86,12 @@ prettier on staged files; pre-push runs `workers` typecheck (`npm run check`).
 
 ## Testing
 
+Unit tests are pure logic, run from the repo root with no backend needed:
+
+```bash
+npm run test:unit # 62 vitest cases in workers/ (~1s)
+```
+
 E2E tests run against Workers environments.
 
 ```bash
