@@ -178,7 +178,7 @@ test.describe("MCP Tools", () => {
     expect(content.text).toContain("model_id");
   });
 
-  test("tools/call run_model generates image", async ({ request }) => {
+  test("tools/call run_model generates image @slow", async ({ request }) => {
     const body = await postMcp(request, "/mcp/message", {
       jsonrpc: "2.0",
       id: 9,

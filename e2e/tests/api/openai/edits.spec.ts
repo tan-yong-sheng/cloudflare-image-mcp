@@ -15,7 +15,7 @@ const TEST_MASK_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQV
 
 test.describe('OpenAI Image Edits API', () => {
 
-  test('POST /v1/images/edits with image for image-to-image transformation', async ({ request }) => {
+  test('POST /v1/images/edits with image for image-to-image transformation @slow', async ({ request }) => {
     const model = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 
     const response = await request.post('/v1/images/edits', {
