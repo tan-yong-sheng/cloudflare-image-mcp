@@ -79,9 +79,14 @@ env:
 # whole run. Fixed string on purpose — per-PR scoping would NOT protect one
 # shared worker. cancel-in-progress stays false: queued runs must wait, and
 # a cancelled stale run releases the group promptly via job timeouts.
+# queue: max (not the single-pending default): a third run must wait behind
+# a pending run, never replace it — otherwise a release PR could silently
+# lose its queued gate. Runs proceed FIFO; queue: max + cancel-in-progress:
+# true is rejected by workflow validation, and we want false here anyway.
 concurrency:
   group: e2e-staging-worker
   cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy_staging:
@@ -406,9 +411,13 @@ jobs:
 
     steps:
       - name: Evaluate gate honesty
+        # Pass attacker-controlled values via env (not string interpolation
+        # into run:) so a crafted branch name cannot break out of the shell
+        # assignment and bypass the result check (CWE-78 / template-injection).
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          E2E_RESULT: ${{ needs.e2e-tests.result }}
         run: |
-          HEAD_REF="${{ github.head_ref }}"
-          E2E_RESULT="${{ needs.e2e-tests.result }}"
           # Prefix-only match on the source branch. Fork PRs from gated
           # prefixes fail closed here (their e2e-tests skips on the fork
           # guard), which is the safe direction for a merge gate.
