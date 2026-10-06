@@ -75,6 +75,35 @@ jobs:
           fi
           echo "✅ Required secrets are configured"
 
+      - name: Verify deploy token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "Verifying deploy token via GET /user/tokens/verify..."
+          if ! VERIFY_RESPONSE=$(curl -sS -m 30 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/user/tokens/verify"); then
+            echo "❌ Token verify request failed (deploy API/network failure, retry — token status unknown)"
+            exit 1
+          fi
+          echo "$VERIFY_RESPONSE" | node -e '
+            let s="";
+            process.stdin.on("data",d=>{s+=d;});
+            process.stdin.on("end",()=>{
+              let j;
+              try { j=JSON.parse(s); }
+              catch (e) { console.error("❌ Deploy token verification failed: non-JSON response (deploy API failure, retry)"); process.exit(1); }
+              if (j.success) {
+                const status = (j.result && j.result.status) ? j.result.status : "valid";
+                console.log("✅ Deploy token verified (status: " + status + ")");
+              } else {
+                console.error("❌ Deploy token invalid (verify rejected the token — rotate CLOUDFLARE_API_TOKEN). Details (no secret values):");
+                console.error(JSON.stringify(j.errors || j, null, 2));
+                process.exit(1);
+              }
+            });
+          '
+
       - name: Set environment variables
         run: |
           ENVIRONMENT="${{ inputs.environment || github.event.inputs.environment || 'production' }}"
@@ -228,9 +257,12 @@ jobs:
           echo "- MCP HTTP: ${{ env.WORKERS_URL }}/mcp" >> $GITHUB_STEP_SUMMARY
           echo "- MCP SSE: ${{ env.WORKERS_URL }}/mcp?transport=sse" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Secrets Configured" >> $GITHUB_STEP_SUMMARY
-          echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured' || '❌ Missing' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (multi-account)' || 'ℹ️ Not set (using deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Secrets Configured (role each secret serves)" >> $GITHUB_STEP_SUMMARY
+          echo "- CLOUDFLARE_API_TOKEN: ✅ Configured (role: management API / deploy token; pre-flight verified)" >> $GITHUB_STEP_SUMMARY
+          echo "- CLOUDFLARE_ACCOUNT_ID: ✅ Configured (role: Cloudflare account for deploy + fallback AI inference)" >> $GITHUB_STEP_SUMMARY
+          echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured (role: endpoint auth — MCP + OpenAI + frontend)' || '❌ Missing (role: endpoint auth — endpoints are public)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (role: AI inference — multi-account)' || 'ℹ️ Not set (role: AI inference — falls back to deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- TZ: ${{ secrets.TZ != '' && '✅ Configured (role: runtime logging timezone)' || 'ℹ️ Not set (role: runtime logging timezone — defaults to UTC)' }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup sensitive files
         if: always()
