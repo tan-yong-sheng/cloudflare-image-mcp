@@ -1,30 +1,32 @@
 /**
  * MCP SDK E2E Tests
  *
- * Uses the official @modelcontextprotocol/sdk to test the MCP server.
+ * Uses the official @modelcontextprotocol/client (v2) to test the MCP server.
  * This provides deeper protocol-level validation than raw HTTP tests.
  *
  * Run with: TEST_TARGET=workers npx playwright test tests/api/mcp/mcp-sdk.spec.ts
  */
 
-import { test, expect } from '@playwright/test';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { getAuthHeaders } from '../../../lib/target.js';
-import { readFileSync } from 'node:fs';
+import { test, expect } from "@playwright/test";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
+import { getAuthHeaders } from "../../../lib/target.js";
+import { readFileSync } from "node:fs";
 
 interface TextContent {
-  type: 'text';
+  type: "text";
   text: string;
   isError?: boolean;
 }
 
-test.describe('MCP SDK Integration', () => {
+test.describe("MCP SDK Integration", () => {
   // Create MCP client for each test
   const createClient = async (baseURL: string) => {
     const client = new Client({
-      name: 'test-client',
-      version: '1.0.0',
+      name: "test-client",
+      version: "1.0.0",
     });
 
     // Get auth headers from environment (same as Playwright config)
@@ -39,7 +41,7 @@ test.describe('MCP SDK Integration', () => {
     return { client, transport };
   };
 
-  test('MCP SDK can initialize connection', async ({ baseURL }) => {
+  test("MCP SDK can initialize connection", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
@@ -52,13 +54,13 @@ test.describe('MCP SDK Integration', () => {
       expect(Array.isArray(tools.tools)).toBe(true);
       expect(tools.tools.length).toBeGreaterThan(0);
 
-      console.log('✅ MCP initialized, found', tools.tools.length, 'tools');
+      console.log("✅ MCP initialized, found", tools.tools.length, "tools");
     } finally {
       await transport.close();
     }
   });
 
-  test('MCP SDK can list tools with proper schema', async ({ baseURL }) => {
+  test("MCP SDK can list tools with proper schema", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
@@ -68,30 +70,30 @@ test.describe('MCP SDK Integration', () => {
       expect(tools.tools).toBeInstanceOf(Array);
 
       for (const tool of tools.tools) {
-        expect(tool).toHaveProperty('name');
-        expect(tool).toHaveProperty('description');
-        expect(tool).toHaveProperty('inputSchema');
-        expect(tool.inputSchema).toHaveProperty('type', 'object');
+        expect(tool).toHaveProperty("name");
+        expect(tool).toHaveProperty("description");
+        expect(tool).toHaveProperty("inputSchema");
+        expect(tool.inputSchema).toHaveProperty("type", "object");
       }
 
       // Check for expected tools
       const toolNames = tools.tools.map((t: any) => t.name);
-      expect(toolNames).toContain('run_model');
-      expect(toolNames).toContain('list_models');
-      expect(toolNames).toContain('describe_model');
+      expect(toolNames).toContain("run_model");
+      expect(toolNames).toContain("list_models");
+      expect(toolNames).toContain("describe_model");
 
-      console.log('✅ MCP tools:', toolNames.join(', '));
+      console.log("✅ MCP tools:", toolNames.join(", "));
     } finally {
       await transport.close();
     }
   });
 
-  test('MCP SDK can call list_models tool', async ({ baseURL }) => {
+  test("MCP SDK can call list_models tool", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
       const result = await client.callTool({
-        name: 'list_models',
+        name: "list_models",
         arguments: {},
       });
 
@@ -103,52 +105,61 @@ test.describe('MCP SDK Integration', () => {
       // Content should have text content with JSON
       if (content.length > 0) {
         const textContent = content[0];
-        expect(textContent).toHaveProperty('type', 'text');
-        expect(textContent).toHaveProperty('text');
+        expect(textContent).toHaveProperty("type", "text");
+        expect(textContent).toHaveProperty("text");
 
         // Parse the JSON response
         const models = JSON.parse(textContent.text);
         expect(Object.keys(models).length).toBeGreaterThan(0);
 
-        // Ensure task arrays never include the legacy "inpainting" task type
+        // Ensure task arrays never include the legacy 'inpainting' task type
         for (const [key, value] of Object.entries(models)) {
-          if (key === 'next_step' || key === 'edit_capabilities') continue;
+          if (key === "next_step" || key === "edit_capabilities") continue;
           if (Array.isArray(value)) {
-            expect(value).not.toContain('inpainting');
+            expect(value).not.toContain("inpainting");
           }
         }
 
         // Ensure edit_capabilities matches models that declare editCapabilities.mask in the source-of-truth registry.
         // NOTE: Jest/Vitest `toHaveProperty()` treats dots in strings as path separators, so use direct indexing.
-        expect(models).toHaveProperty('edit_capabilities');
+        expect(models).toHaveProperty("edit_capabilities");
 
-        const registryPath = new URL('../../../../workers/src/config/models.json', import.meta.url);
-        const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as any;
+        const registryPath = new URL(
+          "../../../../workers/src/config/models.json",
+          import.meta.url
+        );
+        const registry = JSON.parse(readFileSync(registryPath, "utf8")) as any;
 
-        const expectedMaskModels = Object.entries(registry.models as Record<string, any>)
+        const expectedMaskModels = Object.entries(
+          registry.models as Record<string, any>
+        )
           .filter(([, cfg]) => cfg?.editCapabilities?.mask)
           .map(([id, cfg]) => ({ id, mask: cfg.editCapabilities.mask }));
 
         for (const { id, mask } of expectedMaskModels) {
           expect(models.edit_capabilities[id]).toBeDefined();
-          expect(models.edit_capabilities[id]).toHaveProperty('mask', mask);
+          expect(models.edit_capabilities[id]).toHaveProperty("mask", mask);
         }
 
-        console.log('✅ MCP list_models returned', Object.keys(models).length - 2, 'models');
+        console.log(
+          "✅ MCP list_models returned",
+          Object.keys(models).length - 2,
+          "models"
+        );
       }
     } finally {
       await transport.close();
     }
   });
 
-  test('MCP SDK can call describe_model tool', async ({ baseURL }) => {
+  test("MCP SDK can call describe_model tool", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
       const result = await client.callTool({
-        name: 'describe_model',
+        name: "describe_model",
         arguments: {
-          model_id: '@cf/black-forest-labs/flux-1-schnell',
+          model_id: "@cf/black-forest-labs/flux-1-schnell",
         },
       });
 
@@ -158,32 +169,35 @@ test.describe('MCP SDK Integration', () => {
 
       if (content.length > 0) {
         const textContent = content[0];
-        expect(textContent).toHaveProperty('type', 'text');
+        expect(textContent).toHaveProperty("type", "text");
 
         const schema = JSON.parse(textContent.text);
-        expect(schema).toHaveProperty('model_id', '@cf/black-forest-labs/flux-1-schnell');
-        expect(schema).toHaveProperty('name');
-        expect(schema).toHaveProperty('description');
-        expect(schema).toHaveProperty('supported_task_types');
-        expect(schema).toHaveProperty('cf_params');
+        expect(schema).toHaveProperty(
+          "model_id",
+          "@cf/black-forest-labs/flux-1-schnell"
+        );
+        expect(schema).toHaveProperty("name");
+        expect(schema).toHaveProperty("description");
+        expect(schema).toHaveProperty("supported_task_types");
+        expect(schema).toHaveProperty("cf_params");
 
-        console.log('✅ MCP describe_model returned schema for', schema.name);
+        console.log("✅ MCP describe_model returned schema for", schema.name);
       }
     } finally {
       await transport.close();
     }
   });
 
-  test('MCP SDK can call run_model tool', async ({ baseURL }) => {
+  test("MCP SDK can call run_model tool @slow", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
       const result = await client.callTool({
-        name: 'run_model',
+        name: "run_model",
         arguments: {
-          taskType: 'generations',
-          prompt: 'A bright red apple on a wooden table',
-          model_id: '@cf/black-forest-labs/flux-1-schnell',
+          taskType: "generations",
+          prompt: "A bright red apple on a wooden table",
+          model_id: "@cf/black-forest-labs/flux-1-schnell",
           n: 1,
         },
       });
@@ -194,63 +208,68 @@ test.describe('MCP SDK Integration', () => {
 
       if (content.length > 0) {
         const textContent = content[0];
-        expect(textContent).toHaveProperty('type', 'text');
-        expect(textContent.text).toContain('!['); // Markdown image
+        expect(textContent).toHaveProperty("type", "text");
+        expect(textContent.text).toContain("!["); // Markdown image
 
         // Extract URL from markdown
-        const urlMatch = textContent.text.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+        const urlMatch = textContent.text.match(
+          /!\[.*?\]\((https?:\/\/[^\s)]+)\)/
+        );
         expect(urlMatch).not.toBeNull();
 
         const imageUrl = urlMatch![1];
         expect(imageUrl).toMatch(/^https:\/\//);
 
-        console.log('✅ MCP run_model generated image:', imageUrl.substring(0, 60) + '...');
+        console.log(
+          "✅ MCP run_model generated image:",
+          imageUrl.substring(0, 60) + "..."
+        );
       }
     } finally {
       await transport.close();
     }
   });
 
-  test('MCP SDK handles errors gracefully', async ({ baseURL }) => {
+  test("MCP SDK handles errors gracefully", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
       // Call with missing required parameter
       const result = await client.callTool({
-        name: 'run_model',
+        name: "run_model",
         arguments: {
+          taskType: "generations",
           // Missing prompt and model_id
         },
       });
 
-      // Should return error in content
+      // Should return error at result level (SDK schema validation)
       expect(result).toBeDefined();
+      expect(result).toHaveProperty("isError", true);
       const content = result.content as TextContent[];
       expect(content).toBeDefined();
 
       if (content.length > 0) {
         const textContent = content[0];
-        // Server returns error as text content (not with isError flag)
-        expect(textContent.text).toContain('Error:');
-        expect(textContent.text).toContain('required');
+        expect(textContent.text).toContain("model_id");
 
-        console.log('✅ MCP error handling works:', textContent.text);
+        console.log("✅ MCP error handling works:", textContent.text);
       }
     } finally {
       await transport.close();
     }
   });
 
-  test('MCP SDK can generate multiple images', async ({ baseURL }) => {
+  test("MCP SDK can generate multiple images @slow", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
       const result = await client.callTool({
-        name: 'run_model',
+        name: "run_model",
         arguments: {
-          taskType: 'generations',
-          prompt: 'A blue sky with clouds',
-          model_id: '@cf/black-forest-labs/flux-1-schnell',
+          taskType: "generations",
+          prompt: "A blue sky with clouds",
+          model_id: "@cf/black-forest-labs/flux-1-schnell",
           n: 2,
         },
       });
@@ -261,14 +280,16 @@ test.describe('MCP SDK Integration', () => {
 
       if (content.length > 0) {
         const textContent = content[0];
-        expect(textContent).toHaveProperty('type', 'text');
+        expect(textContent).toHaveProperty("type", "text");
 
         // Count image URLs in response
-        const urlMatches = textContent.text.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/g);
+        const urlMatches = textContent.text.match(
+          /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g
+        );
         expect(urlMatches).not.toBeNull();
         expect(urlMatches!.length).toBe(2);
 
-        console.log('✅ MCP run_model generated', urlMatches!.length, 'images');
+        console.log("✅ MCP run_model generated", urlMatches!.length, "images");
       }
     } finally {
       await transport.close();

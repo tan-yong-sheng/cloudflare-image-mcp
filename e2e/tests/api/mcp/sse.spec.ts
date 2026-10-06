@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
 /**
  * MCP SSE (Server-Sent Events) E2E Tests
@@ -7,65 +7,55 @@ import { test, expect } from '@playwright/test';
  * @api
  */
 
-test.describe('MCP SSE Transport', () => {
-  test('GET /mcp?transport=sse behavior', async ({ request }) => {
-    const response = await request.get('/mcp?transport=sse');
+test.describe("MCP SSE Transport", () => {
+  test("GET /mcp?transport=sse behavior", async ({ request }) => {
+    const response = await request.get("/mcp?transport=sse");
 
-    // SSE endpoint may not be available in all implementations
-    if (response.status() === 404) {
-      test.skip(true, 'SSE transport not implemented');
-      return;
-    }
-
-    expect(response.status()).toBe(200);
-
-    // Check if it returns event-stream or JSON (implementation dependent)
-    const contentType = response.headers()['content-type'];
-    if (contentType.includes('text/event-stream')) {
-      expect(response.headers()['cache-control']).toContain('no-cache');
-    } else {
-      // Server may return JSON info instead
-      expect(contentType).toContain('application/json');
-    }
-  });
-
-  test('GET /mcp (without transport param) returns endpoint info', async ({ request }) => {
-    const response = await request.get('/mcp');
-
-    expect(response.status()).toBe(200);
-    expect(response.headers()['content-type']).toContain('application/json');
+    // The SDK handler has no standalone GET/SSE stream: it answers 405
+    // JSON-RPC with Allow: POST. Clients open streams via POST instead.
+    expect(response.status()).toBe(405);
 
     const body = await response.json();
-
-    // Validate MCP endpoint info
-    expect(body).toHaveProperty('name');
-    expect(body).toHaveProperty('version');
-    expect(body).toHaveProperty('protocol', 'MCP');
-    expect(body).toHaveProperty('transport');
-    expect(body).toHaveProperty('endpoints');
-    expect(body).toHaveProperty('tools');
-
-    // Validate endpoints structure
-    expect(body.endpoints).toHaveProperty('message');
-    expect(body.endpoints).toHaveProperty('sse');
-
-    // Validate tools array
-    expect(Array.isArray(body.tools)).toBe(true);
-    expect(body.tools.length).toBeGreaterThan(0);
+    expect(body).toHaveProperty("error");
   });
 
-  test('GET /mcp returns CORS headers', async ({ request }) => {
-    const response = await request.get('/mcp');
+  test("GET /mcp (without transport param) is not a JSON-RPC route", async ({
+    request,
+  }) => {
+    const response = await request.get("/mcp");
 
-    expect(response.headers()['access-control-allow-origin']).toBe('*');
+    // GET is not part of the Streamable HTTP contract: the SDK answers 405.
+    expect(response.status()).toBe(405);
   });
 
-  test('OPTIONS /mcp returns CORS preflight headers', async ({ request }) => {
-    const response = await request.fetch('/mcp', {
-      method: 'OPTIONS',
+  test("GET /.well-known/oauth-protected-resource returns discovery document", async ({
+    request,
+  }) => {
+    const response = await request.get("/.well-known/oauth-protected-resource");
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("application/json");
+
+    const body = await response.json();
+    expect(body).toHaveProperty("resource");
+    expect(body).toHaveProperty("authorization_servers");
+    expect(body).toHaveProperty("bearer_methods_supported", ["header"]);
+  });
+
+  test("OPTIONS /mcp returns CORS preflight headers", async ({ request }) => {
+    const response = await request.fetch("/mcp", {
+      method: "OPTIONS",
     });
 
     expect(response.status()).toBe(200);
-    expect(response.headers()['access-control-allow-origin']).toBe('*');
+    expect(response.headers()["access-control-allow-origin"]).toBe("*");
+    // SDK and auth-challenge responses must carry CORS so browser clients
+    // can read them (regression: GET /mcp once lost the header).
+    const mcpGet = await request.get("/mcp");
+    expect(mcpGet.headers()["access-control-allow-origin"]).toBe("*");
+    // MCP transport headers must be allow-listed for browser clients.
+    expect(response.headers()["access-control-allow-headers"]).toContain(
+      "Mcp-Protocol-Version"
+    );
   });
 });

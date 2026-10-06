@@ -5,10 +5,16 @@
 
 # Build artifacts
 dist/
-node_modules
+node_modules/
+.vscode
 
-# Claude settings
-.claude/settings.local.json.bak
+# Worktrees
+.worktrees/
+
+# Coding agents
+.pi/
+.claude/
+.codex/
 
 # e2e
 e2e/playwright-report/

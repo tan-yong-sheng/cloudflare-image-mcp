@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 test.describe('OpenAI Image Variations API', () => {
-  test('POST /v1/images/variations with image', async ({ request }) => {
+  test('POST /v1/images/variations with image @slow', async ({ request }) => {
     const response = await request.post('/v1/images/variations', {
       data: {
         image: TEST_IMAGE_BASE64,
@@ -51,7 +51,7 @@ test.describe('OpenAI Image Variations API', () => {
     expect(body.error.message.toLowerCase()).toContain('image');
   });
 
-  test('POST /v1/images/variations respects n parameter', async ({ request }) => {
+  test('POST /v1/images/variations respects n parameter @slow', async ({ request }) => {
     const response = await request.post('/v1/images/variations', {
       data: {
         image: TEST_IMAGE_BASE64,

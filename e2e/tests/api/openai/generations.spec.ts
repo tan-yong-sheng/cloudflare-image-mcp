@@ -11,7 +11,7 @@ test.describe('OpenAI Image Generations API', () => {
   // Default test model (fastest for testing)
   const TEST_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
-  test('POST /v1/images/generations with minimal parameters', async ({ request }) => {
+  test('POST /v1/images/generations with minimal parameters @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A sunny day at the beach with palm trees and ocean waves',
@@ -42,7 +42,7 @@ test.describe('OpenAI Image Generations API', () => {
     console.log('✅ Image URL:', image.url);
   });
 
-  test('POST /v1/images/generations with all parameters', async ({ request }) => {
+  test('POST /v1/images/generations with all parameters @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A blue square on white background',
@@ -67,7 +67,7 @@ test.describe('OpenAI Image Generations API', () => {
     }
   });
 
-  test('POST /v1/images/generations with b64_json response format', async ({ request }) => {
+  test('POST /v1/images/generations with b64_json response format @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A green triangle on white background',
@@ -134,7 +134,7 @@ test.describe('OpenAI Image Generations API', () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('POST /v1/images/generations respects n parameter limit', async ({ request }) => {
+  test('POST /v1/images/generations respects n parameter limit @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A mountain landscape with snow peaks and green forests',
@@ -150,7 +150,7 @@ test.describe('OpenAI Image Generations API', () => {
     expect(body.data.length).toBeLessThanOrEqual(8);
   });
 
-  test('POST /v1/images/generations with guidance parameter', async ({ request }) => {
+  test('POST /v1/images/generations with guidance parameter @slow', async ({ request }) => {
     const modelWithGuidance = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 
     const response = await request.post('/v1/images/generations', {
@@ -169,7 +169,7 @@ test.describe('OpenAI Image Generations API', () => {
     }
   });
 
-  test('POST /v1/images/generations with negative prompt', async ({ request }) => {
+  test('POST /v1/images/generations with negative prompt @slow', async ({ request }) => {
     const modelWithNegPrompt = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 
     const response = await request.post('/v1/images/generations', {
@@ -187,7 +187,7 @@ test.describe('OpenAI Image Generations API', () => {
     }
   });
 
-  test('POST /v1/images/generations returns CORS headers', async ({ request }) => {
+  test('POST /v1/images/generations returns CORS headers @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'Test',
@@ -198,7 +198,7 @@ test.describe('OpenAI Image Generations API', () => {
     expect(response.headers()['access-control-allow-origin']).toBe('*');
   });
 
-  test('POST /v1/images/generations returns valid image URL format', async ({ request }) => {
+  test('POST /v1/images/generations returns valid image URL format @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A beautiful sunset over mountains',
@@ -221,7 +221,7 @@ test.describe('OpenAI Image Generations API', () => {
     expect(path).toMatch(/^\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/);
   });
 
-  test('POST /v1/images/generations returns clean response without b64_json when format=url', async ({ request }) => {
+  test('POST /v1/images/generations returns clean response without b64_json when format=url @slow', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A simple test image',

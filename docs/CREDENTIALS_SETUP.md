@@ -23,6 +23,16 @@ Create a token with these **Account-scoped** permissions:
 | Account | Workers R2 Storage — Edit |
 | Account | Workers AI — Edit |
 | Account | Workers AI — Read |
+| Account | Workers KV Storage — Read |
+
+> **Why KV Read when this project uses no KV?** The staging cleanup job runs
+> `wrangler delete --force`, which enumerates *all* bindings (including KV
+> namespaces) before deleting the worker. Without KV Read the pre-check
+> fails with `Authentication error [code: 10000]` and the delete aborts —
+> even though there is nothing KV-related to delete (storage is R2 only).
+> Alternatively, keep the token minimal and replace the cleanup step with a
+> direct `DELETE .../workers/scripts/<name>?force=true` API call, which
+> needs only Workers Scripts Edit.
 
 ---
 

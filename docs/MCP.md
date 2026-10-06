@@ -8,7 +8,8 @@ Cloudflare Image MCP implements the Model Context Protocol (MCP), allowing AI as
 
 ### Streamable HTTP
 
-The MCP server supports streamable HTTP transport:
+The MCP server is served by the official MCP TypeScript SDK (v2 packages,
+stateless per-request servers) over streamable HTTP:
 
 - **Endpoints**:
   - Multi-model (default): `POST /mcp` or `POST /mcp/message`
@@ -16,20 +17,35 @@ The MCP server supports streamable HTTP transport:
   - Single-model (simple): `POST /mcp/simple` or `POST /mcp/simple/message`
 - **Protocol**: JSON-RPC 2.0
 - **Content-Type**: `application/json`
+- **Accept**: clients must send `Accept: application/json, text/event-stream`
+  (SDK requirement); responses arrive as SSE frames carrying JSON-RPC payloads.
+- **Protocol versions**: negotiated (`2025-11-25` down to `2024-10-07` legacy
+  clients supported); `ping` and `notifications/initialized` handled per spec.
+- No standalone `GET` stream: `GET /mcp` answers `405` (use `POST`).
 
-### Server-Sent Events (SSE)
+### Authentication (OAuth 2.1 resource server)
 
-For real-time updates:
+When `API_KEYS` is set, send `Authorization: Bearer <key>` on every request
+(see [Credentials Setup](CREDENTIALS_SETUP.md)). Failures return `401` with
+an OAuth bearer challenge pointing at the public discovery document:
 
-- **Endpoint**: `GET /mcp?transport=sse` (or `/mcp/smart?transport=sse`, `/mcp/simple?transport=sse`)
-- **Content-Type**: `text/event-stream`
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer error="invalid_token",
+  error_description="Authentication required",
+  resource_metadata="https://<worker>/.well-known/oauth-protected-resource"
+```
+
+- Discovery document: `GET /.well-known/oauth-protected-resource`
+  (public by design). This server verifies pre-shared keys only — it never
+  issues tokens (`authorization_servers` is empty).
+- The JSON 401 body keeps the legacy `{ error: 'Unauthorized', message }`
+  shape.
 
 ## Endpoints
 
 - **Multi-model (default):** `/mcp` (or `/mcp/smart`) — tools: `run_model`, `list_models`, `describe_model`.
-- **Single-model:** `/mcp/simple?model=@cf/...` (`model` query param required) — `run_model` only;
-  `list_models` / `describe_model` return an error telling you to use `/mcp` or `/mcp/smart`.
-- SSE streaming: append `?transport=sse` (legacy `/mcp/message` paths still work).
+- **Single-model:** `/mcp/simple?model=@cf/...` (`model` query param required) — `run_model` only.
 - Auth: when `API_KEYS` is set, send `Authorization: Bearer <key>`
   (see [Credentials Setup](CREDENTIALS_SETUP.md)).
 
@@ -47,7 +63,7 @@ Initializes the MCP connection.
   "id": 1,
   "method": "initialize",
   "params": {
-    "protocolVersion": "2024-11-05",
+    "protocolVersion": "2025-11-25",
     "capabilities": {
       "tools": {}
     },
@@ -66,7 +82,7 @@ Initializes the MCP connection.
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "protocolVersion": "2024-11-05",
+    "protocolVersion": "2025-11-25",
     "capabilities": {
       "tools": {
         "listChanged": true
@@ -299,7 +315,7 @@ async function callMCPTool(method: string, params: any) {
 
 // Initialize
 await callMCPTool("initialize", {
-  protocolVersion: "2024-11-05",
+  protocolVersion: "2025-11-25",
   capabilities: { tools: {} },
   clientInfo: { name: "my-app", version: "1.0.0" },
 });
@@ -356,7 +372,7 @@ curl -X POST https://cloudflare-image-workers.*.workers.dev/mcp/message \
     "id": 1,
     "method": "initialize",
     "params": {
-      "protocolVersion": "2024-11-05",
+      "protocolVersion": "2025-11-25",
       "capabilities": {},
       "clientInfo": { "name": "curl", "version": "1.0" }
     }
@@ -423,7 +439,11 @@ Tool-specific errors are returned in the content with `isError: true`:
 
 ## Transport notes
 
-This Worker exposes MCP over **HTTP** (streamable HTTP) with optional **SSE** transport. There is no separate stdio server in this repository.
+This Worker exposes MCP over **HTTP** (streamable HTTP) served by the
+official MCP TypeScript SDK (v2 packages, stateless). There is no separate
+stdio server in this repository. Prefer the SDK client over hand-rolled
+HTTP: it sets the required `Accept` header, negotiates the protocol
+version, and unwraps SSE frames for you.
 
 **Available Tools:**
 

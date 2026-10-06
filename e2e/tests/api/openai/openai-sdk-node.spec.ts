@@ -22,7 +22,7 @@ test.describe('OpenAI SDK Node.js Compliance', () => {
     });
   };
 
-  test('OpenAI SDK can generate images with url format', async ({ baseURL }) => {
+  test('OpenAI SDK can generate images with url format @slow', async ({ baseURL }) => {
     const client = createClient(baseURL!);
 
     const response = await client.images.generate({
@@ -62,7 +62,7 @@ test.describe('OpenAI SDK Node.js Compliance', () => {
     console.log('✅ Generated image URL:', image.url);
   });
 
-  test('OpenAI SDK can generate images with b64_json format', async ({ baseURL }) => {
+  test('OpenAI SDK can generate images with b64_json format @slow', async ({ baseURL }) => {
     const client = createClient(baseURL!);
 
     const response = await client.images.generate({
@@ -102,7 +102,7 @@ test.describe('OpenAI SDK Node.js Compliance', () => {
     console.log('✅ Generated base64 image (length):', image.b64_json?.length);
   });
 
-  test('OpenAI SDK can generate multiple images', async ({ baseURL }) => {
+  test('OpenAI SDK can generate multiple images @slow', async ({ baseURL }) => {
     const client = createClient(baseURL!);
 
     const response = await client.images.generate({
@@ -176,7 +176,7 @@ test.describe('OpenAI SDK Node.js Compliance', () => {
     console.log('✅ Listed', response.data.length, 'models');
   });
 
-  test('OpenAI SDK response format matches spec exactly', async ({ baseURL }) => {
+  test('OpenAI SDK response format matches spec exactly @slow', async ({ baseURL }) => {
     const client = createClient(baseURL!);
 
     const response = await client.images.generate({
@@ -201,7 +201,7 @@ test.describe('OpenAI SDK Node.js Compliance', () => {
     expect(Object.keys(image)).toEqual(['url']);
   });
 
-  test('OpenAI SDK b64_json response format matches spec exactly', async ({ baseURL }) => {
+  test('OpenAI SDK b64_json response format matches spec exactly @slow', async ({ baseURL }) => {
     const client = createClient(baseURL!);
 
     const response = await client.images.generate({
