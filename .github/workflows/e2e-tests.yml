@@ -59,6 +59,16 @@ on:
 
 env:
   NODE_VERSION: "24"
+
+# Serialization scope: every run of this workflow that touches the shared
+# staging worker (deploy -> test -> delete) holds this single group for the
+# whole run. Fixed string on purpose — per-PR scoping would NOT protect one
+# shared worker. cancel-in-progress stays false: queued runs must wait, and
+# a cancelled stale run releases the group promptly via job timeouts.
+concurrency:
+  group: e2e-staging-worker
+  cancel-in-progress: false
+
 jobs:
   deploy_staging:
     name: Deploy staging (for E2E)
@@ -361,3 +371,36 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  e2e-gate-sentinel:
+    name: E2E Gate Sentinel
+    # Honest-skip sentinel: the raw e2e-tests job reports success when it is
+    # conditionally skipped, so branch protection must require THIS check
+    # (which can fail) rather than the raw job. Fails closed: a gated branch
+    # whose E2E did not succeed — skipped or failed — blocks the merge.
+    # Non-gated branches/events always pass, keeping the feature-PR fast path.
+    needs: [e2e-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    # Decision check only; bound it so it can never hold the gate open.
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Evaluate gate honesty
+        run: |
+          HEAD_REF="${{ github.head_ref }}"
+          E2E_RESULT="${{ needs.e2e-tests.result }}"
+          # Prefix-only match on the source branch. Fork PRs from gated
+          # prefixes fail closed here (their e2e-tests skips on the fork
+          # guard), which is the safe direction for a merge gate.
+          if [[ "$HEAD_REF" == prerelease/* || "$HEAD_REF" == release/* ]]; then
+            if [[ "$E2E_RESULT" != "success" ]]; then
+              echo "❌ E2E did not succeed on gated branch '$HEAD_REF' (result: $E2E_RESULT) — blocking merge"
+              exit 1
+            fi
+            echo "✅ E2E succeeded on gated branch '$HEAD_REF'"
+          else
+            echo "✅ Non-gated branch/event — sentinel passes (e2e-tests result: $E2E_RESULT)"
+          fi
