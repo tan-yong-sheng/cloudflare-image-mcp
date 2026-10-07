@@ -138,9 +138,9 @@ Use tags to categorize tests:
   PRs via `E2E_SMOKE=1` / `npm run test:smoke`, canary tier via
   `E2E_SMOKE=1 E2E_DRIFT=1` / `npm run test:canary` on schedule,
   everything via `E2E_SLOW=1` / `npm run test:slow` on dispatch
-- `@drift` - Model/SDK drift canaries (subset of `@slow`, nightly
-  only): per-model provider behavior + published-SDK transport that
-  hermetic contract tests cannot prove
+- `@drift` - Model/SDK drift canaries (subset of `@slow`, weekly
+  schedule only): per-model provider behavior + published-SDK transport
+  that hermetic contract tests cannot prove
 
 ### Test Data
 

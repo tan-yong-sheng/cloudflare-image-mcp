@@ -1,14 +1,15 @@
 name: E2E Tests
 
 on:
-  # Nightly canary tier (monitor, not gate): contract + @smoke +
+  # Weekly canary tier (monitor, not gate): contract + @smoke +
   # @drift (~8 live calls) proving credential chain, model availability,
-  # and SDK transport against the deployed Worker. Failures here page
-  # the on-call via the Actions notification, they never block a PR.
+  # and SDK transport against the deployed Worker. Provider models change
+  # rarely, so weekly is enough signal. Failures here page the on-call
+  # via the Actions notification, they never block a PR.
   # The retired 36-test @slow matrix is superseded by the hermetic
   # contract suite (workers/src/endpoints/openai-contract.test.ts).
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 2 * * 1"
   # Manual trigger for testing specific deployments
   workflow_dispatch:
     inputs:
@@ -38,7 +39,7 @@ on:
 
   # Merge gate: contract suite + 2 @smoke canaries (1 live generation +
   # 1 MCP run_model) on release-integration PRs to main, where the fast
-  # PR check (pr-checks.yml) is insufficient signal. The nightly schedule
+  # PR check (pr-checks.yml) is insufficient signal. The weekly schedule
   # runs the canary tier only (contract + @smoke + @drift, ~8 live calls)
   # as a drift monitor; retired shape tests live hermetically in
   # workers/src/endpoints/openai-contract.test.ts.
@@ -240,14 +241,14 @@ jobs:
           # PR events cannot set inputs, so an unset full_matrix on a PR
           # means "gated run", not "caller wants contract-only".
           # Dispatch/call keep caller control via the full_matrix input
-          # (opt-in @slow incl. skipped manifests); schedule runs the
-          # canary tier (E2E_SMOKE=1 + E2E_DRIFT=1, ~8 live calls).
+          # (opt-in @slow incl. skipped manifests); the weekly schedule
+          # runs the canary tier (E2E_SMOKE=1 + E2E_DRIFT=1, ~8 live
+          # calls).
           if [ -n "${{ inputs.test_pattern }}" ]; then
             echo "Running specific test pattern: ${{ inputs.test_pattern }} (with E2E_SLOW=1 so @slow targets are reachable)"
             E2E_SLOW=1 npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
           elif [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "Running nightly canary tier (monitor-only):"
-            echo "contract + @smoke + @drift (E2E_SMOKE=1 E2E_DRIFT=1)"
+            echo "Running weekly canary tier (monitor-only):"
             echo "contract + @smoke + @drift"
             echo "(E2E_SMOKE=1 E2E_DRIFT=1)"
             E2E_SMOKE=1 E2E_DRIFT=1 npx playwright test --reporter=list,junit,html
