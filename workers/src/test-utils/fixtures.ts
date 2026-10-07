@@ -16,7 +16,8 @@ import { vi } from "vitest";
 export const FIXTURE_PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-export function fixturePngBytes(): Uint8Array {
+/** 1x1 red PNG bytes; internal to the stub adapter below. */
+function fixturePngBytes(): Uint8Array {
   const binary = atob(FIXTURE_PNG_B64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -29,7 +30,7 @@ export function fixturePngBytes(): Uint8Array {
  * What a base64-format model (e.g. flux-1-schnell, responseFormat base64)
  * returns through the REST envelope: { result: { image: "<b64>" } }.
  */
-export function jsonEnvelopeImage() {
+function jsonEnvelopeImage() {
   return { result: { image: FIXTURE_PNG_B64 } };
 }
 
@@ -37,7 +38,7 @@ export function jsonEnvelopeImage() {
  * What a binary-format model (e.g. sdxl-base-1.0, responseFormat binary)
  * returns: raw image bytes with an image content-type.
  */
-export function binaryImageResponse(): Response {
+function binaryImageResponse(): Response {
   const bytes = fixturePngBytes();
   return new Response(bytes.buffer as ArrayBuffer, {
     status: 200,
@@ -66,7 +67,7 @@ export function stubInference(shape: "json" | "binary" = "json") {
 }
 
 /** Minimal in-memory R2Bucket: put/get round-trip, delete/list for cleanup. */
-export function fakeBucket(): R2Bucket {
+function fakeBucket(): R2Bucket {
   const store = new Map<
     string,
     { body: ArrayBuffer; httpMetadata?: any; customMetadata?: any }

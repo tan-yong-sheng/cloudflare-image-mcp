@@ -236,40 +236,23 @@ jobs:
       - name: Run E2E tests
         run: |
           cd e2e
-          # Tier semantics live in e2e/lib/tiers.ts (tier → grep+timeout).
-          # This block only *selects* the tier name by trigger so the YAML
-          # never re-encodes the grep/timeout map:
-          # - test_pattern: forced slow tier so @slow targets are reachable
-          # - schedule: canary tier (contract + @smoke + @drift, ~8 live
-          #   calls, monitor-only, never a PR gate)
-          # - pull_request: smoke tier on gated PRs (contract + 2 @smoke
-          #   canaries, ~2 live calls). PR events cannot set inputs, so an
-          #   unset full_matrix on a PR means "gated run", not
-          #   "caller wants contract-only".
-          # - full_matrix input: slow tier (opt-in @slow incl. skipped
-          #   manifests), dispatch/call only.
-          # - default: contract tier (0 live calls).
+          # Tier semantics live in e2e/lib/tiers.ts (tier → grep+timeout);
+          # the tier NAME comes from E2E_TIER below (selected by trigger).
+          # test_pattern forces slow so @slow targets stay reachable.
           if [ -n "${{ inputs.test_pattern }}" ]; then
             echo "Running specific test pattern: ${{ inputs.test_pattern }} (forced slow tier so @slow targets are reachable)"
             npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "Running weekly canary tier (monitor-only): contract + @smoke + @drift"
-            npx playwright test --reporter=list,junit,html
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "Running contract suite + @smoke canaries: 2 live inference calls"
-            npx playwright test --reporter=list,junit,html
-          elif [ "${{ inputs.full_matrix }}" = "true" ]; then
-            echo "Running full matrix: contract + @slow generation tests"
-            npx playwright test --reporter=list,junit,html
           else
-            echo "Running fast contract tests (@slow generation tests skipped; use full_matrix to include)"
+            echo "Running E2E tier: $E2E_TIER"
             npx playwright test --reporter=list,junit,html
           fi
         env:
-          # Single tier name; grep+timeout come from e2e/lib/tiers.ts.
-          # Legacy flags stay set for backward compat (local E2E_SLOW=1
-          # invocations, manual `gh workflow run` without full_matrix)
-          # but E2E_TIER wins in getTier() when non-empty.
+          # Sole trigger→tier selection: schedule = canary (~8 live calls,
+          # monitor-only); gated PR = smoke (contract + 2 @smoke, ~2 live
+          # calls — PRs can't set inputs, so unset full_matrix on a PR means
+          # "gated run"); full_matrix input = slow (dispatch/call only);
+          # default = contract (0 live calls). Grep+timeout come from
+          # e2e/lib/tiers.ts.
           E2E_TIER: ${{ inputs.test_pattern != '' && 'slow' || github.event_name == 'schedule' && 'canary' || github.event_name == 'pull_request' && 'smoke' || inputs.full_matrix && 'slow' || 'contract' }}
           E2E_SLOW: ${{ inputs.full_matrix && '1' || '' }}
           E2E_SMOKE: ${{ (github.event_name == 'pull_request' || github.event_name == 'schedule') && '1' || '' }}
