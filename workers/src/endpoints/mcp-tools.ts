@@ -7,6 +7,7 @@
 
 import type {
   BatchResult,
+  GenerationRequest,
   ImageGeneratorService,
 } from "../services/image-generator.js";
 
@@ -59,93 +60,145 @@ function ok(text: string): ToolResult {
 }
 
 /**
- * Handle run_model tool call.
- * @param defaultModel - when set (single-model endpoint), model_id is pinned
- *   to this value and a mismatched model_id is rejected.
+ * run_model argument shape, shared by the single + multi endpoints.
+ * The single-model endpoint omits model_id (it comes from ?model=).
  */
-export async function handleRunModel(
-  ctx: ToolsContext,
-  args: {
-    taskType?: string;
-    prompt?: string;
-    model_id?: string;
-    n?: number;
-    size?: string;
-    image?: string | string[];
-    mask?: string;
-    cf_params?: Record<string, unknown>;
-  },
+export interface RunModelArgs {
+  taskType?: string;
+  prompt?: string;
+  model_id?: string;
+  n?: number;
+  size?: string;
+  image?: string | string[];
+  mask?: string;
+  cf_params?: Record<string, unknown>;
+}
+
+/**
+ * Validated run_model request: taskType narrowed, model resolved.
+ * Internal seam between validation and resolve.
+ */
+interface ValidatedRunModel {
+  taskType: "generations" | "edits";
+  prompt: string;
+  modelId: string;
+}
+
+/**
+ * Resolve seam output: the generation request plus the repeat count.
+ * Internal seam between resolve and execute.
+ */
+interface ResolvedRunModel {
+  request: GenerationRequest;
+  numImages: number;
+}
+
+/**
+ * Validate seam: task-type, prompt, image, mask, pinned-model, and
+ * registry checks. Returns the first failure text, or the validated
+ * request on success. Single + multi endpoints share this seam, so
+ * task-compatibility errors are identical on both.
+ */
+function validateRunModel(
+  generator: ImageGeneratorService,
+  args: RunModelArgs,
   defaultModel: string | null
-): Promise<ToolResult> {
-  const { taskType, prompt, n, size, image, mask, cf_params } = args;
+): { ok: true; value: ValidatedRunModel } | { ok: false; error: string } {
+  const { taskType, prompt, image, mask } = args;
   let model_id = args.model_id ?? null;
 
-  // ── Validate taskType ──
   if (!taskType) {
-    return error(
-      'Error: taskType is required. Use "generations" for text-to-image or "edits" for image editing.'
-    );
+    return {
+      ok: false,
+      error:
+        'Error: taskType is required. Use "generations" for text-to-image or "edits" for image editing.',
+    };
   }
   if (taskType !== "generations" && taskType !== "edits") {
-    return error(
-      `Error: Invalid taskType '${taskType}'. Must be 'generations' or 'edits'.`
-    );
+    return {
+      ok: false,
+      error: `Error: Invalid taskType '${taskType}'. Must be 'generations' or 'edits'.`,
+    };
   }
 
-  // ── Validate prompt ──
   if (!prompt) {
-    return error("Error: prompt is required");
+    return { ok: false, error: "Error: prompt is required" };
   }
 
-  // ── Validate edits-specific fields ──
   if (taskType === "edits" && !image) {
-    return error('Error: image is required when taskType is "edits".');
+    return {
+      ok: false,
+      error: 'Error: image is required when taskType is "edits".',
+    };
   }
   if (taskType === "generations" && image) {
-    return error(
-      'Error: image cannot be used with taskType "generations". Use taskType "edits" for image editing.'
-    );
+    return {
+      ok: false,
+      error:
+        'Error: image cannot be used with taskType "generations". Use taskType "edits" for image editing.',
+    };
   }
   if (taskType === "generations" && mask) {
-    return error(
-      'Error: mask cannot be used with taskType "generations". Use taskType "edits" for inpainting.'
-    );
+    return {
+      ok: false,
+      error:
+        'Error: mask cannot be used with taskType "generations". Use taskType "edits" for inpainting.',
+    };
   }
 
-  // ── Resolve model_id ──
   if (defaultModel) {
     if (model_id && model_id !== defaultModel) {
-      return error(
-        `Error: this endpoint is pinned to model_id='${defaultModel}'. Remove model_id or use /mcp for model selection.`
-      );
+      return {
+        ok: false,
+        error: `Error: this endpoint is pinned to model_id='${defaultModel}'. Remove model_id or use /mcp for model selection.`,
+      };
     }
     model_id = defaultModel;
   }
   if (!model_id) {
-    return error(
-      "Error: model_id is required. Use list_models to get available model_ids."
-    );
+    return {
+      ok: false,
+      error:
+        "Error: model_id is required. Use list_models to get available model_ids.",
+    };
   }
 
-  // ── Validate model exists ──
-  const modelConfig = ctx.generator.getModelConfig(model_id);
+  const modelConfig = generator.getModelConfig(model_id);
   if (!modelConfig) {
-    return error(
-      `Error: Unknown model_id: ${model_id}. Use list_models to get valid model_ids.`
-    );
+    return {
+      ok: false,
+      error: `Error: Unknown model_id: ${model_id}. Use list_models to get valid model_ids.`,
+    };
   }
 
-  // ── Validate model supports the requested task ──
   if (
     taskType === "edits" &&
     !modelConfig.supportedTasks.includes("image-to-image")
   ) {
-    return error(
-      `Error: Model ${model_id} does not support image editing. Use taskType 'generations' or choose a model that supports image-to-image.`
-    );
+    return {
+      ok: false,
+      error: `Error: Model ${model_id} does not support image editing. Use taskType 'generations' or choose a model that supports image-to-image.`,
+    };
   }
 
-  // ── Build explicitParams from OpenAI-standard fields + cf_params ──
+  return {
+    ok: true,
+    value: { taskType, prompt, modelId: model_id },
+  };
+}
+
+/**
+ * Resolve seam: shape the validated request into a GenerationRequest
+ * for the generation seam (plus the clamped repeat count). Merges
+ * OpenAI-standard fields (size) with cf_params; explicit JSON wins.
+ */
+function resolveRunRequest(
+  validated: ValidatedRunModel,
+  args: RunModelArgs
+): { ok: true; value: ResolvedRunModel } | { ok: false; error: string } {
+  const { taskType, prompt, modelId } = validated;
+  const { n, size, image, mask, cf_params } = args;
+
   const numImages = Math.min(n || 1, 8);
   const explicitParams: Record<string, unknown> = {};
   if (size !== undefined) explicitParams.size = size;
@@ -155,80 +208,133 @@ export async function handleRunModel(
       (cf_params as Record<string, unknown>).strength !== undefined &&
       taskType === "generations"
     ) {
-      return error(
-        'Error: cf_params.strength cannot be used with taskType "generations". Use taskType "edits" for image editing.'
-      );
+      return {
+        ok: false,
+        error:
+          'Error: cf_params.strength cannot be used with taskType "generations". Use taskType "edits" for image editing.',
+      };
     }
     for (const [key, value] of Object.entries(cf_params)) {
       if (value !== undefined) explicitParams[key] = value;
     }
   }
 
-  // ── Execute: one runMany call per task; the task follows from the
-  // request shape (images present, mask present) inside the seam. ──
-  const base = {
-    modelId: model_id,
+  const base: GenerationRequest = {
+    modelId,
     prompt,
     explicitParams: explicitParams as Record<string, any>,
   };
-  let result: BatchResult;
 
   if (taskType === "edits") {
     if (mask) {
       // Inpainting takes exactly one image: reject arrays explicitly
       // rather than silently dropping all but the first element.
       if (Array.isArray(image)) {
-        return error(
-          "Error: mask can only be used with a single image. Pass one base64 image (not an array), or drop mask for multi-reference edits."
-        );
+        return {
+          ok: false,
+          error:
+            "Error: mask can only be used with a single image. Pass one base64 image (not an array), or drop mask for multi-reference edits.",
+        };
       }
-      result = await ctx.generator.runMany(
-        { ...base, images: image as string, mask },
-        numImages
-      );
-    } else {
-      result = await ctx.generator.runMany(
-        { ...base, images: image as string | string[] },
-        numImages
-      );
+      return {
+        ok: true,
+        value: {
+          request: { ...base, images: image as string, mask },
+          numImages,
+        },
+      };
     }
-  } else {
-    result = await ctx.generator.runMany(base, numImages);
+    return {
+      ok: true,
+      value: {
+        request: { ...base, images: image as string | string[] },
+        numImages,
+      },
+    };
   }
+  return { ok: true, value: { request: base, numImages } };
+}
 
-  if (!result.success) {
-    return error(`Error: ${result.error}`);
-  }
+/**
+ * Execute seam: dispatch through the generation seam (runMany).
+ * One runMany call per task; the task follows from the request shape
+ * (images present, mask present) inside the seam.
+ */
+async function executeRunRequest(
+  generator: ImageGeneratorService,
+  resolved: ResolvedRunModel
+): Promise<BatchResult> {
+  return generator.runMany(resolved.request, resolved.numImages);
+}
 
-  // ── Format response ──
+/**
+ * Format seam: render a successful batch result as MCP text content.
+ */
+function formatRunResult(
+  baseUrl: string,
+  taskType: "generations" | "edits",
+  mask: string | undefined,
+  result: BatchResult
+): string {
   const textParts: string[] = [];
   const modeLabel =
     taskType === "edits" ? (mask ? "Inpainted" : "Edited") : "Generated";
 
   if (result.images.length === 1) {
     const img = result.images[0];
-    textParts.push(`Image ${modeLabel.toLowerCase()} successfully!\n`);
+    textParts.push(`Image ${modeLabel.toLowerCase()} successfully!` + "\n");
     if (hasUrl(img)) {
-      textParts.push(`![${modeLabel} Image](${fullUrl(ctx.baseUrl, img.url)})`);
+      textParts.push(`![${modeLabel} Image](${fullUrl(baseUrl, img.url)})`);
     } else {
       textParts.push(
         `Image ${modeLabel.toLowerCase()} (base64 data available)`
       );
     }
   } else {
-    textParts.push(`${modeLabel} ${result.images.length} images:\n\n`);
+    textParts.push(`${modeLabel} ${result.images.length} images:` + "\n\n");
     result.images.forEach((img, i) => {
       if (hasUrl(img)) {
         textParts.push(
-          `Image ${i + 1}: ![${modeLabel} Image ${i + 1}](${fullUrl(ctx.baseUrl, img.url)})\n`
+          `Image ${i + 1}: ![${modeLabel} Image ${i + 1}](${fullUrl(baseUrl, img.url)})` +
+            "\n"
         );
       } else {
-        textParts.push(`Image ${i + 1}: (base64 data available)\n`);
+        textParts.push(`Image ${i + 1}: (base64 data available)` + "\n");
       }
     });
   }
 
-  return ok(textParts.join("\n"));
+  return textParts.join("\n");
+}
+
+/**
+ * Handle run_model tool call.
+ * @param defaultModel - when set (single-model endpoint), model_id is pinned
+ *   to this value and a mismatched model_id is rejected.
+ */
+export async function handleRunModel(
+  ctx: ToolsContext,
+  args: RunModelArgs,
+  defaultModel: string | null
+): Promise<ToolResult> {
+  const validated = validateRunModel(ctx.generator, args, defaultModel);
+  if (!validated.ok) {
+    return error(validated.error);
+  }
+
+  const resolved = resolveRunRequest(validated.value, args);
+  if (!resolved.ok) {
+    return error(resolved.error);
+  }
+
+  const result = await executeRunRequest(ctx.generator, resolved.value);
+  if (!result.success) {
+    return error(`Error: ${result.error}`);
+  }
+
+  return ok(
+    formatRunResult(ctx.baseUrl, validated.value.taskType, args.mask, result)
+  );
 }
 
 /**
