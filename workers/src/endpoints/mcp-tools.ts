@@ -5,7 +5,10 @@
 // produce MCP content blocks. Transport-agnostic so both SDK server
 // factories (and unit harnesses) share one implementation.
 
-import type { ImageGeneratorService } from "../services/image-generator.js";
+import type {
+  BatchResult,
+  ImageGeneratorService,
+} from "../services/image-generator.js";
 
 export interface ToolContent {
   type: "text";
@@ -161,12 +164,14 @@ export async function handleRunModel(
     }
   }
 
-  // ── Execute ──
-  let result: {
-    success: boolean;
-    images: Array<{ url: string; id: string } | { b64_json: string }>;
-    error?: string;
+  // ── Execute: one runMany call per task; the task follows from the
+  // request shape (images present, mask present) inside the seam. ──
+  const base = {
+    modelId: model_id,
+    prompt,
+    explicitParams: explicitParams as Record<string, any>,
   };
+  let result: BatchResult;
 
   if (taskType === "edits") {
     if (mask) {
@@ -177,30 +182,18 @@ export async function handleRunModel(
           "Error: mask can only be used with a single image. Pass one base64 image (not an array), or drop mask for multi-reference edits."
         );
       }
-      result = await ctx.generator.generateInpaints(
-        model_id,
-        prompt,
-        image as string,
-        mask,
-        numImages,
-        explicitParams as Record<string, any>
+      result = await ctx.generator.runMany(
+        { ...base, images: image as string, mask },
+        numImages
       );
     } else {
-      result = await ctx.generator.generateImageToImages(
-        model_id,
-        prompt,
-        image as string | string[],
-        numImages,
-        explicitParams as Record<string, any>
+      result = await ctx.generator.runMany(
+        { ...base, images: image as string | string[] },
+        numImages
       );
     }
   } else {
-    result = await ctx.generator.generateImages(
-      model_id,
-      prompt,
-      numImages,
-      explicitParams as Record<string, any>
-    );
+    result = await ctx.generator.runMany(base, numImages);
   }
 
   if (!result.success) {

@@ -116,12 +116,9 @@ export class OpenAIEndpoint {
     }
 
     // Generate images
-    const result = await this.generator.generateImages(
-      modelId,
-      prompt,
-      Math.min(n, 8), // Cap at 8 images
-      explicitParams,
-      returnBase64
+    const result = await this.generator.runMany(
+      { modelId, prompt, explicitParams, returnBase64 },
+      Math.min(n, 8) // Cap at 8 images
     );
 
     if (!result.success) {
@@ -180,32 +177,32 @@ export class OpenAIEndpoint {
 
     const count = Math.min(n, 8);
 
-    // Route to appropriate service method
-    let result;
-    if (maskData) {
-      // Inpainting (masked edit) — single image only
-      result = await this.generator.generateInpaints(
-        modelId,
-        prompt,
-        imageDataArr[0],
-        maskData,
-        count,
-        explicitParams,
-        returnBase64
-      );
-    } else {
-      // Image-to-image — pass single string or array depending on count
-      const imageInput =
-        imageDataArr.length === 1 ? imageDataArr[0] : imageDataArr;
-      result = await this.generator.generateImageToImages(
-        modelId,
-        prompt,
-        imageInput,
-        count,
-        explicitParams,
-        returnBase64
-      );
-    }
+    // Route to the seam: mask presence selects the masked-edit path,
+    // image count selects single vs multi-reference inside the service.
+    const imageInput =
+      imageDataArr.length === 1 ? imageDataArr[0] : imageDataArr;
+    const result = maskData
+      ? await this.generator.runMany(
+          {
+            modelId,
+            prompt,
+            images: imageDataArr[0],
+            mask: maskData,
+            explicitParams,
+            returnBase64,
+          },
+          count
+        )
+      : await this.generator.runMany(
+          {
+            modelId,
+            prompt,
+            images: imageInput,
+            explicitParams,
+            returnBase64,
+          },
+          count
+        );
 
     if (!result.success) {
       return new Response(
@@ -258,13 +255,15 @@ export class OpenAIEndpoint {
 
     const imageInput =
       imageDataArr.length === 1 ? imageDataArr[0] : imageDataArr;
-    const result = await this.generator.generateImageToImages(
-      modelId,
-      "", // Empty prompt for variations
-      imageInput,
-      count,
-      explicitParams,
-      returnBase64
+    const result = await this.generator.runMany(
+      {
+        modelId,
+        prompt: "", // Empty prompt for variations
+        images: imageInput,
+        explicitParams,
+        returnBase64,
+      },
+      count
     );
 
     if (!result.success) {

@@ -1,26 +1,55 @@
 // ============================================================================
-// Image Generator Service - Routes to appropriate Cloudflare AI model
+// Image Generator Service - run-once / run-many generation seam
 // ============================================================================
+// One deep module serving both the OpenAI endpoint and the MCP tool module.
+// Text-to-image, image-to-image, and masked edits all execute through
+// runOnce (single) and runMany (batch); task-specific checks live inside.
+// Cloudflare REST transport and R2 persistence sit behind injected
+// adapters (real in production, in-memory in tests).
 
-import type { Env, ModelConfig, AIAccount } from "../types.js";
+import type { Env, ModelConfig } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
-import { MODEL_CONFIGS } from "../config/models.js";
 import {
-  arrayBufferToBase64,
-  base64ToUint8Array,
-  cleanBase64,
-} from "../utils/encoding.js";
+  RestAITransport,
+  type AITransport,
+  type ImageStore,
+} from "./generation-adapters.js";
+import type { GeneratedImage } from "../utils/image-request.js";
+import { MODEL_CONFIGS } from "../config/models.js";
+import { arrayBufferToBase64, cleanBase64 } from "../utils/encoding.js";
+
+/**
+ * One generation request. Images select the task: absent means
+ * text-to-image, present means image-to-image, and a mask on top means
+ * a masked edit (exactly one input image).
+ */
+export interface GenerationRequest {
+  modelId: string;
+  prompt: string | Record<string, any>;
+  images?: string | string[];
+  mask?: string;
+  explicitParams?: Record<string, any>;
+  returnBase64?: boolean;
+}
+
+export interface SingleResult {
+  success: boolean;
+  imageUrl?: string;
+  imageId?: string;
+  base64Data?: string;
+  error?: string;
+}
+
+export interface BatchResult {
+  success: boolean;
+  images: GeneratedImage[];
+  error?: string;
+}
 
 export class ImageGeneratorService {
-  private aiAccounts: AIAccount[];
-  /**
-   * Which credential pool is active (observability label only, never a secret value):
-   * 'AI_ACCOUNTS' when multi-account inference is configured, 'fallback' when
-   * using the deploy credentials (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).
-   */
-  private credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback";
-  private storage: R2StorageService;
+  private transport: AITransport;
+  private store: ImageStore;
   private models: Map<string, ModelConfig>;
 
   private async extractImageResult(
@@ -78,8 +107,10 @@ export class ImageGeneratorService {
     return null;
   }
 
-  constructor(env: Env) {
-    this.storage = new R2StorageService(env);
+  constructor(
+    env: Env,
+    deps?: { transport?: AITransport; store?: ImageStore }
+  ) {
     this.models = new Map(Object.entries(MODEL_CONFIGS));
 
     // Build AI accounts list:
@@ -92,144 +123,59 @@ export class ImageGeneratorService {
       },
     ];
 
+    /**
+     * Which credential pool is active (observability label only, never a secret value):
+     * 'AI_ACCOUNTS' when multi-account inference is configured, 'fallback' when
+     * using the deploy credentials (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).
+     */
+    let credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback";
+    let aiAccounts = fallback;
+
     if (env.AI_ACCOUNTS) {
       try {
-        const parsed = JSON.parse(env.AI_ACCOUNTS) as AIAccount[];
+        const parsed = JSON.parse(env.AI_ACCOUNTS) as {
+          account_id: string;
+          api_token: string;
+        }[];
         if (!Array.isArray(parsed) || parsed.length === 0) {
           console.warn(
             "AI_ACCOUNTS is empty or not an array, falling back to deploy credentials"
           );
-          this.aiAccounts = fallback;
+          aiAccounts = fallback;
         } else {
           const valid = parsed.every((a) => a.account_id && a.api_token);
           if (!valid) {
             console.warn(
               "AI_ACCOUNTS entries missing account_id/api_token, falling back to deploy credentials"
             );
-            this.aiAccounts = fallback;
+            aiAccounts = fallback;
           } else {
-            this.aiAccounts = parsed;
-            this.credentialSource = "AI_ACCOUNTS";
+            aiAccounts = parsed;
+            credentialSource = "AI_ACCOUNTS";
           }
         }
       } catch {
         console.warn(
           "AI_ACCOUNTS is not valid JSON, falling back to deploy credentials"
         );
-        this.aiAccounts = fallback;
+        aiAccounts = fallback;
       }
     } else {
-      this.aiAccounts = fallback;
+      aiAccounts = fallback;
     }
 
     // Observability: name the active inference path (counts only, never values).
-    if (this.credentialSource === "AI_ACCOUNTS") {
+    if (credentialSource === "AI_ACCOUNTS") {
       console.warn(
-        `AI inference path: AI_ACCOUNTS with ${this.aiAccounts.length} account(s)`
+        `AI inference path: AI_ACCOUNTS with ${aiAccounts.length} account(s)`
       );
     } else {
       console.warn("AI inference path: fallback to deploy credentials");
     }
-  }
 
-  /**
-   * Pick a random AI account for load distribution
-   */
-  private pickAccount(): { account: AIAccount; index: number } {
-    const index = Math.floor(Math.random() * this.aiAccounts.length);
-    return { account: this.aiAccounts[index], index };
-  }
-
-  /**
-   * Call Cloudflare Workers AI via REST API
-   */
-  private async runAI(
-    modelId: string,
-    payload: Record<string, any>,
-    model: ModelConfig,
-    images?: string[]
-  ): Promise<any> {
-    const { account, index } = this.pickAccount();
-    // Credential source tag for observability (never a secret value).
-    const credentialTag =
-      this.credentialSource === "AI_ACCOUNTS"
-        ? `AI_ACCOUNTS[${index}]`
-        : "fallback deploy credential";
-    const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
-
-    let response: Response;
-
-    if (model.inputFormat === "multipart") {
-      // Multipart form data (FLUX 2 models)
-      const form = new FormData();
-      for (const [key, value] of Object.entries(payload)) {
-        if (value !== undefined && value !== null && key !== "image") {
-          form.append(key, String(value));
-        }
-      }
-
-      // Append image(s) as binary blobs if provided
-      if (images && images.length > 0) {
-        for (const img of images) {
-          const cleanedB64 = cleanBase64(img);
-          const bytes = base64ToUint8Array(cleanedB64);
-          form.append(
-            "image",
-            new Blob([bytes.buffer as ArrayBuffer], { type: "image/png" })
-          );
-        }
-      } else if (
-        payload.image &&
-        typeof payload.image === "string" &&
-        payload.image.length > 100
-      ) {
-        // Single image in payload (text-to-image with image param)
-        const cleanedB64 = cleanBase64(payload.image);
-        const bytes = base64ToUint8Array(cleanedB64);
-        form.append(
-          "image",
-          new Blob([bytes.buffer as ArrayBuffer], { type: "image/png" })
-        );
-      }
-
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${account.api_token}`,
-        },
-        body: form,
-      });
-    } else {
-      // JSON format
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${account.api_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${errorText}`
-      );
-    }
-
-    // Determine response type from content-type header
-    const contentType = response.headers.get("content-type") || "";
-
-    if (contentType.includes("application/json")) {
-      // JSON response — may contain { result: { image: "base64..." } } or { result: "base64..." }
-      const json = (await response.json()) as any;
-      // Cloudflare REST API wraps result in { result: ... }
-      return json.result !== undefined ? json.result : json;
-    }
-
-    // Binary response (image/png, application/octet-stream, etc.)
-    return await response.arrayBuffer();
+    this.transport =
+      deps?.transport ?? new RestAITransport(aiAccounts, credentialSource);
+    this.store = deps?.store ?? new R2StorageService(env);
   }
 
   /**
@@ -240,78 +186,40 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Generate image from text prompt
+   * Run one generation: text-to-image, image-to-image, or masked edit.
+   * The task follows from the request shape (images present, mask present).
    */
-  async generateImage(
-    modelId: string,
-    prompt: string | Record<string, any>,
-    explicitParams: Record<string, any> = {},
-    returnBase64: boolean = false
-  ): Promise<{
-    success: boolean;
-    imageUrl?: string;
-    imageId?: string;
-    base64Data?: string;
-    revisedPrompt?: string;
-    error?: string;
-  }> {
+  async runOnce(request: GenerationRequest): Promise<SingleResult> {
+    const { modelId, explicitParams = {}, returnBase64 = false } = request;
+
     const model = this.getModelConfig(modelId);
     if (!model) {
       return { success: false, error: `Unknown model: ${modelId}` };
     }
 
     try {
-      // Parse parameters
-      const params = ParamParser.parse(prompt, explicitParams, model);
-
-      // Build Cloudflare AI payload
-      const payload = ParamParser.toCFPayload(params, model);
-
-      // Run the model via REST API
-      const result = await this.runAI(model.id, payload, model);
-
-      // Extract image from response (base64 string OR binary)
-      const extracted = await this.extractImageResult(result);
-      if (!extracted) {
-        return { success: false, error: "No image in model response" };
+      if (request.mask !== undefined) {
+        return await this.runMaskedEdit(
+          model,
+          request,
+          explicitParams,
+          returnBase64
+        );
       }
-
-      // If base64 format requested, return directly without uploading
-      if (returnBase64) {
-        const base64Data =
-          extracted.kind === "base64"
-            ? cleanBase64(extracted.data)
-            : arrayBufferToBase64(extracted.data);
-
-        return {
-          success: true,
-          base64Data,
-        };
+      if (request.images !== undefined) {
+        return await this.runImageToImage(
+          model,
+          request,
+          explicitParams,
+          returnBase64
+        );
       }
-
-      // Upload to R2 storage
-      const uploadResult = await this.storage.uploadImage(
-        extracted.kind === "base64"
-          ? cleanBase64(extracted.data)
-          : extracted.data,
-        {
-          model: model.id,
-          prompt: params.prompt,
-          parameters: {
-            size: params.size,
-            steps: params.steps,
-            seed: params.seed,
-            guidance: params.guidance,
-            negative_prompt: params.negative_prompt,
-          },
-        }
+      return await this.runTextToImage(
+        model,
+        request,
+        explicitParams,
+        returnBase64
       );
-
-      return {
-        success: true,
-        imageUrl: uploadResult.url,
-        imageId: uploadResult.id,
-      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Image generation failed: ${message}`);
@@ -320,36 +228,28 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Generate multiple images
+   * Run the same request n times (seeds increment when one is given).
+   * A mid-batch failure keeps completed images and reports the error.
    */
-  async generateImages(
-    modelId: string,
-    prompt: string | Record<string, any>,
-    n: number = 1,
-    explicitParams: Record<string, any> = {},
-    returnBase64: boolean = false
-  ): Promise<{
-    success: boolean;
-    images: Array<{ url: string; id: string } | { b64_json: string }>;
-    error?: string;
-  }> {
-    const results: Array<{ url: string; id: string } | { b64_json: string }> =
-      [];
+  async runMany(
+    request: GenerationRequest,
+    n: number = 1
+  ): Promise<BatchResult> {
+    const results: GeneratedImage[] = [];
+    const baseExplicit = request.explicitParams ?? {};
 
     for (let i = 0; i < n; i++) {
-      const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
-      const result = await this.generateImage(
-        modelId,
-        prompt,
-        {
-          ...explicitParams,
+      const seed = baseExplicit.seed ? baseExplicit.seed + i : undefined;
+      const result = await this.runOnce({
+        ...request,
+        explicitParams: {
+          ...baseExplicit,
           seed,
         },
-        returnBase64
-      );
+      });
 
       if (result.success) {
-        if (returnBase64 && result.base64Data) {
+        if (request.returnBase64 && result.base64Data) {
           results.push({ b64_json: result.base64Data });
         } else if (result.imageUrl) {
           results.push({ url: result.imageUrl, id: result.imageId! });
@@ -369,293 +269,207 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Image-to-image transformation (supports single or multiple input images)
+   * Text-to-image: prompt in, stored image (or inline base64) out.
    */
-  async generateImageToImage(
-    modelId: string,
-    prompt: string | Record<string, any>,
-    imageData: string | string[],
-    strength?: number,
-    explicitParams: Record<string, any> = {},
-    returnBase64: boolean = false
-  ): Promise<{
-    success: boolean;
-    imageUrl?: string;
-    imageId?: string;
-    base64Data?: string;
-    error?: string;
-  }> {
-    const model = this.getModelConfig(modelId);
-    if (!model) {
-      return { success: false, error: `Unknown model: ${modelId}` };
-    }
+  private async runTextToImage(
+    model: ModelConfig,
+    request: GenerationRequest,
+    explicitParams: Record<string, any>,
+    returnBase64: boolean
+  ): Promise<SingleResult> {
+    // Parse parameters
+    const params = ParamParser.parse(request.prompt, explicitParams, model);
 
+    // Build Cloudflare AI payload
+    const payload = ParamParser.toCFPayload(params, model);
+
+    // Run the model via the injected transport
+    const result = await this.transport.run(model.id, payload, model);
+
+    return await this.finishSingle(
+      model,
+      params.prompt,
+      {
+        size: params.size,
+        steps: params.steps,
+        seed: params.seed,
+        guidance: params.guidance,
+        negative_prompt: params.negative_prompt,
+      },
+      result,
+      returnBase64
+    );
+  }
+
+  /**
+   * Image-to-image transformation (supports single or multiple inputs).
+   */
+  private async runImageToImage(
+    model: ModelConfig,
+    request: GenerationRequest,
+    explicitParams: Record<string, any>,
+    returnBase64: boolean
+  ): Promise<SingleResult> {
     if (!model.supportedTasks.includes("image-to-image")) {
       return {
         success: false,
-        error: `Model ${modelId} does not support image-to-image`,
+        error: `Model ${model.id} does not support image-to-image`,
       };
     }
 
     if (model.editCapabilities?.mask === "required") {
       return {
         success: false,
-        error: `Model ${modelId} requires a mask; use /v1/images/edits with mask (masked edit).`,
+        error: `Model ${model.id} requires a mask; use /v1/images/edits with mask (masked edit).`,
       };
     }
 
     // Handle multi-image: validate count against model limits
-    const images = Array.isArray(imageData) ? imageData : [imageData];
+    const images = Array.isArray(request.images)
+      ? request.images
+      : [request.images as string];
     const maxInput = model.maxInputImages || 1;
     if (images.length > maxInput) {
       return {
         success: false,
-        error: `Model ${modelId} supports up to ${maxInput} input image(s), got ${images.length}`,
+        error: `Model ${model.id} supports up to ${maxInput} input image(s), got ${images.length}`,
       };
     }
 
-    try {
-      // Build explicit params - only include strength if provided
-      const mergedExplicit: Record<string, any> = { ...explicitParams };
-      if (strength !== undefined) {
-        mergedExplicit.strength = strength;
-      }
-      // For single image, set image param for ParamParser
-      mergedExplicit.image = images[0];
+    // For single image, set image param for ParamParser
+    const mergedExplicit = { ...explicitParams, image: images[0] };
 
-      // Parse parameters with image
-      const params = ParamParser.parse(prompt, mergedExplicit, model);
+    // Parse parameters with image
+    const params = ParamParser.parse(request.prompt, mergedExplicit, model);
 
-      // Build payload with image
-      const payload = ParamParser.toCFPayload(params, model);
+    // Build payload with image
+    const payload = ParamParser.toCFPayload(params, model);
 
-      // Run the model via REST API (pass images for multipart handling)
-      const result = await this.runAI(model.id, payload, model, images);
+    // Run the model via the injected transport (pass images for multipart handling)
+    const result = await this.transport.run(model.id, payload, model, images);
 
-      const extracted = await this.extractImageResult(result);
-      if (!extracted) {
-        return { success: false, error: "No image in model response" };
-      }
-
-      if (returnBase64) {
-        const base64Data =
-          extracted.kind === "base64"
-            ? cleanBase64(extracted.data)
-            : arrayBufferToBase64(extracted.data);
-
-        return {
-          success: true,
-          base64Data,
-        };
-      }
-
-      const uploadResult = await this.storage.uploadImage(
-        extracted.kind === "base64"
-          ? cleanBase64(extracted.data)
-          : extracted.data,
-        {
-          model: model.id,
-          prompt: params.prompt,
-          parameters: {
-            size: params.size,
-            steps: params.steps,
-            seed: params.seed,
-          },
-        }
-      );
-
-      return {
-        success: true,
-        imageUrl: uploadResult.url,
-        imageId: uploadResult.id,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { success: false, error: message };
-    }
+    return await this.finishSingle(
+      model,
+      params.prompt,
+      {
+        size: params.size,
+        steps: params.steps,
+        seed: params.seed,
+      },
+      result,
+      returnBase64
+    );
   }
 
   /**
-   * Generate multiple output images from image-to-image transformation
+   * Inpainting / image editing with mask (exactly one input image).
    */
-  async generateImageToImages(
-    modelId: string,
-    prompt: string | Record<string, any>,
-    imageData: string | string[],
-    n: number = 1,
-    explicitParams: Record<string, any> = {},
-    returnBase64: boolean = false
-  ): Promise<{
-    success: boolean;
-    images: Array<{ url: string; id: string } | { b64_json: string }>;
-    error?: string;
-  }> {
-    const results: Array<{ url: string; id: string } | { b64_json: string }> =
-      [];
-
-    for (let i = 0; i < n; i++) {
-      const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
-      const result = await this.generateImageToImage(
-        modelId,
-        prompt,
-        imageData,
-        explicitParams.strength,
-        { ...explicitParams, seed },
-        returnBase64
-      );
-
-      if (result.success) {
-        if (returnBase64 && result.base64Data) {
-          results.push({ b64_json: result.base64Data });
-        } else if (result.imageUrl) {
-          results.push({ url: result.imageUrl, id: result.imageId! });
-        } else {
-          return {
-            success: false,
-            images: results,
-            error: "No image data returned",
-          };
-        }
-      } else {
-        return { success: false, images: results, error: result.error };
-      }
-    }
-
-    return { success: true, images: results };
-  }
-
-  /**
-   * Generate multiple inpainted images
-   */
-  async generateInpaints(
-    modelId: string,
-    prompt: string,
-    imageData: string,
-    maskData: string,
-    n: number = 1,
-    explicitParams: Record<string, any> = {},
-    returnBase64: boolean = false
-  ): Promise<{
-    success: boolean;
-    images: Array<{ url: string; id: string } | { b64_json: string }>;
-    error?: string;
-  }> {
-    const results: Array<{ url: string; id: string } | { b64_json: string }> =
-      [];
-
-    for (let i = 0; i < n; i++) {
-      const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
-      const result = await this.generateInpaint(
-        modelId,
-        prompt,
-        imageData,
-        maskData,
-        { ...explicitParams, seed },
-        returnBase64
-      );
-
-      if (result.success) {
-        if (returnBase64 && result.base64Data) {
-          results.push({ b64_json: result.base64Data });
-        } else if (result.imageUrl) {
-          results.push({ url: result.imageUrl, id: result.imageId! });
-        } else {
-          return {
-            success: false,
-            images: results,
-            error: "No image data returned",
-          };
-        }
-      } else {
-        return { success: false, images: results, error: result.error };
-      }
-    }
-
-    return { success: true, images: results };
-  }
-
-  /**
-   * Inpainting / image editing with mask
-   */
-  async generateInpaint(
-    modelId: string,
-    prompt: string,
-    imageData: string,
-    maskData: string,
-    explicitParams: Record<string, any> = {},
-    returnBase64: boolean = false
-  ): Promise<{
-    success: boolean;
-    imageUrl?: string;
-    imageId?: string;
-    base64Data?: string;
-    error?: string;
-  }> {
-    const model = this.getModelConfig(modelId);
-    if (!model) {
-      return { success: false, error: `Unknown model: ${modelId}` };
-    }
-
+  private async runMaskedEdit(
+    model: ModelConfig,
+    request: GenerationRequest,
+    explicitParams: Record<string, any>,
+    returnBase64: boolean
+  ): Promise<SingleResult> {
     if (!model.editCapabilities?.mask) {
       return {
         success: false,
-        error: `Model ${modelId} does not support mask-based edits`,
+        error: `Model ${model.id} does not support mask-based edits`,
       };
     }
 
-    try {
-      const params = ParamParser.parse(
-        prompt,
-        { ...explicitParams, image: imageData, mask: maskData },
-        model
-      );
+    if (Array.isArray(request.images)) {
+      return {
+        success: false,
+        error:
+          `mask can only be used with a single image, got ` +
+          `${request.images.length} input image(s)`,
+      };
+    }
 
-      const payload = ParamParser.toCFPayload(params, model);
+    if (!request.images) {
+      return {
+        success: false,
+        error: "image is required for masked edits",
+      };
+    }
 
-      // Run the model via REST API
-      const result = await this.runAI(model.id, payload, model);
+    const params = ParamParser.parse(
+      request.prompt,
+      { ...explicitParams, image: request.images, mask: request.mask },
+      model
+    );
 
-      const extracted = await this.extractImageResult(result);
-      if (!extracted) {
-        return { success: false, error: "No image in model response" };
-      }
+    const payload = ParamParser.toCFPayload(params, model);
 
-      if (returnBase64) {
-        const base64Data =
-          extracted.kind === "base64"
-            ? cleanBase64(extracted.data)
-            : arrayBufferToBase64(extracted.data);
+    // Run the model via the injected transport
+    const result = await this.transport.run(model.id, payload, model);
 
-        return {
-          success: true,
-          base64Data,
-        };
-      }
+    return await this.finishSingle(
+      model,
+      params.prompt,
+      {
+        size: params.size,
+        steps: params.steps,
+        seed: params.seed,
+      },
+      result,
+      returnBase64
+    );
+  }
 
-      const uploadResult = await this.storage.uploadImage(
+  /**
+   * Interpret one transport result: extract image bytes, then either
+   * return them inline or persist via the injected store.
+   */
+  private async finishSingle(
+    model: ModelConfig,
+    prompt: string,
+    parameters: {
+      size?: string;
+      steps?: number;
+      seed?: number;
+      guidance?: number;
+      negative_prompt?: string;
+    },
+    result: unknown,
+    returnBase64: boolean
+  ): Promise<SingleResult> {
+    // Extract image from response (base64 string OR binary)
+    const extracted = await this.extractImageResult(result);
+    if (!extracted) {
+      return { success: false, error: "No image in model response" };
+    }
+
+    // If base64 format requested, return directly without uploading
+    if (returnBase64) {
+      const base64Data =
         extracted.kind === "base64"
           ? cleanBase64(extracted.data)
-          : extracted.data,
-        {
-          model: model.id,
-          prompt: params.prompt,
-          parameters: {
-            size: params.size,
-            steps: params.steps,
-            seed: params.seed,
-          },
-        }
-      );
+          : arrayBufferToBase64(extracted.data);
 
       return {
         success: true,
-        imageUrl: uploadResult.url,
-        imageId: uploadResult.id,
+        base64Data,
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { success: false, error: message };
     }
+
+    // Upload to R2 storage
+    const uploadResult = await this.store.uploadImage(
+      extracted.kind === "base64"
+        ? cleanBase64(extracted.data)
+        : extracted.data,
+      {
+        model: model.id,
+        prompt,
+        parameters,
+      }
+    );
+
+    return {
+      success: true,
+      imageUrl: uploadResult.url,
+      imageId: uploadResult.id,
+    };
   }
 
   /**
@@ -710,6 +524,6 @@ export class ImageGeneratorService {
    * Cleanup expired images
    */
   async cleanupExpired(): Promise<number> {
-    return this.storage.cleanupExpired();
+    return this.store.cleanupExpired();
   }
 }
