@@ -82,7 +82,12 @@ See the skill documentation for detailed parameter definitions and examples.
 ## Code Style
 
 See `CODING_STANDARDS.md`. Local gates (`lefthook.yml`): pre-commit runs
-prettier on staged files; pre-push runs `workers` typecheck (`npm run check`).
+prettier `--write` on staged files **and re-stages the result** — always
+`git diff --cached` after committing, and write commit messages to survive
+reformatting (describe intent, never quote the diff's exact style).
+Pre-push runs `workers` typecheck (`npm run check`).
+Invoke prettier only via `workers/node_modules/.bin/prettier` — bare `npx`
+may resolve a different major with different formatting.
 
 ## Testing
 
