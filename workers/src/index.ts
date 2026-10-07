@@ -4,6 +4,7 @@
 // ============================================================================
 
 import type { Env } from "./types.js";
+import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { serveFrontend } from "./endpoints/frontend.js";
@@ -19,32 +20,6 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
-
-    // CORS headers for all responses
-    // MCP clients send Mcp-Session-Id / Mcp-Protocol-Version (SDK transports)
-    // and Last-Event-ID (stream resumption); browsers reject the preflight
-    // — and the request never fires — unless these are allow-listed.
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers":
-        "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID, MCP-Transport",
-      "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
-    };
-
-    // Apply the worker CORS headers onto a response built elsewhere
-    // (SDK handler, auth challenge) so browser clients can read it.
-    const withCors = (response: Response): Response => {
-      const headers = new Headers(response.headers);
-      for (const [key, value] of Object.entries(corsHeaders)) {
-        headers.set(key, value);
-      }
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
-    };
 
     // Handle OPTIONS preflight
     if (request.method === "OPTIONS") {
