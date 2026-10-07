@@ -2,10 +2,15 @@
 // Image Generator Service - Routes to appropriate Cloudflare AI model
 // ============================================================================
 
-import type { Env, ModelConfig, AIAccount } from '../types.js';
-import { ParamParser } from './param-parser.js';
-import { R2StorageService } from './r2-storage.js';
-import { MODEL_CONFIGS } from '../config/models.js';
+import type { Env, ModelConfig, AIAccount } from "../types.js";
+import { ParamParser } from "./param-parser.js";
+import { R2StorageService } from "./r2-storage.js";
+import { MODEL_CONFIGS } from "../config/models.js";
+import {
+  arrayBufferToBase64,
+  base64ToUint8Array,
+  cleanBase64,
+} from "../utils/encoding.js";
 
 export class ImageGeneratorService {
   private aiAccounts: AIAccount[];
@@ -14,75 +19,63 @@ export class ImageGeneratorService {
    * 'AI_ACCOUNTS' when multi-account inference is configured, 'fallback' when
    * using the deploy credentials (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).
    */
-  private credentialSource: 'AI_ACCOUNTS' | 'fallback' = 'fallback';
+  private credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback";
   private storage: R2StorageService;
   private models: Map<string, ModelConfig>;
-
-  private cleanBase64(data: string): string {
-    return data.replace(/^data:image\/\w+;base64,/, '');
-  }
 
   private async extractImageResult(
     result: unknown
   ): Promise<
-    | { kind: 'base64'; data: string }
-    | { kind: 'binary'; data: ArrayBuffer }
+    | { kind: "base64"; data: string }
+    | { kind: "binary"; data: ArrayBuffer }
     | null
   > {
     // Common base64-returning shape
-    if (typeof result === 'string') {
-      return { kind: 'base64', data: result };
+    if (typeof result === "string") {
+      return { kind: "base64", data: result };
     }
 
     // Some models may return { image: "...base64..." }
-    if (result && typeof result === 'object' && 'image' in result) {
+    if (result && typeof result === "object" && "image" in result) {
       const maybeImage = (result as any).image;
-      if (typeof maybeImage === 'string') {
-        return { kind: 'base64', data: maybeImage };
+      if (typeof maybeImage === "string") {
+        return { kind: "base64", data: maybeImage };
       }
       if (maybeImage instanceof ArrayBuffer) {
-        return { kind: 'binary', data: maybeImage };
+        return { kind: "binary", data: maybeImage };
       }
       if (maybeImage instanceof Uint8Array) {
         const copied = new Uint8Array(maybeImage);
-        const buf = copied.buffer.slice(copied.byteOffset, copied.byteOffset + copied.byteLength);
-        return { kind: 'binary', data: buf };
+        const buf = copied.buffer.slice(
+          copied.byteOffset,
+          copied.byteOffset + copied.byteLength
+        );
+        return { kind: "binary", data: buf };
       }
       if (maybeImage instanceof ReadableStream) {
         const buf = await new Response(maybeImage).arrayBuffer();
-        return { kind: 'binary', data: buf };
+        return { kind: "binary", data: buf };
       }
     }
 
     // Binary response directly
     if (result instanceof ArrayBuffer) {
-      return { kind: 'binary', data: result };
+      return { kind: "binary", data: result };
     }
     if (result instanceof Uint8Array) {
       const copied = new Uint8Array(result);
-      const buf = copied.buffer.slice(copied.byteOffset, copied.byteOffset + copied.byteLength);
-      return { kind: 'binary', data: buf };
+      const buf = copied.buffer.slice(
+        copied.byteOffset,
+        copied.byteOffset + copied.byteLength
+      );
+      return { kind: "binary", data: buf };
     }
     if (result instanceof ReadableStream) {
       const buf = await new Response(result).arrayBuffer();
-      return { kind: 'binary', data: buf };
+      return { kind: "binary", data: buf };
     }
 
     return null;
-  }
-
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    const chunkSize = 0x8000; // 32KB
-    let binary = '';
-
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      binary += String.fromCharCode(...(chunk as any));
-    }
-
-    return btoa(binary);
   }
 
   constructor(env: Env) {
@@ -92,29 +85,37 @@ export class ImageGeneratorService {
     // Build AI accounts list:
     // 1. AI_ACCOUNTS (JSON array) if set and valid
     // 2. Else fall back to CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
-    const fallback = [{
-      account_id: env.CLOUDFLARE_ACCOUNT_ID,
-      api_token: env.CLOUDFLARE_API_TOKEN,
-    }];
+    const fallback = [
+      {
+        account_id: env.CLOUDFLARE_ACCOUNT_ID,
+        api_token: env.CLOUDFLARE_API_TOKEN,
+      },
+    ];
 
     if (env.AI_ACCOUNTS) {
       try {
         const parsed = JSON.parse(env.AI_ACCOUNTS) as AIAccount[];
         if (!Array.isArray(parsed) || parsed.length === 0) {
-          console.warn('AI_ACCOUNTS is empty or not an array, falling back to deploy credentials');
+          console.warn(
+            "AI_ACCOUNTS is empty or not an array, falling back to deploy credentials"
+          );
           this.aiAccounts = fallback;
         } else {
-          const valid = parsed.every(a => a.account_id && a.api_token);
+          const valid = parsed.every((a) => a.account_id && a.api_token);
           if (!valid) {
-            console.warn('AI_ACCOUNTS entries missing account_id/api_token, falling back to deploy credentials');
+            console.warn(
+              "AI_ACCOUNTS entries missing account_id/api_token, falling back to deploy credentials"
+            );
             this.aiAccounts = fallback;
           } else {
             this.aiAccounts = parsed;
-            this.credentialSource = 'AI_ACCOUNTS';
+            this.credentialSource = "AI_ACCOUNTS";
           }
         }
       } catch {
-        console.warn('AI_ACCOUNTS is not valid JSON, falling back to deploy credentials');
+        console.warn(
+          "AI_ACCOUNTS is not valid JSON, falling back to deploy credentials"
+        );
         this.aiAccounts = fallback;
       }
     } else {
@@ -122,10 +123,12 @@ export class ImageGeneratorService {
     }
 
     // Observability: name the active inference path (counts only, never values).
-    if (this.credentialSource === 'AI_ACCOUNTS') {
-      console.warn(`AI inference path: AI_ACCOUNTS with ${this.aiAccounts.length} account(s)`);
+    if (this.credentialSource === "AI_ACCOUNTS") {
+      console.warn(
+        `AI inference path: AI_ACCOUNTS with ${this.aiAccounts.length} account(s)`
+      );
     } else {
-      console.warn('AI inference path: fallback to deploy credentials');
+      console.warn("AI inference path: fallback to deploy credentials");
     }
   }
 
@@ -148,18 +151,19 @@ export class ImageGeneratorService {
   ): Promise<any> {
     const { account, index } = this.pickAccount();
     // Credential source tag for observability (never a secret value).
-    const credentialTag = this.credentialSource === 'AI_ACCOUNTS'
-      ? `AI_ACCOUNTS[${index}]`
-      : 'fallback deploy credential';
+    const credentialTag =
+      this.credentialSource === "AI_ACCOUNTS"
+        ? `AI_ACCOUNTS[${index}]`
+        : "fallback deploy credential";
     const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
 
     let response: Response;
 
-    if (model.inputFormat === 'multipart') {
+    if (model.inputFormat === "multipart") {
       // Multipart form data (FLUX 2 models)
       const form = new FormData();
       for (const [key, value] of Object.entries(payload)) {
-        if (value !== undefined && value !== null && key !== 'image') {
+        if (value !== undefined && value !== null && key !== "image") {
           form.append(key, String(value));
         }
       }
@@ -167,31 +171,41 @@ export class ImageGeneratorService {
       // Append image(s) as binary blobs if provided
       if (images && images.length > 0) {
         for (const img of images) {
-          const cleanedB64 = this.cleanBase64(img);
-          const bytes = this.base64ToUint8Array(cleanedB64);
-          form.append('image', new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
+          const cleanedB64 = cleanBase64(img);
+          const bytes = base64ToUint8Array(cleanedB64);
+          form.append(
+            "image",
+            new Blob([bytes.buffer as ArrayBuffer], { type: "image/png" })
+          );
         }
-      } else if (payload.image && typeof payload.image === 'string' && payload.image.length > 100) {
+      } else if (
+        payload.image &&
+        typeof payload.image === "string" &&
+        payload.image.length > 100
+      ) {
         // Single image in payload (text-to-image with image param)
-        const cleanedB64 = this.cleanBase64(payload.image);
-        const bytes = this.base64ToUint8Array(cleanedB64);
-        form.append('image', new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
+        const cleanedB64 = cleanBase64(payload.image);
+        const bytes = base64ToUint8Array(cleanedB64);
+        form.append(
+          "image",
+          new Blob([bytes.buffer as ArrayBuffer], { type: "image/png" })
+        );
       }
 
       response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${account.api_token}`,
+          Authorization: `Bearer ${account.api_token}`,
         },
         body: form,
       });
     } else {
       // JSON format
       response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${account.api_token}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${account.api_token}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       });
@@ -199,15 +213,17 @@ export class ImageGeneratorService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${errorText}`);
+      throw new Error(
+        `Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${errorText}`
+      );
     }
 
     // Determine response type from content-type header
-    const contentType = response.headers.get('content-type') || '';
+    const contentType = response.headers.get("content-type") || "";
 
-    if (contentType.includes('application/json')) {
+    if (contentType.includes("application/json")) {
       // JSON response — may contain { result: { image: "base64..." } } or { result: "base64..." }
-      const json = await response.json() as any;
+      const json = (await response.json()) as any;
       // Cloudflare REST API wraps result in { result: ... }
       return json.result !== undefined ? json.result : json;
     }
@@ -257,14 +273,15 @@ export class ImageGeneratorService {
       // Extract image from response (base64 string OR binary)
       const extracted = await this.extractImageResult(result);
       if (!extracted) {
-        return { success: false, error: 'No image in model response' };
+        return { success: false, error: "No image in model response" };
       }
 
       // If base64 format requested, return directly without uploading
       if (returnBase64) {
-        const base64Data = extracted.kind === 'base64'
-          ? this.cleanBase64(extracted.data)
-          : this.arrayBufferToBase64(extracted.data);
+        const base64Data =
+          extracted.kind === "base64"
+            ? cleanBase64(extracted.data)
+            : arrayBufferToBase64(extracted.data);
 
         return {
           success: true,
@@ -274,7 +291,9 @@ export class ImageGeneratorService {
 
       // Upload to R2 storage
       const uploadResult = await this.storage.uploadImage(
-        extracted.kind === 'base64' ? this.cleanBase64(extracted.data) : extracted.data,
+        extracted.kind === "base64"
+          ? cleanBase64(extracted.data)
+          : extracted.data,
         {
           model: model.id,
           prompt: params.prompt,
@@ -314,14 +333,20 @@ export class ImageGeneratorService {
     images: Array<{ url: string; id: string } | { b64_json: string }>;
     error?: string;
   }> {
-    const results: Array<{ url: string; id: string } | { b64_json: string }> = [];
+    const results: Array<{ url: string; id: string } | { b64_json: string }> =
+      [];
 
     for (let i = 0; i < n; i++) {
       const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
-      const result = await this.generateImage(modelId, prompt, {
-        ...explicitParams,
-        seed,
-      }, returnBase64);
+      const result = await this.generateImage(
+        modelId,
+        prompt,
+        {
+          ...explicitParams,
+          seed,
+        },
+        returnBase64
+      );
 
       if (result.success) {
         if (returnBase64 && result.base64Data) {
@@ -329,7 +354,11 @@ export class ImageGeneratorService {
         } else if (result.imageUrl) {
           results.push({ url: result.imageUrl, id: result.imageId! });
         } else {
-          return { success: false, images: results, error: 'No image data returned' };
+          return {
+            success: false,
+            images: results,
+            error: "No image data returned",
+          };
         }
       } else {
         return { success: false, images: results, error: result.error };
@@ -361,11 +390,14 @@ export class ImageGeneratorService {
       return { success: false, error: `Unknown model: ${modelId}` };
     }
 
-    if (!model.supportedTasks.includes('image-to-image')) {
-      return { success: false, error: `Model ${modelId} does not support image-to-image` };
+    if (!model.supportedTasks.includes("image-to-image")) {
+      return {
+        success: false,
+        error: `Model ${modelId} does not support image-to-image`,
+      };
     }
 
-    if (model.editCapabilities?.mask === 'required') {
+    if (model.editCapabilities?.mask === "required") {
       return {
         success: false,
         error: `Model ${modelId} requires a mask; use /v1/images/edits with mask (masked edit).`,
@@ -402,13 +434,14 @@ export class ImageGeneratorService {
 
       const extracted = await this.extractImageResult(result);
       if (!extracted) {
-        return { success: false, error: 'No image in model response' };
+        return { success: false, error: "No image in model response" };
       }
 
       if (returnBase64) {
-        const base64Data = extracted.kind === 'base64'
-          ? this.cleanBase64(extracted.data)
-          : this.arrayBufferToBase64(extracted.data);
+        const base64Data =
+          extracted.kind === "base64"
+            ? cleanBase64(extracted.data)
+            : arrayBufferToBase64(extracted.data);
 
         return {
           success: true,
@@ -417,7 +450,9 @@ export class ImageGeneratorService {
       }
 
       const uploadResult = await this.storage.uploadImage(
-        extracted.kind === 'base64' ? this.cleanBase64(extracted.data) : extracted.data,
+        extracted.kind === "base64"
+          ? cleanBase64(extracted.data)
+          : extracted.data,
         {
           model: model.id,
           prompt: params.prompt,
@@ -455,7 +490,8 @@ export class ImageGeneratorService {
     images: Array<{ url: string; id: string } | { b64_json: string }>;
     error?: string;
   }> {
-    const results: Array<{ url: string; id: string } | { b64_json: string }> = [];
+    const results: Array<{ url: string; id: string } | { b64_json: string }> =
+      [];
 
     for (let i = 0; i < n; i++) {
       const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
@@ -474,7 +510,11 @@ export class ImageGeneratorService {
         } else if (result.imageUrl) {
           results.push({ url: result.imageUrl, id: result.imageId! });
         } else {
-          return { success: false, images: results, error: 'No image data returned' };
+          return {
+            success: false,
+            images: results,
+            error: "No image data returned",
+          };
         }
       } else {
         return { success: false, images: results, error: result.error };
@@ -500,7 +540,8 @@ export class ImageGeneratorService {
     images: Array<{ url: string; id: string } | { b64_json: string }>;
     error?: string;
   }> {
-    const results: Array<{ url: string; id: string } | { b64_json: string }> = [];
+    const results: Array<{ url: string; id: string } | { b64_json: string }> =
+      [];
 
     for (let i = 0; i < n; i++) {
       const seed = explicitParams.seed ? explicitParams.seed + i : undefined;
@@ -519,7 +560,11 @@ export class ImageGeneratorService {
         } else if (result.imageUrl) {
           results.push({ url: result.imageUrl, id: result.imageId! });
         } else {
-          return { success: false, images: results, error: 'No image data returned' };
+          return {
+            success: false,
+            images: results,
+            error: "No image data returned",
+          };
         }
       } else {
         return { success: false, images: results, error: result.error };
@@ -552,7 +597,10 @@ export class ImageGeneratorService {
     }
 
     if (!model.editCapabilities?.mask) {
-      return { success: false, error: `Model ${modelId} does not support mask-based edits` };
+      return {
+        success: false,
+        error: `Model ${modelId} does not support mask-based edits`,
+      };
     }
 
     try {
@@ -569,13 +617,14 @@ export class ImageGeneratorService {
 
       const extracted = await this.extractImageResult(result);
       if (!extracted) {
-        return { success: false, error: 'No image in model response' };
+        return { success: false, error: "No image in model response" };
       }
 
       if (returnBase64) {
-        const base64Data = extracted.kind === 'base64'
-          ? this.cleanBase64(extracted.data)
-          : this.arrayBufferToBase64(extracted.data);
+        const base64Data =
+          extracted.kind === "base64"
+            ? cleanBase64(extracted.data)
+            : arrayBufferToBase64(extracted.data);
 
         return {
           success: true,
@@ -584,7 +633,9 @@ export class ImageGeneratorService {
       }
 
       const uploadResult = await this.storage.uploadImage(
-        extracted.kind === 'base64' ? this.cleanBase64(extracted.data) : extracted.data,
+        extracted.kind === "base64"
+          ? cleanBase64(extracted.data)
+          : extracted.data,
         {
           model: model.id,
           prompt: params.prompt,
@@ -617,7 +668,7 @@ export class ImageGeneratorService {
     provider: string;
     supportedSizes: string[];
     taskTypes: string[];
-    editCapabilities?: ModelConfig['editCapabilities'];
+    editCapabilities?: ModelConfig["editCapabilities"];
   }> {
     const models: Array<{
       id: string;
@@ -626,7 +677,7 @@ export class ImageGeneratorService {
       provider: string;
       supportedSizes: string[];
       taskTypes: string[];
-      editCapabilities?: ModelConfig['editCapabilities'];
+      editCapabilities?: ModelConfig["editCapabilities"];
     }> = [];
 
     for (const [id, config] of this.models) {
@@ -660,24 +711,5 @@ export class ImageGeneratorService {
    */
   async cleanupExpired(): Promise<number> {
     return this.storage.cleanupExpired();
-  }
-
-  /**
-   * Convert base64 string to Uint8Array for multipart form data
-   */
-  private base64ToUint8Array(base64: string): Uint8Array {
-    // Handle data URI prefix
-    const data = base64.replace(/^data:image\/\w+;base64,/, '');
-
-    // Decode base64 to binary string
-    const binaryString = atob(data);
-
-    // Convert to Uint8Array
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    return bytes;
   }
 }
