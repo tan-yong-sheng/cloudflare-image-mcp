@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { handleRunModel, type ToolsContext } from "./mcp-tools.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
-import { fakeEnv, jsonEnvelopeImage } from "../test-utils/fixtures.js";
+import { fakeEnv, stubInference } from "../test-utils/fixtures.js";
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
 const BASE_URL = "https://worker.test";
@@ -20,14 +20,7 @@ afterEach(() => {
 });
 
 function liveContext(): ToolsContext {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () =>
-      Response.json(jsonEnvelopeImage(), {
-        headers: { "Content-Type": "application/json" },
-      })
-    )
-  );
+  stubInference("json");
   return {
     generator: new ImageGeneratorService(
       fakeEnv()

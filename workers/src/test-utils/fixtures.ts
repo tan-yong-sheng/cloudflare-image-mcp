@@ -10,6 +10,8 @@
 // model + responseFormat) rather than editing assertions in place: a new
 // fixture fails loudly, an edited one hides drift.
 
+import { vi } from "vitest";
+
 /** 1x1 red PNG, base64 (no data-URI prefix). */
 export const FIXTURE_PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -41,6 +43,26 @@ export function binaryImageResponse(): Response {
     status: 200,
     headers: { "Content-Type": "image/png" },
   });
+}
+
+/**
+ * Shared fetch-stub adapter: answers every outbound AI call with the
+ * fixture. "json" = base64-envelope models (flux-1-schnell, ...),
+ * "binary" = raw-bytes models (sdxl, ...). Returns the mock so tests
+ * can assert call args. Lives next to the fixtures it serves; the
+ * no-network.ts setup guard still fails any test that forgets to call it.
+ */
+export function stubInference(shape: "json" | "binary" = "json") {
+  const respond =
+    shape === "binary"
+      ? async () => binaryImageResponse()
+      : async () =>
+          Response.json(jsonEnvelopeImage(), {
+            headers: { "Content-Type": "application/json" },
+          });
+  const mock = vi.fn(respond);
+  vi.stubGlobal("fetch", mock);
+  return mock;
 }
 
 /** Minimal in-memory R2Bucket: put/get round-trip, delete/list for cleanup. */

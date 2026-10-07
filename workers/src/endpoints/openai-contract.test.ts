@@ -12,9 +12,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { OpenAIEndpoint } from "./openai-endpoint.js";
 import {
   FIXTURE_PNG_B64,
-  binaryImageResponse,
   fakeEnv,
-  jsonEnvelopeImage,
+  stubInference,
 } from "../test-utils/fixtures.js";
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
@@ -27,25 +26,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Answer every outbound AI call with the fixture (base64 envelope). */
-function stubJsonInference() {
-  const mock = vi.fn(async () =>
-    Response.json(jsonEnvelopeImage(), {
-      headers: { "Content-Type": "application/json" },
-    })
-  );
-  vi.stubGlobal("fetch", mock);
-  return mock;
-}
-
-/** Answer every outbound AI call with the fixture (binary PNG). */
-function stubBinaryInference() {
-  return vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => binaryImageResponse())
-  );
-}
-
 function post(path: string, body: unknown): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
@@ -56,7 +36,7 @@ function post(path: string, body: unknown): Request {
 
 describe("POST /v1/images/generations contract", () => {
   test("minimal params returns created + data with /images/ url", async () => {
-    stubJsonInference();
+    stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -74,7 +54,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("url format returns only url field, never b64_json", async () => {
-    stubJsonInference();
+    stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -100,7 +80,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("b64_json format returns only b64_json field", async () => {
-    stubJsonInference();
+    stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -131,7 +111,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("unknown model returns 500", async () => {
-    stubJsonInference();
+    stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -145,7 +125,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("n above 8 is capped at 8", async () => {
-    const fetchMock = stubJsonInference();
+    const fetchMock = stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -163,7 +143,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("guidance + negative prompt flow through to a url", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -181,7 +161,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("CORS header present on generation response", async () => {
-    stubJsonInference();
+    stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -194,7 +174,7 @@ describe("POST /v1/images/generations contract", () => {
 
 describe("POST /v1/images/edits contract", () => {
   test("JSON image-to-image returns url", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -211,7 +191,7 @@ describe("POST /v1/images/edits contract", () => {
   });
 
   test("multipart image-to-image returns url", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
     const form = new FormData();
     form.append("prompt", "make it sunny");
@@ -232,7 +212,7 @@ describe("POST /v1/images/edits contract", () => {
   });
 
   test("multipart FLUX-2 klein edit returns url", async () => {
-    stubJsonInference();
+    stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
     const form = new FormData();
     form.append("prompt", "make it green");
@@ -253,7 +233,7 @@ describe("POST /v1/images/edits contract", () => {
   });
 
   test("mask-required model without mask returns 500 naming mask", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -270,7 +250,7 @@ describe("POST /v1/images/edits contract", () => {
   });
 
   test("masked inpainting returns url", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
@@ -288,7 +268,7 @@ describe("POST /v1/images/edits contract", () => {
   });
 
   test("size parameter flows through to a url", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     for (const size of ["512x512", "1024x1024"]) {
@@ -320,7 +300,7 @@ describe("POST /v1/images/edits contract", () => {
 
 describe("POST /v1/images/variations contract", () => {
   test("JSON variation returns url", async () => {
-    stubBinaryInference();
+    stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
