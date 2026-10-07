@@ -81,12 +81,17 @@ npx playwright show-report
 
 ### Environment Variables
 
-| Variable        | Description                                   | Default            |
-| --------------- | --------------------------------------------- | ------------------ |
-| `TEST_TARGET`   | Target environment: `staging` or `production` | `staging`          |
-| `TEST_BASE_URL` | Base URL for testing                          | (auto-constructed) |
-| `TEST_TIMEOUT`  | Test timeout in ms                            | `60000`            |
-| `CI`            | Running in CI environment                     | `false`            |
+| Variable        | Description                                                                          | Default            |
+| --------------- | ------------------------------------------------------------------------------------ | ------------------ |
+| `TEST_TARGET`   | Target environment: `staging` or `production`                                        | `staging`          |
+| `TEST_BASE_URL` | Base URL for testing                                                                 | (auto-constructed) |
+| `E2E_TIER`      | Live-test tier: `contract` \| `smoke` \| `canary` \| `slow` (see `e2e/lib/tiers.ts`) | (unset = contract) |
+| `TEST_TIMEOUT`  | Action/navigation budget override only; per-test timeout always comes from the tier  | (tier default)     |
+| `CI`            | Running in CI environment                                                            | `false`            |
+
+Legacy flags (`E2E_SLOW` / `E2E_SMOKE` / `E2E_DRIFT`) still work as a
+fallback, but `E2E_TIER` wins when set — prefer `npm run test:smoke`,
+`test:canary`, `test:slow`.
 
 ### Playwright Configuration
 
@@ -134,6 +139,18 @@ Use tags to categorize tests:
 
 - `@api` - API-focused tests (run in all browsers)
 - `@slow` - Slow tests (may be skipped in quick runs)
+- `@smoke` - Live canaries (subset of `@slow`): run on gated release
+  PRs via `E2E_TIER=smoke` / `npm run test:smoke`, canary tier via
+  `E2E_TIER=canary` / `npm run test:canary` on schedule,
+  everything via `E2E_TIER=slow` / `npm run test:slow` on dispatch
+- `@drift` - Model/SDK drift canaries (subset of `@slow`, weekly
+  schedule only): per-model provider behavior + published-SDK transport
+  that hermetic contract tests cannot prove
+
+Tier → (grep, per-test timeout) lives in `e2e/lib/tiers.ts` — the single
+owner. The workflow selects only the tier _name_ by trigger; spec titles
+keep their `@slow`/`@smoke`/`@drift` tags because Playwright tags live in
+titles.
 
 ### Test Data
 
@@ -189,11 +206,12 @@ E2E results are posted as PR comments:
 
 ### Tests Time Out
 
-Increase timeout:
-
-```bash
-TEST_TIMEOUT=120000 npm test
-```
+`TEST_TIMEOUT` only raises the action/navigation budget — the per-test
+timeout comes from the tier (`e2e/lib/tiers.ts`: 60s contract, 180s any
+live tier). If a live canary times out on a cold worker, the tier budget
+is the knob, not the spec file: do not add per-file `test.setTimeout`
+below the tier value, it masks drift as a timeout (see
+`flux-models.spec.ts` history).
 
 ### Worker Not Responding
 

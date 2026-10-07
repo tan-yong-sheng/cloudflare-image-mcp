@@ -1,10 +1,11 @@
 /**
- * MCP SDK E2E Tests
+ * MCP SDK E2E Tests (contract suite + drift canaries)
  *
- * Uses the official @modelcontextprotocol/client (v2) to test the MCP server.
- * This provides deeper protocol-level validation than raw HTTP tests.
- *
- * Run with: TEST_TARGET=workers npx playwright test tests/api/mcp/mcp-sdk.spec.ts
+ * run_model SHAPE assertions now live hermetically in
+ * workers/src/endpoints/mcp-execution.test.ts. The 2 @slow SDK tests
+ * below stay live as DRIFT canaries: they prove the newest published
+ * SDK still negotiates our transport (a mock cannot catch SDK-side
+ * protocol drift). Everything else in this file is contract (no tag).
  */
 
 import { test, expect } from "@playwright/test";
@@ -188,7 +189,9 @@ test.describe("MCP SDK Integration", () => {
     }
   });
 
-  test("MCP SDK can call run_model tool @slow", async ({ baseURL }) => {
+  // Drift canary (kept): same markdown shape as mcp-execution.test.ts,
+  // but through the real published SDK transport.
+  test("MCP SDK can call run_model tool @slow @drift", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {
@@ -260,7 +263,8 @@ test.describe("MCP SDK Integration", () => {
     }
   });
 
-  test("MCP SDK can generate multiple images @slow", async ({ baseURL }) => {
+  // Drift canary (kept): n=2 through the real published SDK transport.
+  test("MCP SDK can generate multiple images @slow @drift", async ({ baseURL }) => {
     const { client, transport } = await createClient(baseURL!);
 
     try {

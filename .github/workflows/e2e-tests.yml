@@ -1,6 +1,15 @@
 name: E2E Tests
 
 on:
+  # Weekly canary tier (monitor, not gate): contract + @smoke +
+  # @drift (~8 live calls) proving credential chain, model availability,
+  # and SDK transport against the deployed Worker. Provider models change
+  # rarely, so weekly is enough signal. Failures here page the on-call
+  # via the Actions notification, they never block a PR.
+  # The retired 36-test @slow matrix is superseded by the hermetic
+  # contract suite (workers/src/endpoints/openai-contract.test.ts).
+  schedule:
+    - cron: "0 2 * * 1"
   # Manual trigger for testing specific deployments
   workflow_dispatch:
     inputs:
@@ -28,9 +37,14 @@ on:
         default: ""
         type: string
 
-  # Merge gate: full matrix runs on release-integration PRs to main,
-  # where the fast PR check (pr-checks.yml) is insufficient signal.
-  # Feature PRs skip E2E (add the `e2e` label for an opt-in full run).
+  # Merge gate: contract suite + 2 @smoke canaries (1 live generation +
+  # 1 MCP run_model) on release-integration PRs to main, where the fast
+  # PR check (pr-checks.yml) is insufficient signal. The weekly schedule
+  # runs the canary tier only (contract + @smoke + @drift, ~8 live calls)
+  # as a drift monitor; retired shape tests live hermetically in
+  # workers/src/endpoints/openai-contract.test.ts.
+  # Feature PRs skip E2E (add the `e2e` label for an opt-in smoke run:
+  # contract suite + 2 @smoke canaries; full @slow matrix is dispatch-only).
   # Note: no `paths` filter here — it would also filter `labeled`
   # events, silently blocking the opt-in label. Job-level `if` guards
   # below are the real scoping mechanism; non-gated PRs skip in seconds.
@@ -222,24 +236,27 @@ jobs:
       - name: Run E2E tests
         run: |
           cd e2e
-          # Merge-gate PRs (prerelease/*, release/*, `e2e` label) always run
-          # the full matrix: pull_request events cannot set inputs, so an
-          # unset full_matrix on a PR means "gated run", not "caller wants
-          # contract-only". Dispatch/call keep caller control via the input.
+          # Tier semantics live in e2e/lib/tiers.ts (tier → grep+timeout);
+          # the tier NAME comes from E2E_TIER below (selected by trigger).
+          # test_pattern forces slow so @slow targets stay reachable.
           if [ -n "${{ inputs.test_pattern }}" ]; then
-            echo "Running specific test pattern: ${{ inputs.test_pattern }} (with E2E_SLOW=1 so @slow targets are reachable)"
-            E2E_SLOW=1 npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
-          elif [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ inputs.full_matrix }}" = "true" ]; then
-            echo "Running full matrix (E2E_SLOW=1): contract + @slow generation tests"
-            E2E_SLOW=1 npx playwright test --reporter=list,junit,html
+            echo "Running specific test pattern: ${{ inputs.test_pattern }} (forced slow tier so @slow targets are reachable)"
+            npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
           else
-            echo "Running fast contract tests (@slow generation tests skipped; use full_matrix to include)"
+            echo "Running E2E tier: $E2E_TIER"
             npx playwright test --reporter=list,junit,html
           fi
         env:
-          # E2E_SLOW=1 opts into @slow generation tests; default (unset)
-          # runs the fast contract suite. Set by the full_matrix input.
+          # Sole trigger→tier selection: schedule = canary (~8 live calls,
+          # monitor-only); gated PR = smoke (contract + 2 @smoke, ~2 live
+          # calls — PRs can't set inputs, so unset full_matrix on a PR means
+          # "gated run"); full_matrix input = slow (dispatch/call only);
+          # default = contract (0 live calls). Grep+timeout come from
+          # e2e/lib/tiers.ts.
+          E2E_TIER: ${{ inputs.test_pattern != '' && 'slow' || github.event_name == 'schedule' && 'canary' || github.event_name == 'pull_request' && 'smoke' || inputs.full_matrix && 'slow' || 'contract' }}
           E2E_SLOW: ${{ inputs.full_matrix && '1' || '' }}
+          E2E_SMOKE: ${{ (github.event_name == 'pull_request' || github.event_name == 'schedule') && '1' || '' }}
+          E2E_DRIFT: ${{ github.event_name == 'schedule' && '1' || '' }}
           # NOTE: TEST_BASE_URL is derived at runtime via $GITHUB_ENV.
           # Do not override it here with ${{ env.TEST_BASE_URL }} (expressions are evaluated before runtime env updates).
           API_KEY: ${{ env.API_KEY_EFFECTIVE }}
