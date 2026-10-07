@@ -3,27 +3,40 @@
 // Implements /v1/images/generations, /v1/images/edits, /v1/images/variations
 // ============================================================================
 
-import type {
-  Env,
-  OpenAIGenerationRequest,
-  OpenAIEditRequest,
-  OpenAIVariationRequest,
-  OpenAIImageResponse,
-} from "../types.js";
+import type { Env, OpenAIImageResponse } from "../types.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
-import { arrayBufferToBase64 } from "../utils/encoding.js";
 import { corsHeaders } from "../utils/cors.js";
+import {
+  buildImageResponse,
+  collectInputImages,
+  type CollectConfig,
+} from "../utils/image-request.js";
 
-/**
- * Read a File/Blob from FormData and convert to base64 string
- */
-async function fileToBase64(
-  file: File | Blob | null
-): Promise<string | undefined> {
-  if (!file) return undefined;
-  const arrayBuffer = await file.arrayBuffer();
-  return arrayBufferToBase64(arrayBuffer);
-}
+// Per-route input configs: which CF params to extract and which defaults
+// apply. Handlers keep routing only; gathering lives in the shared module.
+const GENERATIONS_CONFIG: CollectConfig = {
+  defaultModel: "@cf/black-forest-labs/flux-1-schnell",
+  params: ["size", "steps", "seed", "guidance", "negative_prompt"],
+  imageKeys: [],
+  includePrompt: true,
+};
+
+const EDITS_CONFIG: CollectConfig = {
+  defaultModel: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+  params: ["size", "steps", "seed", "guidance", "negative_prompt", "strength"],
+  imageKeys: ["image", "image_b64"],
+  maskKeys: ["mask", "mask_b64"],
+  includeMask: true,
+  includePrompt: true,
+};
+
+const VARIATIONS_CONFIG: CollectConfig = {
+  defaultModel: "@cf/black-forest-labs/flux-2-klein-4b",
+  params: ["size", "steps", "seed", "strength"],
+  imageKeys: ["image"],
+  // Default strength for variations (more faithful to original)
+  defaults: { strength: 0.7 },
+};
 
 export class OpenAIEndpoint {
   private generator: ImageGeneratorService;
@@ -81,11 +94,11 @@ export class OpenAIEndpoint {
    * Text-to-image generation (OpenAI-compatible)
    */
   private async handleGenerations(request: Request): Promise<Response> {
-    const body = await request.json();
-    const req = body as OpenAIGenerationRequest;
+    const { prompt, modelId, n, returnBase64, explicitParams } =
+      await collectInputImages(request, GENERATIONS_CONFIG);
 
     // Validate required fields
-    if (!req.prompt) {
+    if (!prompt) {
       return new Response(
         JSON.stringify({
           error: {
@@ -102,25 +115,12 @@ export class OpenAIEndpoint {
       );
     }
 
-    // Use model ID directly (full model ID required)
-    const modelId = req.model || "@cf/black-forest-labs/flux-1-schnell";
-    const n = req.n || 1;
-
-    // Determine if we should return base64 or url
-    const returnBase64 = req.response_format === "b64_json";
-
     // Generate images
     const result = await this.generator.generateImages(
       modelId,
-      req.prompt,
+      prompt,
       Math.min(n, 8), // Cap at 8 images
-      {
-        size: req.size,
-        steps: (req as any).steps,
-        seed: (req as any).seed,
-        guidance: (req as any).guidance,
-        negative_prompt: (req as any).negative_prompt,
-      },
+      explicitParams,
       returnBase64
     );
 
@@ -137,27 +137,10 @@ export class OpenAIEndpoint {
     }
 
     // Build response based on response_format
-    // OpenAI spec: return only the requested format field (url OR b64_json), no revised_prompt
-    let responseData;
-    if (req.response_format === "b64_json") {
-      responseData = result.images.map((img) => ({
-        b64_json: "b64_json" in img ? img.b64_json : "",
-      }));
-    } else {
-      const origin = new URL(request.url).origin;
-      responseData = result.images.map((img) => {
-        const url = "url" in img ? img.url : "";
-        const absoluteUrl = url.startsWith("/")
-          ? new URL(url, origin).toString()
-          : url;
-        return { url: absoluteUrl };
-      });
-    }
-
-    const response: OpenAIImageResponse = {
-      created: Math.floor(Date.now() / 1000),
-      data: responseData,
-    };
+    const response: OpenAIImageResponse = buildImageResponse(result.images, {
+      returnBase64,
+      origin: new URL(request.url).origin,
+    });
 
     return new Response(JSON.stringify(response), {
       headers: { ...this.corsHeaders, "Content-Type": "application/json" },
@@ -170,93 +153,15 @@ export class OpenAIEndpoint {
    * Supports --key=value params embedded in prompt for CF-specific params
    */
   private async handleEdits(request: Request): Promise<Response> {
-    const contentType = request.headers.get("content-type") || "";
-
-    let imageDataArr: string[] = [];
-    let maskData: string | undefined;
-    let prompt: string;
-    let modelId: string;
-    let n: number;
-    let returnBase64 = false;
-
-    // Collect only explicitly-provided params (undefined = not provided,
-    // so --key=value in prompt can fill gaps via ParamParser)
-    const explicitParams: Record<string, any> = {};
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-
-      // Support both single "image" and array "image[]" fields (OpenAI style)
-      const allEntries = formData.getAll("image") as (File | string)[];
-      const arrayEntries = formData.getAll("image[]") as (File | string)[];
-      const imageEntries = [...allEntries, ...arrayEntries];
-
-      for (const entry of imageEntries) {
-        if (entry instanceof File) {
-          const b64 = await fileToBase64(entry);
-          if (b64) imageDataArr.push(b64);
-        } else if (typeof entry === "string" && entry.length > 0) {
-          imageDataArr.push(entry);
-        }
-      }
-
-      const maskFile = formData.get("mask") as File | null;
-      maskData = await fileToBase64(maskFile);
-
-      prompt = formData.get("prompt") as string;
-      modelId =
-        (formData.get("model") as string) ||
-        "@cf/stabilityai/stable-diffusion-xl-base-1.0";
-      n = parseInt(formData.get("n") as string) || 1;
-      returnBase64 = formData.get("response_format") === "b64_json";
-
-      // Extract optional CF-specific params from form data (only if provided)
-      const sizeVal = formData.get("size") as string | null;
-      if (sizeVal) explicitParams.size = sizeVal;
-
-      const stepsVal = formData.get("steps") as string | null;
-      if (stepsVal) explicitParams.steps = parseInt(stepsVal);
-
-      const seedVal = formData.get("seed") as string | null;
-      if (seedVal) explicitParams.seed = parseInt(seedVal);
-
-      const guidanceVal = formData.get("guidance") as string | null;
-      if (guidanceVal) explicitParams.guidance = parseFloat(guidanceVal);
-
-      const negPromptVal = formData.get("negative_prompt") as string | null;
-      if (negPromptVal) explicitParams.negative_prompt = negPromptVal;
-
-      const strengthVal = formData.get("strength") as string | null;
-      if (strengthVal) explicitParams.strength = parseFloat(strengthVal);
-    } else {
-      const body = await request.json();
-      const req = body as OpenAIEditRequest;
-
-      // Support single image string or array of images
-      const rawImage = (req as any).image ?? (req as any).image_b64;
-      if (Array.isArray(rawImage)) {
-        imageDataArr = rawImage.filter(
-          (img: any) => typeof img === "string" && img.length > 0
-        );
-      } else if (typeof rawImage === "string" && rawImage.length > 0) {
-        imageDataArr = [rawImage];
-      }
-
-      maskData = (req as any).mask ?? (req as any).mask_b64;
-      prompt = req.prompt;
-      modelId = req.model || "@cf/stabilityai/stable-diffusion-xl-base-1.0";
-      n = req.n || 1;
-      returnBase64 = req.response_format === "b64_json";
-
-      // Extract optional CF-specific params from JSON body (only if provided)
-      if (req.size !== undefined) explicitParams.size = req.size;
-      if (req.steps !== undefined) explicitParams.steps = req.steps;
-      if (req.seed !== undefined) explicitParams.seed = req.seed;
-      if (req.guidance !== undefined) explicitParams.guidance = req.guidance;
-      if (req.negative_prompt !== undefined)
-        explicitParams.negative_prompt = req.negative_prompt;
-      if (req.strength !== undefined) explicitParams.strength = req.strength;
-    }
+    const {
+      imageDataArr,
+      maskData,
+      prompt,
+      modelId,
+      n,
+      returnBase64,
+      explicitParams,
+    } = await collectInputImages(request, EDITS_CONFIG);
 
     if (imageDataArr.length === 0 || !prompt) {
       return new Response(
@@ -315,26 +220,10 @@ export class OpenAIEndpoint {
     }
 
     // Build OpenAI-compatible response (same pattern as handleGenerations)
-    let responseData;
-    if (returnBase64) {
-      responseData = result.images.map((img) => ({
-        b64_json: "b64_json" in img ? img.b64_json : "",
-      }));
-    } else {
-      const origin = new URL(request.url).origin;
-      responseData = result.images.map((img) => {
-        const url = "url" in img ? img.url : "";
-        const absoluteUrl = url.startsWith("/")
-          ? new URL(url, origin).toString()
-          : url;
-        return { url: absoluteUrl };
-      });
-    }
-
-    const response: OpenAIImageResponse = {
-      created: Math.floor(Date.now() / 1000),
-      data: responseData,
-    };
+    const response: OpenAIImageResponse = buildImageResponse(result.images, {
+      returnBase64,
+      origin: new URL(request.url).origin,
+    });
 
     return new Response(JSON.stringify(response), {
       headers: { ...this.corsHeaders, "Content-Type": "application/json" },
@@ -347,73 +236,8 @@ export class OpenAIEndpoint {
    * Supports --key=value params embedded in prompt for CF-specific params
    */
   private async handleVariations(request: Request): Promise<Response> {
-    const contentType = request.headers.get("content-type") || "";
-
-    let imageDataArr: string[] = [];
-    let modelId: string;
-    let n: number;
-    let returnBase64 = false;
-    const explicitParams: Record<string, any> = {};
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-
-      // Support both single "image" and array "image[]" fields
-      const allEntries = formData.getAll("image") as (File | string)[];
-      const arrayEntries = formData.getAll("image[]") as (File | string)[];
-      const imageEntries = [...allEntries, ...arrayEntries];
-
-      for (const entry of imageEntries) {
-        if (entry instanceof File) {
-          const b64 = await fileToBase64(entry);
-          if (b64) imageDataArr.push(b64);
-        } else if (typeof entry === "string" && entry.length > 0) {
-          imageDataArr.push(entry);
-        }
-      }
-
-      modelId =
-        (formData.get("model") as string) ||
-        "@cf/black-forest-labs/flux-2-klein-4b";
-      n = parseInt(formData.get("n") as string) || 1;
-      returnBase64 = formData.get("response_format") === "b64_json";
-
-      const sizeVal = formData.get("size") as string | null;
-      if (sizeVal) explicitParams.size = sizeVal;
-
-      const stepsVal = formData.get("steps") as string | null;
-      if (stepsVal) explicitParams.steps = parseInt(stepsVal);
-
-      const seedVal = formData.get("seed") as string | null;
-      if (seedVal) explicitParams.seed = parseInt(seedVal);
-
-      const strengthVal = formData.get("strength") as string | null;
-      if (strengthVal) explicitParams.strength = parseFloat(strengthVal);
-    } else {
-      const body = await request.json();
-      const req = body as OpenAIVariationRequest;
-
-      const rawImage = req.image;
-      if (Array.isArray(rawImage)) {
-        imageDataArr = rawImage.filter(
-          (img: any) => typeof img === "string" && img.length > 0
-        );
-      } else if (typeof rawImage === "string" && rawImage.length > 0) {
-        imageDataArr = [rawImage];
-      }
-
-      modelId = req.model || "@cf/black-forest-labs/flux-2-klein-4b";
-      n = req.n || 1;
-      returnBase64 = req.response_format === "b64_json";
-
-      if (req.size !== undefined) explicitParams.size = req.size;
-      if ((req as any).steps !== undefined)
-        explicitParams.steps = (req as any).steps;
-      if ((req as any).seed !== undefined)
-        explicitParams.seed = (req as any).seed;
-      if ((req as any).strength !== undefined)
-        explicitParams.strength = (req as any).strength;
-    }
+    const { imageDataArr, modelId, n, returnBase64, explicitParams } =
+      await collectInputImages(request, VARIATIONS_CONFIG);
 
     if (imageDataArr.length === 0) {
       return new Response(
@@ -431,11 +255,6 @@ export class OpenAIEndpoint {
     }
 
     const count = Math.min(n, 8);
-
-    // Default strength for variations (more faithful to original)
-    if (explicitParams.strength === undefined) {
-      explicitParams.strength = 0.7;
-    }
 
     const imageInput =
       imageDataArr.length === 1 ? imageDataArr[0] : imageDataArr;
@@ -461,26 +280,10 @@ export class OpenAIEndpoint {
     }
 
     // Build OpenAI-compatible response
-    let responseData;
-    if (returnBase64) {
-      responseData = result.images.map((img) => ({
-        b64_json: "b64_json" in img ? img.b64_json : "",
-      }));
-    } else {
-      const origin = new URL(request.url).origin;
-      responseData = result.images.map((img) => {
-        const url = "url" in img ? img.url : "";
-        const absoluteUrl = url.startsWith("/")
-          ? new URL(url, origin).toString()
-          : url;
-        return { url: absoluteUrl };
-      });
-    }
-
-    const response: OpenAIImageResponse = {
-      created: Math.floor(Date.now() / 1000),
-      data: responseData,
-    };
+    const response: OpenAIImageResponse = buildImageResponse(result.images, {
+      returnBase64,
+      origin: new URL(request.url).origin,
+    });
 
     return new Response(JSON.stringify(response), {
       headers: { ...this.corsHeaders, "Content-Type": "application/json" },
