@@ -2,46 +2,6 @@
 // Types for Cloudflare Image Generation Workers
 // ============================================================================
 
-// OpenAI-compatible image generation request
-export interface OpenAIGenerationRequest {
-  model: string;
-  prompt: string;
-  n?: number;
-  size?: string;
-  quality?: 'standard' | 'hd';
-  style?: 'vivid' | 'natural';
-  response_format?: 'url' | 'b64_json';
-  user?: string;
-}
-
-// OpenAI-compatible image edit request
-export interface OpenAIEditRequest {
-  model: string;
-  image: string | string[]; // base64 or URL, or array for multi-image (FLUX 2)
-  mask?: string; // base64 or URL
-  prompt: string;
-  n?: number;
-  size?: string;
-  response_format?: 'url' | 'b64_json';
-  user?: string;
-  // Cloudflare-specific extensions (also extractable via --key=value in prompt)
-  steps?: number;
-  seed?: number;
-  guidance?: number;
-  negative_prompt?: string;
-  strength?: number;
-}
-
-// OpenAI-compatible image variation request
-export interface OpenAIVariationRequest {
-  model: string;
-  image: string; // base64 or URL
-  n?: number;
-  size?: string;
-  response_format?: 'url' | 'b64_json';
-  user?: string;
-}
-
 // OpenAI-compatible response
 export interface OpenAIImageResponse {
   created: number;
@@ -52,11 +12,6 @@ export interface OpenAIImageResponse {
   }>;
 }
 
-// Cloudflare AI response
-export interface CFImageResponse {
-  image: string; // base64 encoded
-}
-
 // Model configuration from models.json
 export interface ModelConfig {
   id: string;
@@ -64,11 +19,11 @@ export interface ModelConfig {
   description: string;
   provider: string;
   apiVersion: number;
-  inputFormat: 'json' | 'multipart';
-  responseFormat: 'base64' | 'binary';
-  supportedTasks: ('text-to-image' | 'image-to-image')[];
+  inputFormat: "json" | "multipart";
+  responseFormat: "base64" | "binary";
+  supportedTasks: ("text-to-image" | "image-to-image")[];
   editCapabilities?: {
-    mask?: 'supported' | 'required';
+    mask?: "supported" | "required";
   };
   maxInputImages?: number; // Max input images for multi-reference (e.g. FLUX 2 supports up to 4)
   parameters: Record<string, ParamConfig>;
@@ -86,7 +41,7 @@ export interface ModelConfig {
 
 export interface ParamConfig {
   cfParam: string;
-  type: 'string' | 'number' | 'integer' | 'boolean';
+  type: "string" | "number" | "integer" | "boolean";
   required?: boolean;
   default?: any;
   min?: number;
@@ -146,21 +101,4 @@ export interface Env {
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
   TZ?: string; // Timezone for logging and folder creation (default: UTC)
-}
-
-// MCP message types
-export interface MCPMessage {
-  jsonrpc: '2.0';
-  id: number | string;
-  method: string;
-  params?: Record<string, any>;
-}
-
-// List models response
-export interface ModelListItem {
-  id: string;
-  name: string;
-  description: string;
-  capabilities: string[];
-  task_types: string[];
 }

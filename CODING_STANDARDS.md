@@ -7,34 +7,36 @@ steps see `CONTRIB.md`. For deployment secrets see
 ## Error envelopes (per surface — do not mix)
 
 - **OpenAI REST**: `{ error: { message, type, param?, code: null } }`.
-  400 missing prompt (`endpoints/openai-endpoint.ts:97-107`,
-  `type:'invalid_request_error'`); 400 edits missing input (`:257-262`);
-  500 service failure (`:283-284`, `:410-411`, `type:'api_error'`);
-  catch-all helper `errorResponse` (`:484-495`).
-- **Worker top level** (`index.ts:140-153`): 404 `{ error:'Not found' }`;
-  500 `{ error:'Internal server error', message }`. Image proxy is the only
-  plain-text exception (`'Image not found'` / `'Error fetching image'`,
-  `index.ts:~126-138`).
+  400 missing prompt (`endpoints/openai-endpoint.ts`,
+  `type:'invalid_request_error'`); 400 edits/variations missing input;
+  400 malformed JSON body; 500 service failure (`type:'api_error'`);
+  catch-all helper `errorResponse`.
+- **Worker top level** (`index.ts`): 404 uses the OpenAI error envelope
+  (`{ error:{message,type:'invalid_request_error',code:null} }` — the router
+  serves `/v1/*`); 500 `{ error:'Internal server error', message }`.
+  Image proxy is the only plain-text exception (`'Image not found'` /
+  `'Error fetching image'`).
 - **Auth**: 401 `{ error:'Unauthorized', message }` +
   `WWW-Authenticate: Bearer` (`middleware/auth.ts`).
 - **MCP/JSON-RPC**: always HTTP 200 with
   `{ jsonrpc:'2.0', id, error:{code,message} }`
-  (`endpoints/mcp-endpoint.ts:194,203,280,299-305`).
+  (transport failures in `endpoints/mcp-sdk-server.ts`).
 - Message extraction everywhere:
-  `error instanceof Error ? error.message : String(error)`
-  (`openai-endpoint.ts:485`, `index.ts:149`).
-- Known inconsistency (standardize when touching):
-  `openai-endpoint.ts:78` and `mcp-endpoint.ts:95` return bare
-  `{ error:'Not found' }` instead of their surface's wrapped shape.
+  `error instanceof Error ? error.message : String(error)`.
 
-## Auth idiom (`middleware/auth.ts`, wired in `index.ts:32-38`)
+## Auth idiom (`middleware/auth.ts`, wired in `index.ts`)
 
 ```ts
 if (requiresAuth(path, request.method)) {
   const r = authenticateRequest(request, env);
-  if (!r.authenticated) return createUnauthorizedResponse(r.error);
+  if (!r.authenticated)
+    return withCors(createUnauthorizedResponse(r.error, request));
 }
 ```
+
+No wrapper: route-level `requiresAuth` + `authenticateRequest` inline is
+the only pattern (the old `withAuth` higher-order wrapper was deleted
+as unused).
 
 Open-by-default: no `env.API_KEYS` → authenticated. Otherwise
 `Authorization: Bearer <token>` split-and-compare against
@@ -43,10 +45,10 @@ Public: `OPTIONS` always; exact `/`, `/index.html`, `/health`;
 prefix `/images/`; exact `/api/internal/models`. Everything else
 requires auth when `API_KEYS` is set.
 
-## Validation idiom (hand-rolled — no zod at runtime)
+## Validation idiom (hand-rolled — zod only for MCP tool schemas)
 
-`zod` is in `workers/package.json` but has zero runtime imports in
-`workers/src`. Do not cite it as convention (use-or-remove is open).
+`zod` is used only by the MCP tool schemas (`endpoints/mcp-schemas.ts`)
+for SDK inputSchema declarations. OpenAI request validation is hand-rolled.
 Use `ParamParser.parse(input, explicitParams, modelConfig)`
 (`services/param-parser.ts:22-`): object→`parseObject`,
 string→`parseString` (`--key=value`, regex at `:47`); merge

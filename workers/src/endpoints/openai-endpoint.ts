@@ -60,15 +60,16 @@ export class OpenAIEndpoint {
     }
 
     try {
-      // Route to handler
+      // Route to handler. Awaited (not bare-returned) so handler
+      // rejections — e.g. malformed JSON bodies — land in the catch below.
       if (path === "/v1/images/generations" && request.method === "POST") {
-        return this.handleGenerations(request);
+        return await this.handleGenerations(request);
       }
       if (path === "/v1/images/edits" && request.method === "POST") {
-        return this.handleEdits(request);
+        return await this.handleEdits(request);
       }
       if (path === "/v1/images/variations" && request.method === "POST") {
-        return this.handleVariations(request);
+        return await this.handleVariations(request);
       }
       if (path === "/v1/models" && request.method === "GET") {
         return this.handleListModels();
@@ -80,13 +81,54 @@ export class OpenAIEndpoint {
         return this.handleDescribeModel(modelId);
       }
 
-      return new Response(JSON.stringify({ error: "Not found" }), {
-        status: 404,
-        headers: { ...this.corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: "Not found",
+            type: "invalid_request_error",
+            code: null,
+          },
+        }),
+        {
+          status: 404,
+          headers: {
+            ...this.corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
     } catch (error) {
+      // Malformed JSON bodies surface here (request.json() rejects
+      // inside collectInputImages): a bad request, not a service failure.
+      if (this.isMalformedJsonError(error)) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: "Invalid JSON in request body",
+              type: "invalid_request_error",
+              code: null,
+            },
+          }),
+          {
+            status: 400,
+            headers: {
+              ...this.corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
       return this.errorResponse(error);
     }
+  }
+
+  /**
+   * request.json() rejects with a SyntaxError when the body is not valid
+   * JSON. The handle try-block only wraps routing plus input collection,
+   * so a SyntaxError surfacing here can only come from body parsing.
+   */
+  private isMalformedJsonError(error: unknown): boolean {
+    return error instanceof SyntaxError;
   }
 
   /**

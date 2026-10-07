@@ -55,28 +55,55 @@ export class RestAITransport implements AITransport {
     this.credentialSource = credentialSource;
   }
 
-  /**
-   * Pick a random AI account for load distribution
-   */
-  private pickAccount(): { account: AIAccount; index: number } {
-    const index = Math.floor(Math.random() * this.aiAccounts.length);
-    return { account: this.aiAccounts[index], index };
-  }
-
   async run(
     modelId: string,
     payload: Record<string, any>,
     model: ModelConfig,
     images?: string[]
   ): Promise<unknown> {
-    const { account, index } = this.pickAccount();
-    // Credential source tag for observability (never a secret value).
-    const credentialTag =
-      this.credentialSource === "AI_ACCOUNTS"
-        ? `AI_ACCOUNTS[${index}]`
-        : "fallback deploy credential";
-    const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
+    // Failover: try each configured account in turn (starting at a random
+    // offset for load distribution); only the last failure is thrown.
+    const start = Math.floor(Math.random() * this.aiAccounts.length);
+    let lastError: unknown = null;
 
+    for (let attempt = 0; attempt < this.aiAccounts.length; attempt++) {
+      const index = (start + attempt) % this.aiAccounts.length;
+      const account = this.aiAccounts[index];
+      // Credential source tag for observability (never a secret value).
+      const credentialTag =
+        this.credentialSource === "AI_ACCOUNTS"
+          ? `AI_ACCOUNTS[${index}]`
+          : "fallback deploy credential";
+      const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
+
+      try {
+        return await this.runWithAccount(
+          url,
+          account,
+          credentialTag,
+          payload,
+          model,
+          images
+        );
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `AI request failed [credential: ${credentialTag}], trying next account (${attempt + 1}/${this.aiAccounts.length})`
+        );
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async runWithAccount(
+    url: string,
+    account: AIAccount,
+    credentialTag: string,
+    payload: Record<string, any>,
+    model: ModelConfig,
+    images?: string[]
+  ): Promise<unknown> {
     let response: Response;
 
     if (model.inputFormat === "multipart") {

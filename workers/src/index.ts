@@ -169,11 +169,20 @@ export default {
         }
       }
 
-      // 404 for unknown routes
-      return new Response(JSON.stringify({ error: "Not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // 404 for unknown routes (OpenAI error envelope: router serves /v1/*)
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: "Not found",
+            type: "invalid_request_error",
+            code: null,
+          },
+        }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     } catch (error) {
       console.error("Worker error:", error);
       return new Response(
