@@ -66,9 +66,9 @@ export default defineConfig({
         ? /^(?!.*@smoke).*@slow/
         : /@slow/,
 
-  // Generous per-test timeout: slow runs need it for cold workers,
-  // fast runs are unaffected (their tests finish in ms).
-  timeout: runSlow ? 180000 : 60000,
+  // Generous per-test timeout: any live tier (slow/smoke/drift) needs it
+  // for cold workers; fast runs are unaffected (their tests finish in ms).
+  timeout: runSlow || runSmoke || runDrift ? 180000 : 60000,
 
   // Opt out of parallel tests on CI (resource intensive image generation)
   workers: process.env.CI ? 1 : undefined,

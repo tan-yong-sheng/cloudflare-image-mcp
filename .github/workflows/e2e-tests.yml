@@ -43,7 +43,8 @@ on:
   # runs the canary tier only (contract + @smoke + @drift, ~8 live calls)
   # as a drift monitor; retired shape tests live hermetically in
   # workers/src/endpoints/openai-contract.test.ts.
-  # Feature PRs skip E2E (add the `e2e` label for an opt-in full run).
+  # Feature PRs skip E2E (add the `e2e` label for an opt-in smoke run:
+  # contract suite + 2 @smoke canaries; full @slow matrix is dispatch-only).
   # Note: no `paths` filter here — it would also filter `labeled`
   # events, silently blocking the opt-in label. Job-level `if` guards
   # below are the real scoping mechanism; non-gated PRs skip in seconds.

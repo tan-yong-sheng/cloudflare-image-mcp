@@ -14,8 +14,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     testTimeout: 10000,
     hookTimeout: 10000,
-    // Fail loudly on any real network: contract tests must stay hermetic.
-    // (fetch is stubbed per-test; an unstubbed call surfaces here, not
-    // as a silent live inference charge.)
+    // Fail loudly on any real network: no-network.ts installs a throwing
+    // fetch before each test, so an unstubbed call surfaces here, not
+    // as a silent live inference charge. Per-test stubs override it.
+    setupFiles: ["./src/test-utils/no-network.ts"],
   },
 });
