@@ -1,9 +1,9 @@
 // ============================================================================
-// R2 Storage Service - Upload, retrieve, and manage generated images
+// R2 Storage Service - Upload, resolve, and clean up generated images
 // Auto-delete after configured expiry period
 // ============================================================================
 
-import type { Env, ImageMetadata } from '../types.js';
+import type { Env, ImageMetadata } from "../types.js";
 
 export class R2StorageService {
   private bucket: R2Bucket;
@@ -12,17 +12,17 @@ export class R2StorageService {
 
   constructor(env: Env) {
     this.bucket = env.IMAGE_BUCKET;
-    this.expiryHours = parseInt(env.IMAGE_EXPIRY_HOURS || '24', 10);
+    this.expiryHours = parseInt(env.IMAGE_EXPIRY_HOURS || "24", 10);
     // Default to UTC if TZ is not set
-    this.timezone = env.TZ || 'UTC';
+    this.timezone = env.TZ || "UTC";
   }
 
   /**
-   * Upload generated image to R2
+   * Upload generated image to R2. Returns its id, URL, and expiry.
    */
   async uploadImage(
     imageData: string | ArrayBuffer,
-    metadata: Omit<ImageMetadata, 'id' | 'expiresAt' | 'createdAt'>
+    metadata: Omit<ImageMetadata, "id" | "expiresAt" | "createdAt">
   ): Promise<{ id: string; url: string; expiresAt: number }> {
     const id = this.generateId();
     const timestamp = Date.now();
@@ -37,10 +37,10 @@ export class R2StorageService {
 
     // Convert base64 to ArrayBuffer if needed
     let body: ArrayBuffer;
-    if (typeof imageData === 'string') {
+    if (typeof imageData === "string") {
       // Check if it's a data URI
-      if (imageData.startsWith('data:')) {
-        const base64 = imageData.split(',')[1];
+      if (imageData.startsWith("data:")) {
+        const base64 = imageData.split(",")[1];
         body = this.base64ToArrayBuffer(base64);
       } else {
         body = this.base64ToArrayBuffer(imageData);
@@ -56,7 +56,7 @@ export class R2StorageService {
     // Upload to R2
     await this.bucket.put(key, body, {
       httpMetadata: {
-        contentType: 'image/png',
+        contentType: "image/png",
         cacheControl: `public, max-age=${this.expiryHours * 3600}`,
       },
       customMetadata: {
@@ -74,16 +74,21 @@ export class R2StorageService {
   }
 
   /**
-   * Retrieve image metadata
+   * Resolve one image by exact id. The id is the full key suffix
+   * (images/<date>/<id>.png); substring matches never resolve.
    */
-  async getImage(id: string): Promise<{ metadata: ImageMetadata; data: ArrayBuffer } | null> {
+  async resolveImage(
+    id: string
+  ): Promise<{ metadata: ImageMetadata; data: ArrayBuffer } | null> {
     // Search for the image (note: in production, you'd want an index)
     const listed = await this.bucket.list({
-      prefix: 'images/',
+      prefix: "images/",
       limit: 100,
     });
 
-    const matchingObject = listed.objects.find((obj) => obj.key.includes(id));
+    const matchingObject = listed.objects.find(
+      (obj) => this.extractIdFromKey(obj.key) === id
+    );
     if (!matchingObject) {
       return null;
     }
@@ -110,7 +115,8 @@ export class R2StorageService {
   }
 
   /**
-   * Delete expired images
+   * Delete expired images. Objects with missing or invalid expiry
+   * timestamps are skipped so corrupt metadata cannot delete live data.
    */
   async cleanupExpired(): Promise<number> {
     const now = Date.now();
@@ -119,7 +125,7 @@ export class R2StorageService {
 
     do {
       const listOptions: R2ListOptions = {
-        prefix: 'images/',
+        prefix: "images/",
         limit: 1000,
       };
       if (cursor) {
@@ -134,6 +140,11 @@ export class R2StorageService {
         const custom = obj.customMetadata || {};
         const expiresAt = parseInt(custom.expiresAt, 10);
 
+        // Guard: missing or unparseable expiry is kept, never deleted.
+        if (Number.isNaN(expiresAt)) {
+          continue;
+        }
+
         if (expiresAt < now) {
           expiredKeys.push(obj.key);
         }
@@ -145,7 +156,7 @@ export class R2StorageService {
       }
 
       // Handle cursor for truncated results
-      if (listed.truncated && 'cursor' in listed) {
+      if (listed.truncated && "cursor" in listed) {
         cursor = (listed as any).cursor;
       } else {
         cursor = undefined;
@@ -153,115 +164,6 @@ export class R2StorageService {
     } while (cursor !== undefined);
 
     return deleted;
-  }
-
-  /**
-   * List all images (with pagination)
-   */
-  async listImages(options: { limit?: number; prefix?: string } = {}): Promise<{
-    images: Array<{ id: string; url: string; createdAt: number; expiresAt: number }>;
-    truncated: boolean;
-    cursor?: string;
-  }> {
-    const listOptions: R2ListOptions = {
-      prefix: options.prefix || 'images/',
-      limit: options.limit || 100,
-    };
-
-    const listed = await this.bucket.list(listOptions);
-
-    const images = listed.objects.map((obj) => {
-      const custom = obj.customMetadata || {};
-      const id = this.extractIdFromKey(obj.key);
-
-      // Generate URL - use worker proxy URL
-      const url = `/${obj.key}`;
-
-      return {
-        id,
-        url,
-        createdAt: parseInt(custom.createdAt, 10),
-        expiresAt: parseInt(custom.expiresAt, 10),
-      };
-    });
-
-    // Handle cursor for truncated results
-    let cursor: string | undefined = undefined;
-    if (listed.truncated && 'cursor' in listed) {
-      cursor = (listed as any).cursor;
-    }
-
-    return {
-      images,
-      truncated: listed.truncated,
-      cursor,
-    };
-  }
-
-  /**
-   * Delete a specific image
-   */
-  async deleteImage(id: string): Promise<boolean> {
-    const listed = await this.bucket.list({
-      prefix: 'images/',
-      limit: 100,
-    });
-
-    const matchingObject = listed.objects.find((obj) => obj.key.includes(id));
-    if (!matchingObject) {
-      return false;
-    }
-
-    await this.bucket.delete(matchingObject.key);
-    return true;
-  }
-
-  /**
-   * Get storage statistics
-   */
-  async getStats(): Promise<{
-    totalImages: number;
-    totalSize: number;
-    oldestImage?: number;
-    newestImage?: number;
-  }> {
-    let total = 0;
-    let size = 0;
-    let oldest: number | undefined;
-    let newest: number | undefined;
-    let cursor: string | undefined = undefined;
-
-    do {
-      const listOptions: R2ListOptions = {
-        prefix: 'images/',
-        limit: 1000,
-      };
-      if (cursor) {
-        listOptions.cursor = cursor;
-      }
-
-      const listed = await this.bucket.list(listOptions);
-
-      for (const obj of listed.objects) {
-        total++;
-        size += obj.size;
-
-        const custom = obj.customMetadata || {};
-        const createdAt = parseInt(custom.createdAt, 10);
-
-        if (!oldest || createdAt < oldest) oldest = createdAt;
-        if (!newest || createdAt > newest) newest = createdAt;
-      }
-
-      // Handle cursor for truncated results
-      if (listed.truncated && 'cursor' in listed) {
-        cursor = (listed as any).cursor;
-      } else {
-        cursor = undefined;
-      }
-    } while (cursor !== undefined);
-
-    return { totalImages: total, totalSize: size, oldestImage: oldest, newestImage: newest };
   }
 
   // ===== Helper Methods =====
@@ -274,23 +176,26 @@ export class R2StorageService {
   private getDatePrefix(timestamp: number): string {
     try {
       // Use Intl.DateTimeFormat for timezone support
-      const formatter = new Intl.DateTimeFormat('en-CA', {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
         timeZone: this.timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
       });
 
       const parts = formatter.formatToParts(new Date(timestamp));
-      const year = parts.find(p => p.type === 'year')?.value;
-      const month = parts.find(p => p.type === 'month')?.value;
-      const day = parts.find(p => p.type === 'day')?.value;
+      const year = parts.find((p) => p.type === "year")?.value;
+      const month = parts.find((p) => p.type === "month")?.value;
+      const day = parts.find((p) => p.type === "day")?.value;
 
       return `${year}-${month}-${day}`;
     } catch (err) {
       // Fallback to UTC if timezone is invalid
-      console.error(`Invalid timezone "${this.timezone}", falling back to UTC:`, err);
-      return new Date(timestamp).toISOString().split('T')[0];
+      console.error(
+        `Invalid timezone "${this.timezone}", falling back to UTC:`,
+        err
+      );
+      return new Date(timestamp).toISOString().split("T")[0];
     }
   }
 

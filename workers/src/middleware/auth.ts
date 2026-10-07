@@ -176,29 +176,3 @@ export function createUnauthorizedResponse(
     }
   );
 }
-
-/**
- * Middleware wrapper for authentication
- */
-export function withAuth(
-  handler: (request: Request, env: Env) => Promise<Response>,
-  env: Env
-): (request: Request) => Promise<Response> {
-  return async (request: Request): Promise<Response> => {
-    const url = new URL(request.url);
-
-    // Check if auth is required for this path
-    if (!requiresAuth(url.pathname, request.method)) {
-      return handler(request, env);
-    }
-
-    // Validate authentication
-    const authResult = authenticateRequest(request, env);
-    if (!authResult.authenticated) {
-      return createUnauthorizedResponse(authResult.error, request);
-    }
-
-    // Proceed with authenticated request
-    return handler(request, env);
-  };
-}
