@@ -29,13 +29,10 @@ function stubContext(): ToolsContext {
         taskTypes: config.supportedTasks,
         editCapabilities: config.editCapabilities,
       })),
-    generateImages: () => {
+    runOnce: () => {
       throw new Error("must not reach network in validation tests");
     },
-    generateImageToImages: () => {
-      throw new Error("must not reach network in validation tests");
-    },
-    generateInpaints: () => {
+    runMany: () => {
       throw new Error("must not reach network in validation tests");
     },
   };
