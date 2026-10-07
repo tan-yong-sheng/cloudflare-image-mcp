@@ -40,7 +40,10 @@ function stubJsonInference() {
 
 /** Answer every outbound AI call with the fixture (binary PNG). */
 function stubBinaryInference() {
-  return vi.stubGlobal("fetch", vi.fn(async () => binaryImageResponse()));
+  return vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => binaryImageResponse())
+  );
 }
 
 function post(path: string, body: unknown): Request {
@@ -146,7 +149,11 @@ describe("POST /v1/images/generations contract", () => {
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
     const res = await endpoint.handle(
-      post("/v1/images/generations", { prompt: "a beach", model: SCHNELL, n: 10 })
+      post("/v1/images/generations", {
+        prompt: "a beach",
+        model: SCHNELL,
+        n: 10,
+      })
     );
 
     expect(res.status).toBe(200);

@@ -93,7 +93,10 @@ export function fakeBucket(): R2Bucket {
       const prefix = options.prefix ?? "";
       const objects = [...store.keys()]
         .filter((k) => k.startsWith(prefix))
-        .map((key) => ({ key, customMetadata: store.get(key)!.customMetadata }));
+        .map((key) => ({
+          key,
+          customMetadata: store.get(key)!.customMetadata,
+        }));
       return { objects, truncated: false } as any;
     },
   } as unknown as R2Bucket;

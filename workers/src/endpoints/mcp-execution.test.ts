@@ -8,15 +8,9 @@
 // shapes come from the live E2E matrix (e2e/tests/api/mcp/tools.spec.ts).
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import {
-  handleRunModel,
-  type ToolsContext,
-} from "./mcp-tools.js";
+import { handleRunModel, type ToolsContext } from "./mcp-tools.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
-import {
-  fakeEnv,
-  jsonEnvelopeImage,
-} from "../test-utils/fixtures.js";
+import { fakeEnv, jsonEnvelopeImage } from "../test-utils/fixtures.js";
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
 const BASE_URL = "https://worker.test";
