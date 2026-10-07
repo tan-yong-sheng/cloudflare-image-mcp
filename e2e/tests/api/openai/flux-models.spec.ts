@@ -1,16 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * FLUX Model E2E Tests (real API calls)
+ * FLUX Model E2E Tests — DRIFT canaries (Phase 4).
  *
- * Tests /v1/images/generations and /v1/images/edits with FLUX-1 and FLUX-2 models.
- * These hit the live Cloudflare Workers AI backend.
- *
- * 4 tests total:
- *   1. FLUX-1 schnell  — text-to-image  (/v1/images/generations)
- *   2. FLUX-2 klein 4B — text-to-image  (/v1/images/generations)
- *   3. FLUX-2 klein 4B — image editing   (/v1/images/edits)
- *   4. FLUX-2 dev      — text-to-image  (/v1/images/generations, b64_json)
+ * These 4 tests stay LIVE deliberately: they are the only tests that
+ * prove per-model provider behavior (JSON vs multipart input, base64
+ * vs binary output, b64 length/format per model). Mocks cannot catch
+ * a model being retired or changing its envelope. Shape assertions
+ * for the same paths live hermetically in openai-contract.test.ts.
  *
  * @api
  */
@@ -26,7 +23,8 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 1. FLUX-1 schnell — text-to-image (fastest model)
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-1 schnell: /v1/images/generations returns valid image URL @slow', async ({ request }) => {
+  // Drift canary (kept): fastest model, JSON in / base64 out.
+  test('FLUX-1 schnell: /v1/images/generations returns valid image URL @slow @drift', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A red circle on a white background',
@@ -59,7 +57,8 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 2. FLUX-2 klein 4B — text-to-image
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-2 klein 4B: /v1/images/generations returns valid image URL @slow', async ({ request }) => {
+  // Drift canary (kept): multipart in / base64 out.
+  test('FLUX-2 klein 4B: /v1/images/generations returns valid image URL @slow @drift', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A blue square on a grey background',
@@ -85,7 +84,8 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 3. FLUX-2 klein 4B — image editing (/v1/images/edits)
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-2 klein 4B: /v1/images/edits with image returns valid result @slow', async ({ request }) => {
+  // Drift canary (kept): multipart edit path with b64 round-trip.
+  test('FLUX-2 klein 4B: /v1/images/edits with image returns valid result @slow @drift', async ({ request }) => {
     const response = await request.post('/v1/images/edits', {
       data: {
         image: TINY_IMAGE_B64,
@@ -117,7 +117,8 @@ test.describe('FLUX Models – Real API', () => {
   // ───────────────────────────────────────────────────────────────
   // 4. FLUX-2 dev — text-to-image (b64_json format)
   // ───────────────────────────────────────────────────────────────
-  test('FLUX-2 dev: /v1/images/generations returns b64_json @slow', async ({ request }) => {
+  // Drift canary (kept): second model family proving b64_json output.
+  test('FLUX-2 dev: /v1/images/generations returns b64_json @slow @drift', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A yellow triangle on a dark background',

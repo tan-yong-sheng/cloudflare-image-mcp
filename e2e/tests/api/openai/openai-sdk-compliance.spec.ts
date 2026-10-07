@@ -1,3 +1,17 @@
+/**
+ * OpenAI API Compliance Tests — RETIRED as live tests (Phase 4).
+ *
+ * Every assertion below now runs hermetically in
+ * workers/src/endpoints/openai-contract.test.ts (stubbed fetch, fake R2,
+ * seconds not minutes, zero inference). This file is kept as a manifest
+ * so the retirement is reviewable per-test; the runner skips it via
+ * describe.skip. Delete the file once the contract suite has baked.
+ *
+ * @compliance
+ */
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { test as liveTest, expect as liveExpect } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 
 /**
@@ -9,7 +23,7 @@ import { test, expect } from '@playwright/test';
  * @compliance
  */
 
-test.describe('OpenAI API Compliance', () => {
+test.describe.skip('OpenAI API Compliance', () => {
   // Default test model (fastest for testing)
   const TEST_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 

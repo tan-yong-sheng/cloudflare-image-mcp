@@ -19,6 +19,8 @@ import {
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
 const SDXL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
+const KLEIN = "@cf/black-forest-labs/flux-2-klein-4b";
+const INPAINT = "@cf/runwayml/stable-diffusion-v1-5-inpainting";
 const ORIGIN = "https://worker.test";
 
 afterEach(() => {
@@ -153,6 +155,24 @@ describe("POST /v1/images/generations contract", () => {
     expect(fetchMock).toHaveBeenCalledTimes(8);
   });
 
+  test("guidance + negative prompt flow through to a url", async () => {
+    stubBinaryInference();
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+
+    const res = await endpoint.handle(
+      post("/v1/images/generations", {
+        prompt: "a star",
+        model: SDXL,
+        guidance: 7.5,
+        negative_prompt: "blurry, low quality",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
+  });
+
   test("CORS header present on generation response", async () => {
     stubJsonInference();
     const endpoint = new OpenAIEndpoint(fakeEnv());
@@ -202,6 +222,82 @@ describe("POST /v1/images/edits contract", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
+  });
+
+  test("multipart FLUX-2 klein edit returns url", async () => {
+    stubJsonInference();
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const form = new FormData();
+    form.append("prompt", "make it green");
+    form.append("model", KLEIN);
+    form.append(
+      "image",
+      new Blob([FIXTURE_PNG_B64], { type: "text/plain" }),
+      "input.png"
+    );
+
+    const res = await endpoint.handle(
+      new Request(`${ORIGIN}/v1/images/edits`, { method: "POST", body: form })
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
+  });
+
+  test("mask-required model without mask returns 500 naming mask", async () => {
+    stubBinaryInference();
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+
+    const res = await endpoint.handle(
+      post("/v1/images/edits", {
+        prompt: "add something",
+        model: INPAINT,
+        image: FIXTURE_PNG_B64,
+      })
+    );
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as any;
+    expect(String(body.error.message)).toMatch(/mask/i);
+  });
+
+  test("masked inpainting returns url", async () => {
+    stubBinaryInference();
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+
+    const res = await endpoint.handle(
+      post("/v1/images/edits", {
+        prompt: "add a star",
+        model: INPAINT,
+        image: FIXTURE_PNG_B64,
+        mask: FIXTURE_PNG_B64,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
+  });
+
+  test("size parameter flows through to a url", async () => {
+    stubBinaryInference();
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+
+    for (const size of ["512x512", "1024x1024"]) {
+      const res = await endpoint.handle(
+        post("/v1/images/edits", {
+          prompt: "edit this",
+          model: SDXL,
+          image: FIXTURE_PNG_B64,
+          size,
+        })
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
+    }
   });
 
   test("missing image returns 400", async () => {

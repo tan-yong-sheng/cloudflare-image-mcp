@@ -1,10 +1,12 @@
 name: E2E Tests
 
 on:
-  # Nightly full matrix (monitor, not gate): the 36-test @slow suite
-  # runs on schedule so model drift is caught within 24h without
-  # burning inference on every PR push. Failures here page the
-  # on-call via the Actions notification, they never block a PR.
+  # Nightly canary tier (monitor, not gate): contract + @smoke +
+  # @drift (~8 live calls) proving credential chain, model availability,
+  # and SDK transport against the deployed Worker. Failures here page
+  # the on-call via the Actions notification, they never block a PR.
+  # The retired 36-test @slow matrix is superseded by the hermetic
+  # contract suite (workers/src/endpoints/openai-contract.test.ts).
   schedule:
     - cron: "0 2 * * *"
   # Manual trigger for testing specific deployments
@@ -36,8 +38,10 @@ on:
 
   # Merge gate: contract suite + 2 @smoke canaries (1 live generation +
   # 1 MCP run_model) on release-integration PRs to main, where the fast
-  # PR check (pr-checks.yml) is insufficient signal. The full 36-test
-  # @slow matrix runs on schedule + manual dispatch only.
+  # PR check (pr-checks.yml) is insufficient signal. The nightly schedule
+  # runs the canary tier only (contract + @smoke + @drift, ~8 live calls)
+  # as a drift monitor; retired shape tests live hermetically in
+  # workers/src/endpoints/openai-contract.test.ts.
   # Feature PRs skip E2E (add the `e2e` label for an opt-in full run).
   # Note: no `paths` filter here — it would also filter `labeled`
   # events, silently blocking the opt-in label. Job-level `if` guards
@@ -236,14 +240,17 @@ jobs:
           # PR events cannot set inputs, so an unset full_matrix on a PR
           # means "gated run", not "caller wants contract-only".
           # Dispatch/call keep caller control via the full_matrix input
-          # (full 36-test @slow matrix); schedule runs the matrix too.
+          # (opt-in @slow incl. skipped manifests); schedule runs the
+          # canary tier (E2E_SMOKE=1 + E2E_DRIFT=1, ~8 live calls).
           if [ -n "${{ inputs.test_pattern }}" ]; then
             echo "Running specific test pattern: ${{ inputs.test_pattern }} (with E2E_SLOW=1 so @slow targets are reachable)"
             E2E_SLOW=1 npx playwright test ${{ inputs.test_pattern }} --reporter=list,junit,html
           elif [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "Running nightly full matrix (monitor-only):"
-            echo "contract + @slow generation tests (E2E_SLOW=1)"
-            E2E_SLOW=1 npx playwright test --reporter=list,junit,html
+            echo "Running nightly canary tier (monitor-only):"
+            echo "contract + @smoke + @drift (E2E_SMOKE=1 E2E_DRIFT=1)"
+            echo "contract + @smoke + @drift"
+            echo "(E2E_SMOKE=1 E2E_DRIFT=1)"
+            E2E_SMOKE=1 E2E_DRIFT=1 npx playwright test --reporter=list,junit,html
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "Running contract suite + @smoke canaries:"
             echo "2 live inference calls (E2E_SMOKE=1)"
@@ -256,11 +263,13 @@ jobs:
             npx playwright test --reporter=list,junit,html
           fi
         env:
-          # E2E_SLOW=1 opts into the full @slow matrix; E2E_SMOKE=1
-          # keeps the contract suite plus the 2 @smoke canaries.
-          # Unset E2E_SLOW runs the fast contract suite.
+          # E2E_SLOW=1 opts into all @slow (incl. skipped manifests);
+          # E2E_SMOKE=1 keeps the contract suite plus the 2 @smoke
+          # canaries; E2E_DRIFT=1 additionally keeps the 6 @drift
+          # canaries (4 FLUX + 2 MCP SDK). Unset runs contract only.
           E2E_SLOW: ${{ inputs.full_matrix && '1' || '' }}
-          E2E_SMOKE: ${{ github.event_name == 'pull_request' && '1' || '' }}
+          E2E_SMOKE: ${{ (github.event_name == 'pull_request' || github.event_name == 'schedule') && '1' || '' }}
+          E2E_DRIFT: ${{ github.event_name == 'schedule' && '1' || '' }}
           # NOTE: TEST_BASE_URL is derived at runtime via $GITHUB_ENV.
           # Do not override it here with ${{ env.TEST_BASE_URL }} (expressions are evaluated before runtime env updates).
           API_KEY: ${{ env.API_KEY_EFFECTIVE }}

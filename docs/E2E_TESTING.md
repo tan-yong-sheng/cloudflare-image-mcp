@@ -135,8 +135,12 @@ Use tags to categorize tests:
 - `@api` - API-focused tests (run in all browsers)
 - `@slow` - Slow tests (may be skipped in quick runs)
 - `@smoke` - Live canaries (subset of `@slow`): run on gated release
-  PRs via `E2E_SMOKE=1` / `npm run test:smoke`, full matrix via
-  `E2E_SLOW=1` / `npm run test:slow` on schedule + dispatch
+  PRs via `E2E_SMOKE=1` / `npm run test:smoke`, canary tier via
+  `E2E_SMOKE=1 E2E_DRIFT=1` / `npm run test:canary` on schedule,
+  everything via `E2E_SLOW=1` / `npm run test:slow` on dispatch
+- `@drift` - Model/SDK drift canaries (subset of `@slow`, nightly
+  only): per-model provider behavior + published-SDK transport that
+  hermetic contract tests cannot prove
 
 ### Test Data
 

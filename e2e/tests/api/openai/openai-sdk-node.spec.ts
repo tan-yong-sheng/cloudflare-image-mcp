@@ -1,16 +1,18 @@
 /**
- * OpenAI SDK Node.js Compliance Tests
+ * OpenAI SDK Node.js Compliance Tests — RETIRED as live tests (Phase 4).
  *
- * Uses the official OpenAI Node.js SDK directly (not through Playwright browser)
- * to verify our endpoint is fully compatible with OpenAI's TypeScript SDK.
- *
- * These tests run in Node.js context and use the OpenAI SDK to make actual API calls.
+ * The 5 @slow SDK-shape tests now run hermetically in
+ * workers/src/endpoints/openai-contract.test.ts. The SDK client itself
+ * is thin (URL + envelope mapping); what it proved about OUR Worker
+ * is the response shape, which the contract suite pins exactly
+ * (url/b64_json exclusivity, created+data envelope). Kept as manifest
+ * behind describe.skip; delete once the contract suite has baked.
  */
 
 import { test, expect } from '@playwright/test';
 import OpenAI from 'openai';
 
-test.describe('OpenAI SDK Node.js Compliance', () => {
+test.describe.skip('OpenAI SDK Node.js Compliance', () => {
   // Create OpenAI client pointing to our endpoint
   // baseURL is provided by Playwright config from TEST_BASE_URL env var
   const createClient = (baseURL: string) => {

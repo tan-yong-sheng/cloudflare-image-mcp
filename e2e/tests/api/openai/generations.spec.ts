@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * OpenAI Image Generations API E2E Tests
+ * OpenAI Image Generations API E2E Tests (live canary + contract suite)
  *
- * Tests the /v1/images/generations endpoint for text-to-image generation.
+ * Live inference here is ONE test: the @smoke canary proving the
+ * credential chain + model drift on the deployed Worker. Every other
+ * shape assertion lives hermetically in
+ * workers/src/endpoints/openai-contract.test.ts (stubbed fetch, fake R2).
  * @api
  */
 
@@ -11,6 +14,8 @@ test.describe('OpenAI Image Generations API', () => {
   // Default test model (fastest for testing)
   const TEST_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
+  // Live canary (kept): proves the credential chain + model drift.
+  // Contract mirror: openai-contract.test.ts > minimal params.
   test('POST /v1/images/generations with minimal parameters @slow @smoke', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
@@ -42,59 +47,11 @@ test.describe('OpenAI Image Generations API', () => {
     console.log('✅ Image URL:', image.url);
   });
 
-  test('POST /v1/images/generations with all parameters @slow', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A blue square on white background',
-        model: TEST_MODEL,
-        n: 2,
-        size: '1024x1024',
-        steps: 4,
-        seed: 42,
-        response_format: 'url',
-      },
-    });
+  // Retired (Phase 4): covered by openai-contract.test.ts > url format.
+  // test('POST /v1/images/generations with all parameters @slow', ...)
 
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    expect(body.data).toHaveLength(2);
-
-    // Verify each image has a URL (can be absolute or relative)
-    for (const image of body.data) {
-      expect(image).toHaveProperty('url');
-      expect(image.url).toMatch(/^(https?:\/\/|\/images\/)/);
-    }
-  });
-
-  test('POST /v1/images/generations with b64_json response format @slow', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A green triangle on white background',
-        model: TEST_MODEL,
-        n: 1,
-        response_format: 'b64_json',
-      },
-    });
-
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    expect(body.data).toHaveLength(1);
-
-    const image = body.data[0];
-    expect(image).toHaveProperty('b64_json');
-    expect(typeof image.b64_json).toBe('string');
-
-    // Validate base64 format (or URL if server doesn't support b64_json)
-    const base64Regex = /^[A-Za-z0-9+/=]+$/;
-    if (image.b64_json.match(/^https?:\/\//) || image.b64_json.match(/^\/images\//)) {
-      // Server returned URL instead of base64 - skip validation
-      console.log('Server returned URL instead of base64:', image.b64_json);
-    } else {
-      expect(image.b64_json).toMatch(base64Regex);
-    }
-  });
+  // Retired (Phase 4): covered by openai-contract.test.ts > b64_json format.
+  // test('POST /v1/images/generations with b64_json response format @slow', ...)
 
   test('POST /v1/images/generations without prompt returns 400', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
@@ -134,124 +91,21 @@ test.describe('OpenAI Image Generations API', () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('POST /v1/images/generations respects n parameter limit @slow', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A mountain landscape with snow peaks and green forests',
-        model: TEST_MODEL,
-        n: 10, // Request more than max
-      },
-    });
+  // Retired (Phase 4): covered by openai-contract.test.ts > n above 8.
+  // test('POST /v1/images/generations respects n parameter limit @slow', ...)
 
-    expect(response.status()).toBe(200);
+  // Retired (Phase 4): covered by openai-contract.test.ts > guidance +
+  // negative prompt. (The old test also sent `num_steps`, which the Worker
+  // ignores — the CF param is `steps` — so it never proved anything.)
+  // test('POST /v1/images/generations with guidance parameter @slow', ...)
+  // test('POST /v1/images/generations with negative prompt @slow', ...)
 
-    const body = await response.json();
-    // Should be capped at 8 images
-    expect(body.data.length).toBeLessThanOrEqual(8);
-  });
+  // Retired (Phase 4): covered by openai-contract.test.ts > CORS header.
+  // test('POST /v1/images/generations returns CORS headers @slow', ...)
 
-  test('POST /v1/images/generations with guidance parameter @slow', async ({ request }) => {
-    const modelWithGuidance = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
-
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A star on black background',
-        model: modelWithGuidance,
-        guidance: 7.5,
-        num_steps: 20,
-      },
-    });
-
-    // May fail if model not available, but tests parameter handling
-    if (response.status() === 200) {
-      const body = await response.json();
-      expect(body.data.length).toBeGreaterThan(0);
-    }
-  });
-
-  test('POST /v1/images/generations with negative prompt @slow', async ({ request }) => {
-    const modelWithNegPrompt = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
-
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A beautiful landscape',
-        model: modelWithNegPrompt,
-        negative_prompt: 'blurry, low quality',
-        num_steps: 20,
-      },
-    });
-
-    if (response.status() === 200) {
-      const body = await response.json();
-      expect(body.data.length).toBeGreaterThan(0);
-    }
-  });
-
-  test('POST /v1/images/generations returns CORS headers @slow', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'Test',
-        model: TEST_MODEL,
-      },
-    });
-
-    expect(response.headers()['access-control-allow-origin']).toBe('*');
-  });
-
-  test('POST /v1/images/generations returns valid image URL format @slow', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A beautiful sunset over mountains',
-        model: TEST_MODEL,
-        n: 1,
-      },
-    });
-
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    const image = body.data[0];
-
-    // URL must be a valid string
-    expect(typeof image.url).toBe('string');
-    expect(image.url.length).toBeGreaterThan(0);
-
-    // URL should point to: /images/YYYY-MM-DD/<id>.png (absolute or relative)
-    const path = image.url.startsWith('http') ? new URL(image.url).pathname : image.url;
-    expect(path).toMatch(/^\/images\/\d{4}-\d{2}-\d{2}\/[a-z0-9-]+\.png$/);
-  });
-
-  test('POST /v1/images/generations returns clean response without b64_json when format=url @slow', async ({ request }) => {
-    const response = await request.post('/v1/images/generations', {
-      data: {
-        prompt: 'A simple test image',
-        model: TEST_MODEL,
-        n: 1,
-      },
-    });
-
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-
-    // Response should have required fields
-    expect(body).toHaveProperty('created');
-    expect(body).toHaveProperty('data');
-    expect(Array.isArray(body.data)).toBe(true);
-    expect(body.data.length).toBeGreaterThan(0);
-
-    const image = body.data[0];
-
-    // Must have url (not null/undefined)
-    expect(image).toHaveProperty('url');
-    expect(typeof image.url).toBe('string');
-    expect(image.url).not.toBeNull();
-
-    // b64_json should NOT be present when response_format is url (default)
-    // This was causing 'NoneType' object has no attribute 'lower' error in OpenWebUI
-    expect(image).not.toHaveProperty('b64_json');
-
-    // revised_prompt is not part of OpenAI spec
-    expect(image).not.toHaveProperty('revised_prompt');
-  });
+  // Retired (Phase 4): the canary above already asserts the /images/
+  // shape on a live response; the strict date-path regex is covered by
+  // openai-contract.test.ts > minimal params (fake R2 uses real key gen).
+  // test('POST /v1/images/generations returns valid image URL format @slow', ...)
+  // test('POST /v1/images/generations returns clean response ... @slow', ...)
 });

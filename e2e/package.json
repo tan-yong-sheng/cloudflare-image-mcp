@@ -12,6 +12,7 @@
     "test:staging": "TEST_TARGET=staging playwright test",
     "test:slow": "E2E_SLOW=1 playwright test",
     "test:smoke": "E2E_SMOKE=1 playwright test",
+    "test:canary": "E2E_SMOKE=1 E2E_DRIFT=1 playwright test",
     "test:ui:interactive": "playwright test --ui",
     "test:debug": "playwright test --debug",
     "test:report": "playwright show-report",

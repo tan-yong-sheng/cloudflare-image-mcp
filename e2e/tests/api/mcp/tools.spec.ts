@@ -1,15 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * MCP Tools E2E Tests
+ * MCP Tools E2E Tests (live canary + contract suite)
  *
- * Tests the MCP tools/list and tools/call methods.
- *
- * NOTE: the SDK Streamable HTTP transport requires clients to send
- * `Accept: application/json, text/event-stream`, so responses arrive as
- * SSE frames. The `postMcp` helper sets the Accept header and unwraps the
- * first SSE data frame into JSON.
- * @api
+ * Live inference here is ONE test: the @smoke canary proving the MCP
+ * path end to end on the deployed Worker. run_model SHAPE assertions
+ * live hermetically in workers/src/endpoints/mcp-execution.test.ts.
  */
 
 /**
@@ -178,6 +174,8 @@ test.describe("MCP Tools", () => {
     expect(content.text).toContain("model_id");
   });
 
+  // Live canary (kept): proves the MCP path end to end on the deploy.
+  // Contract mirror: mcp-execution.test.ts > run_model generations.
   test("tools/call run_model generates image @slow @smoke", async ({ request }) => {
     const body = await postMcp(request, "/mcp/message", {
       jsonrpc: "2.0",
