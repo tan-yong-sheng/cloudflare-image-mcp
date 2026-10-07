@@ -134,6 +134,9 @@ Use tags to categorize tests:
 
 - `@api` - API-focused tests (run in all browsers)
 - `@slow` - Slow tests (may be skipped in quick runs)
+- `@smoke` - Live canaries (subset of `@slow`): run on gated release
+  PRs via `E2E_SMOKE=1` / `npm run test:smoke`, full matrix via
+  `E2E_SLOW=1` / `npm run test:slow` on schedule + dispatch
 
 ### Test Data
 

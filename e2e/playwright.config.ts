@@ -25,9 +25,10 @@ const timeout = parseInt(process.env.TEST_TIMEOUT || '60000');
 
 // Slow tests make real Workers AI calls (15-90s each on cold workers).
 // Default runs skip them: `E2E_SLOW=1` opts into the full matrix
-// (release branches, manual dispatch). One smoke test per surface stays
-// untagged so the credential chain is still proven on every run.
+// (manual dispatch, nightly schedule). Release-gate PRs run the fast
+// contract suite plus the 2 @smoke canaries (1 live call each).
 const runSlow = process.env.E2E_SLOW === '1';
+const runSmoke = process.env.E2E_SMOKE === '1';
 
 console.log(`🎯 E2E Test Configuration:`);
 console.log(`   Target: ${targetConfig.name}`);
@@ -35,6 +36,7 @@ console.log(`   Base URL: ${baseURL}`);
 console.log(`   Auth Required: ${targetConfig.requiresAuth}`);
 console.log(`   Auth Headers Present: ${Object.keys(authHeaders).length > 0}`);
 console.log(`   Slow generation tests: ${runSlow ? 'included (E2E_SLOW=1)' : 'skipped (set E2E_SLOW=1 for full matrix)'}`);
+console.log(`   Smoke canaries: ${runSmoke && !runSlow ? 'contract + @smoke (E2E_SMOKE=1)' : 'n/a'}`);
 
 export default defineConfig({
   testDir: './tests',
@@ -51,7 +53,15 @@ export default defineConfig({
   // Skip @slow tests (real image generation) unless explicitly opted in.
   // This keeps PR runs to ~1min of contract tests; release/manual runs set
   // E2E_SLOW=1 for the full matrix with a matching timeout budget.
-  grepInvert: runSlow ? undefined : /@slow/,
+  // E2E_SMOKE=1 keeps the contract suite plus the 2 @smoke canaries
+  // (1 generation + 1 MCP run_model) and drops the other 34 @slow
+  // tests. The anchored lookahead is tag-order independent: a title
+  // containing @smoke anywhere is never excluded.
+  grepInvert: runSlow
+    ? undefined
+    : runSmoke
+      ? /^(?!.*@smoke).*@slow/
+      : /@slow/,
 
   // Generous per-test timeout: slow runs need it for cold workers,
   // fast runs are unaffected (their tests finish in ms).

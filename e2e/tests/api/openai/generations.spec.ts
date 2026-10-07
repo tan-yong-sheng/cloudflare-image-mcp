@@ -11,7 +11,7 @@ test.describe('OpenAI Image Generations API', () => {
   // Default test model (fastest for testing)
   const TEST_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
-  test('POST /v1/images/generations with minimal parameters @slow', async ({ request }) => {
+  test('POST /v1/images/generations with minimal parameters @slow @smoke', async ({ request }) => {
     const response = await request.post('/v1/images/generations', {
       data: {
         prompt: 'A sunny day at the beach with palm trees and ocean waves',
