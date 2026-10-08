@@ -359,6 +359,16 @@ describe("runMany", () => {
     ).toEqual([41, 42, 43]);
   });
 
+  test("seed 0 increments across batch runs (not dropped as falsy)", async () => {
+    const { generator, transport } = setup();
+
+    await generator.runMany(textRequest({ explicitParams: { seed: 0 } }), 3);
+
+    expect(
+      transport.calls.map((call) => (call.payload as { seed?: number }).seed)
+    ).toEqual([0, 1, 2]);
+  });
+
   test("batch base64 runs return inline payloads without uploading", async () => {
     const { generator, store } = setup();
 
