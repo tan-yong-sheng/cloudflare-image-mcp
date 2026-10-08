@@ -206,6 +206,7 @@ describe("cleanupExpired", () => {
       ["images/2024-01-01/prefix.png", "0garbage"],
       ["images/2024-01-01/float.png", "123.45"],
       ["images/2024-01-01/blank.png", ""],
+      ["images/2024-01-01/spaces.png", "   "],
     ] as Array<[string, string]>) {
       await bucket.put(
         key,
