@@ -197,4 +197,33 @@ describe("cleanupExpired", () => {
     expect(bucket.deleted).toHaveLength(0);
     expect(bucket.objects.has("images/2024-01-01/corrupt.png")).toBe(true);
   });
+
+  test("numeric-prefix corrupt timestamps are kept, never deleted", async () => {
+    // "0garbage" must not parse as 0 (expired): the guard keeps anything
+    // that is not a finite integer expiry.
+    const { bucket, service } = setup();
+    for (const [key, expiresAt] of [
+      ["images/2024-01-01/prefix.png", "0garbage"],
+      ["images/2024-01-01/float.png", "123.45"],
+      ["images/2024-01-01/blank.png", ""],
+    ] as Array<[string, string]>) {
+      await bucket.put(
+        key,
+        new TextEncoder().encode("x").buffer as ArrayBuffer,
+        {
+          customMetadata: {
+            model: "m",
+            prompt: "p",
+            createdAt: "1",
+            expiresAt,
+          },
+        }
+      );
+    }
+
+    const deleted = await service.cleanupExpired();
+
+    expect(deleted).toBe(0);
+    expect(bucket.deleted).toHaveLength(0);
+  });
 });

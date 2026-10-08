@@ -364,10 +364,19 @@ export class ImageGeneratorService {
       };
     }
 
-    // Handle multi-image: validate count against model limits
+    // Handle multi-image: validate count against model limits.
+    // An explicitly empty array is invalid input (not text-to-image):
+    // images[0] would be undefined and silently change the task.
     const images = Array.isArray(request.images)
       ? request.images
       : [request.images as string];
+    if (images.length === 0) {
+      return {
+        success: false,
+        validationError: true,
+        error: "At least one input image is required for image edits",
+      };
+    }
     const maxInput = model.maxInputImages || 1;
     if (images.length > maxInput) {
       return {

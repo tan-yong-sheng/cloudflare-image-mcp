@@ -82,4 +82,30 @@ describe("RestAITransport account failover", () => {
       transport.run(JSON_MODEL.id, { prompt: "a cat" }, JSON_MODEL)
     ).rejects.toThrow("Cloudflare AI API error (500)");
   });
+
+  test("malformed upstream JSON throws plain Error (never SyntaxError)", async () => {
+    // A SyntaxError here would be misclassified as malformed caller JSON
+    // by the endpoint's handle() catch (400); operational failures must
+    // stay plain Errors so they map to 500.
+    const transport = new RestAITransport(
+      [{ account_id: "only", api_token: "token" }],
+      "fallback"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<html>gateway blew up</html>", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+
+    const failure = await transport
+      .run(JSON_MODEL.id, { prompt: "a cat" }, JSON_MODEL)
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(SyntaxError);
+    expect((failure as Error).message).toMatch("unparseable JSON");
+  });
 });
