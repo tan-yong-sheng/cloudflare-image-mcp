@@ -270,9 +270,29 @@ export class ImageGeneratorService {
     const results: GeneratedImage[] = [];
     const baseExplicit = request.explicitParams ?? {};
 
+    // Normalize a numeric-string seed (JSON callers may send "5") so the
+    // batch increment adds numbers: "5" + 1 would concatenate to "51".
+    // Anything else passes through untouched for ParamParser to validate;
+    // null counts as absent (pre-existing omission behavior).
+    const rawSeed = baseExplicit.seed;
+    const numericSeed =
+      typeof rawSeed === "number"
+        ? rawSeed
+        : typeof rawSeed === "string" &&
+            rawSeed.trim() !== "" &&
+            Number.isInteger(Number(rawSeed))
+          ? Number(rawSeed)
+          : undefined;
+    const hasSeed =
+      numericSeed !== undefined || (rawSeed !== undefined && rawSeed !== null);
+
     for (let i = 0; i < n; i++) {
       const seed =
-        baseExplicit.seed !== undefined ? baseExplicit.seed + i : undefined;
+        numericSeed !== undefined
+          ? numericSeed + i
+          : hasSeed
+            ? rawSeed
+            : undefined;
       const result = await this.runOnce({
         ...request,
         explicitParams: {
@@ -429,6 +449,7 @@ export class ImageGeneratorService {
     if (Array.isArray(request.images)) {
       return {
         success: false,
+        validationError: true,
         error:
           `mask can only be used with a single image, got ` +
           `${request.images.length} input image(s)`,
@@ -438,6 +459,7 @@ export class ImageGeneratorService {
     if (!request.images) {
       return {
         success: false,
+        validationError: true,
         error: "image is required for masked edits",
       };
     }

@@ -346,6 +346,23 @@ describe("runOnce masked edits", () => {
     expect(transport.calls).toHaveLength(0);
   });
 
+  test("masked-edit input-shape guards flag validation", async () => {
+    const { generator, transport } = setup();
+
+    for (const images of [["QUJD", "REVG"], undefined]) {
+      const result = await generator.runOnce({
+        modelId: MASK_MODEL,
+        prompt: "remove the fence",
+        ...(images === undefined ? {} : { images }),
+        mask: "TUFT",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.validationError).toBe(true);
+    }
+    expect(transport.calls).toHaveLength(0);
+  });
+
   test("masked edits accept exactly one image", async () => {
     const { generator, transport } = setup();
 
@@ -394,6 +411,16 @@ describe("runMany", () => {
     expect(
       transport.calls.map((call) => (call.payload as { seed?: number }).seed)
     ).toEqual([0, 1, 2]);
+  });
+
+  test("numeric-string seed increments as numbers, not concatenation", async () => {
+    const { generator, transport } = setup();
+
+    await generator.runMany(textRequest({ explicitParams: { seed: "5" } }), 2);
+
+    expect(
+      transport.calls.map((call) => (call.payload as { seed?: number }).seed)
+    ).toEqual([5, 6]);
   });
 
   test("prompt-embedded seed survives when no base seed is given", async () => {
