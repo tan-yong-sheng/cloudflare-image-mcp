@@ -7,7 +7,7 @@
 // Cloudflare REST transport and R2 persistence sit behind injected
 // adapters (real in production, in-memory in tests).
 
-import type { Env, ModelConfig } from "../types.js";
+import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
 import {
@@ -223,7 +223,11 @@ export class ImageGeneratorService {
 
     const model = this.getModelConfig(modelId);
     if (!model) {
-      return { success: false, error: `Unknown model: ${modelId}` };
+      return {
+        success: false,
+        validationError: true,
+        error: `Unknown model: ${modelId}`,
+      };
     }
 
     try {
@@ -346,6 +350,21 @@ export class ImageGeneratorService {
     // Run the model via the injected transport
     const result = await this.transport.run(model.id, payload, model);
 
+    return await this.finishParsed(model, params, result, returnBase64);
+  }
+
+  /**
+   * Shared tail of the three generation paths: interpret one transport
+   * result with the parsed parameters. Collapses three identical
+   * finishSingle call blocks (text carries guidance/negative_prompt too —
+   * finishSingle only reads the fields it needs).
+   */
+  private async finishParsed(
+    model: ModelConfig,
+    params: ParsedParams,
+    result: unknown,
+    returnBase64: boolean
+  ): Promise<SingleResult> {
     return await this.finishSingle(
       model,
       params.prompt,
@@ -373,6 +392,7 @@ export class ImageGeneratorService {
     if (!model.supportedTasks.includes("image-to-image")) {
       return {
         success: false,
+        validationError: true,
         error: `Model ${model.id} does not support image-to-image`,
       };
     }
@@ -380,6 +400,7 @@ export class ImageGeneratorService {
     if (model.editCapabilities?.mask === "required") {
       return {
         success: false,
+        validationError: true,
         error: `Model ${model.id} requires a mask; use /v1/images/edits with mask (masked edit).`,
       };
     }
@@ -401,6 +422,7 @@ export class ImageGeneratorService {
     if (images.length > maxInput) {
       return {
         success: false,
+        validationError: true,
         error: `Model ${model.id} supports up to ${maxInput} input image(s), got ${images.length}`,
       };
     }
@@ -417,17 +439,7 @@ export class ImageGeneratorService {
     // Run the model via the injected transport (pass images for multipart handling)
     const result = await this.transport.run(model.id, payload, model, images);
 
-    return await this.finishSingle(
-      model,
-      params.prompt,
-      {
-        size: params.size,
-        steps: params.steps,
-        seed: params.seed,
-      },
-      result,
-      returnBase64
-    );
+    return await this.finishParsed(model, params, result, returnBase64);
   }
 
   /**
@@ -442,6 +454,7 @@ export class ImageGeneratorService {
     if (!model.editCapabilities?.mask) {
       return {
         success: false,
+        validationError: true,
         error: `Model ${model.id} does not support mask-based edits`,
       };
     }
@@ -475,17 +488,7 @@ export class ImageGeneratorService {
     // Run the model via the injected transport
     const result = await this.transport.run(model.id, payload, model);
 
-    return await this.finishSingle(
-      model,
-      params.prompt,
-      {
-        size: params.size,
-        steps: params.steps,
-        seed: params.seed,
-      },
-      result,
-      returnBase64
-    );
+    return await this.finishParsed(model, params, result, returnBase64);
   }
 
   /**

@@ -11,6 +11,7 @@ import {
 import { corsHeaders } from "../utils/cors.js";
 import {
   buildImageResponse,
+  CollectionError,
   collectInputImages,
   type CollectConfig,
 } from "../utils/image-request.js";
@@ -101,9 +102,10 @@ export class OpenAIEndpoint {
         }
       );
     } catch (error) {
-      // Malformed JSON bodies surface here (request.json() rejects
-      // inside collectInputImages): a bad request, not a service failure.
-      if (this.isMalformedJsonError(error)) {
+      // Caller-input failures surface here (malformed JSON, non-object
+      // body, bad count, malformed multipart inside collectInputImages):
+      // a bad request, not a service failure.
+      if (this.isCallerInputError(error)) {
         const message =
           error instanceof SyntaxError
             ? "Invalid JSON in request body"
@@ -133,17 +135,13 @@ export class OpenAIEndpoint {
 
   /**
    * request.json() rejects with a SyntaxError when the body is not valid
-   * JSON; collectInputImages throws a plain Error with this prefix when
-   * the parsed body is not an object. The handle try-block only wraps
-   * routing plus input collection, so either surfacing here can only
-   * come from body parsing: both are 400s, not service failures.
+   * JSON; collectInputImages throws CollectionError for non-object
+   * bodies, bad counts, and malformed multipart. The handle try-block
+   * only wraps routing plus input collection, so either surfacing here
+   * can only come from body parsing: both are 400s, not failures.
    */
-  private isMalformedJsonError(error: unknown): boolean {
-    return (
-      error instanceof SyntaxError ||
-      (error instanceof Error &&
-        error.message.startsWith("Request body must be"))
-    );
+  private isCallerInputError(error: unknown): boolean {
+    return error instanceof SyntaxError || error instanceof CollectionError;
   }
 
   /**

@@ -110,7 +110,7 @@ describe("POST /v1/images/generations contract", () => {
     expect(body.error.message.toLowerCase()).toContain("prompt");
   });
 
-  test("unknown model returns 500", async () => {
+  test("unknown model returns 400 invalid_request_error", async () => {
     stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
@@ -121,7 +121,11 @@ describe("POST /v1/images/generations contract", () => {
       })
     );
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.code).toBeNull();
+    expect(String(body.error.message)).toMatch(/unknown model/i);
   });
 
   test("n above 8 is capped at 8", async () => {
@@ -232,7 +236,7 @@ describe("POST /v1/images/edits contract", () => {
     expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
   });
 
-  test("mask-required model without mask returns 500 naming mask", async () => {
+  test("mask-required model without mask returns 400 naming mask", async () => {
     stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv());
 
@@ -244,8 +248,10 @@ describe("POST /v1/images/edits contract", () => {
       })
     );
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
     const body = (await res.json()) as any;
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.code).toBeNull();
     expect(String(body.error.message)).toMatch(/mask/i);
   });
 

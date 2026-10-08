@@ -74,3 +74,57 @@ describe("malformed JSON bodies", () => {
     });
   });
 });
+
+describe("collection-phase caller input", () => {
+  function jsonRequest(path: string, body: Record<string, any>): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  test("invalid n maps to 400, not 500", async () => {
+    const response = await endpoint().handle(
+      jsonRequest("/v1/images/generations", { prompt: "p", n: "abc" })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as any;
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.code).toBeNull();
+    expect(String(body.error.message)).toMatch(/Invalid n/);
+  });
+
+  test("null JSON body maps to 400 with its specific message", async () => {
+    const response = await endpoint().handle(
+      new Request("https://worker.test/v1/images/generations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "null",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as any;
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.message).toBe("Request body must be a JSON object");
+  });
+
+  test("malformed multipart maps to 400, not 500", async () => {
+    const response = await endpoint().handle(
+      new Request("https://worker.test/v1/images/edits", {
+        method: "POST",
+        // Claims multipart but carries a body formData() cannot parse.
+        headers: { "Content-Type": "multipart/form-data; boundary=xyz" },
+        body: "this is not multipart",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as any;
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.code).toBeNull();
+    expect(String(body.error.message)).toMatch(/multipart/i);
+  });
+});

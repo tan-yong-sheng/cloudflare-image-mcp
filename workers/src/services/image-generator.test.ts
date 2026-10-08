@@ -177,6 +177,7 @@ describe("runOnce text-to-image", () => {
     expect(result).toEqual({
       success: false,
       error: "Unknown model: @cf/nope/missing",
+      validationError: true,
     });
     expect(transport.calls).toHaveLength(0);
     expect(store.uploads).toHaveLength(0);
@@ -259,6 +260,7 @@ describe("runOnce image-to-image", () => {
     expect(result).toEqual({
       success: false,
       error: `Model ${TEXT_MODEL} does not support image-to-image`,
+      validationError: true,
     });
     expect(transport.calls).toHaveLength(0);
   });
@@ -277,6 +279,7 @@ describe("runOnce image-to-image", () => {
       error:
         `Model ${MASK_REQUIRED_MODEL} requires a mask; ` +
         "use /v1/images/edits with mask (masked edit).",
+      validationError: true,
     });
     expect(transport.calls).toHaveLength(0);
   });
@@ -293,6 +296,7 @@ describe("runOnce image-to-image", () => {
     expect(result).toEqual({
       success: false,
       error: `Model ${MULTI_MODEL} supports up to 4 input image(s), got 5`,
+      validationError: true,
     });
     expect(transport.calls).toHaveLength(0);
   });
@@ -327,6 +331,7 @@ describe("runOnce masked edits", () => {
     expect(result).toEqual({
       success: false,
       error: `Model ${IMG2IMG_MODEL} does not support mask-based edits`,
+      validationError: true,
     });
     expect(transport.calls).toHaveLength(0);
   });

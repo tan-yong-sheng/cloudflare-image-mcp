@@ -54,10 +54,17 @@ function coerceFormParam(key: string, value: string): any {
 }
 
 /**
+ * Caller-input failure during collection (bad count, non-object body,
+ * malformed multipart). The endpoint's handle() catch maps this to 400;
+ * every other collection-phase throw stays a 500.
+ */
+export class CollectionError extends Error {}
+
+/**
  * Normalize the image count: absent/blank means 1; anything else must be
- * a positive integer. Throws (a 500 via handle's catch, like every other
- * collection-phase failure) instead of letting NaN flow into runMany,
- * where it previously produced a successful response with no images.
+ * a positive integer. Throws CollectionError (400 via handle's catch)
+ * instead of letting NaN flow into runMany, where it previously produced
+ * a successful response with no images.
  */
 function parseCount(value: unknown): number {
   if (value === null || value === undefined || value === "") return 1;
@@ -65,7 +72,9 @@ function parseCount(value: unknown): number {
   // not parse as 2 — the whole value has to be an integer.
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`Invalid n: must be a positive integer, got ${value}`);
+    throw new CollectionError(
+      `Invalid n: must be a positive integer, got ${value}`
+    );
   }
   return parsed;
 }
@@ -139,7 +148,14 @@ export async function collectInputImages(
   const explicitParams: Record<string, any> = {};
 
   if (contentType.includes("multipart/form-data")) {
-    const formData = await request.formData();
+    // Malformed multipart is caller input (400), not a service failure.
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new CollectionError(`Invalid multipart body: ${detail}`);
+    }
 
     // Support both single "image" and array "image[]" fields (OpenAI style)
     const imageEntries = [
@@ -179,7 +195,7 @@ export async function collectInputImages(
       parsed === null ||
       Array.isArray(parsed)
     ) {
-      throw new Error("Request body must be a JSON object");
+      throw new CollectionError("Request body must be a JSON object");
     }
     const body = parsed as Record<string, any>;
 
