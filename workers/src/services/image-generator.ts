@@ -239,7 +239,8 @@ export class ImageGeneratorService {
     const baseExplicit = request.explicitParams ?? {};
 
     for (let i = 0; i < n; i++) {
-      const seed = baseExplicit.seed ? baseExplicit.seed + i : undefined;
+      const seed =
+        baseExplicit.seed !== undefined ? baseExplicit.seed + i : undefined;
       const result = await this.runOnce({
         ...request,
         explicitParams: {
