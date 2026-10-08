@@ -170,7 +170,18 @@ export class RestAITransport implements AITransport {
 
     if (contentType.includes("application/json")) {
       // JSON response — may contain { result: { image: "base64..." } } or { result: "base64..." }
-      const json = (await response.json()) as any;
+      // Parse failures are operational (upstream), so rethrow as plain
+      // Error: a raw SyntaxError here would be misclassified as malformed
+      // caller JSON by the endpoint's handle() catch.
+      let json: any;
+      try {
+        json = await response.json();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Cloudflare AI API returned unparseable JSON [credential: ${credentialTag}]: ${detail}`
+        );
+      }
       // Cloudflare REST API wraps result in { result: ... }
       return json.result !== undefined ? json.result : json;
     }

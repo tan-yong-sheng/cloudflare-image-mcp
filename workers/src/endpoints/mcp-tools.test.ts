@@ -188,6 +188,21 @@ describe("handleRunModel validation", () => {
       'cf_params.strength cannot be used with taskType "generations"'
     );
   });
+
+  test.each([-1, 0, 2.5, "abc"])("invalid n (%s) is rejected", async (n) => {
+    const result = await handleRunModel(
+      ctx,
+      {
+        taskType: "generations",
+        prompt: "cat",
+        model_id: "@cf/black-forest-labs/flux-1-schnell",
+        n: n as number,
+      },
+      null
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Invalid n");
+  });
 });
 
 describe("handleListModels", () => {

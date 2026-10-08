@@ -231,7 +231,7 @@ describe("count and body validation", () => {
   });
 
   test("fractional and non-positive n throw", async () => {
-    for (const n of [2.5, 0, -1]) {
+    for (const n of [2.5, 0, -1, "1.5", "2x", "abc"]) {
       const request = jsonRequest("/v1/images/generations", {
         prompt: "p",
         n,

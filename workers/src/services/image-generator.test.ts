@@ -331,6 +331,21 @@ describe("runOnce masked edits", () => {
     expect(transport.calls).toHaveLength(0);
   });
 
+  test("explicitly empty image array is invalid input", async () => {
+    const { generator, transport } = setup();
+
+    const result = await generator.runOnce({
+      modelId: IMG2IMG_MODEL,
+      prompt: "add a hat",
+      images: [],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.validationError).toBe(true);
+    expect(result.error).toMatch("At least one input image");
+    expect(transport.calls).toHaveLength(0);
+  });
+
   test("masked edits accept exactly one image", async () => {
     const { generator, transport } = setup();
 

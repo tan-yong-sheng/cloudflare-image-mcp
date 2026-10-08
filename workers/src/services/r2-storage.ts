@@ -138,10 +138,13 @@ export class R2StorageService {
 
       for (const obj of listed.objects) {
         const custom = obj.customMetadata || {};
-        const expiresAt = parseInt(custom.expiresAt, 10);
+        // Number(), not parseInt: a corrupt "0garbage" timestamp must not
+        // parse as 0 and get deleted — the guard keeps anything that is
+        // not a finite integer expiry.
+        const expiresAt = custom.expiresAt ? Number(custom.expiresAt) : NaN;
 
         // Guard: missing or unparseable expiry is kept, never deleted.
-        if (Number.isNaN(expiresAt)) {
+        if (!Number.isInteger(expiresAt)) {
           continue;
         }
 

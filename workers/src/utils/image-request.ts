@@ -61,12 +61,13 @@ function coerceFormParam(key: string, value: string): any {
  */
 function parseCount(value: unknown): number {
   if (value === null || value === undefined || value === "") return 1;
-  const parsed =
-    typeof value === "number" ? value : parseInt(String(value), 10);
-  if (!Number.isInteger(parsed) || (parsed as number) < 1) {
+  // Number(), not parseInt: "1.5" must not truncate to 1 and "2x" must
+  // not parse as 2 — the whole value has to be an integer.
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
     throw new Error(`Invalid n: must be a positive integer, got ${value}`);
   }
-  return parsed as number;
+  return parsed;
 }
 
 /**

@@ -199,7 +199,18 @@ function resolveRunRequest(
   const { taskType, prompt, modelId } = validated;
   const { n, size, image, mask, cf_params } = args;
 
-  const numImages = Math.min(n || 1, 8);
+  // Mirror the OpenAI path's parseCount: n must be a positive integer.
+  // Without this, n=-1 yields zero iterations (success with no images)
+  // and fractional n rounds up surprisingly.
+  const rawN = n ?? 1;
+  const parsedN = typeof rawN === "number" ? rawN : Number(rawN);
+  if (!Number.isInteger(parsedN) || parsedN < 1) {
+    return {
+      ok: false,
+      error: `Error: Invalid n: must be a positive integer, got ${n}.`,
+    };
+  }
+  const numImages = Math.min(parsedN, 8);
   const explicitParams: Record<string, unknown> = {};
   if (size !== undefined) explicitParams.size = size;
 
