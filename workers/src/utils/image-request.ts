@@ -54,6 +54,22 @@ function coerceFormParam(key: string, value: string): any {
 }
 
 /**
+ * Normalize the image count: absent/blank means 1; anything else must be
+ * a positive integer. Throws (a 500 via handle's catch, like every other
+ * collection-phase failure) instead of letting NaN flow into runMany,
+ * where it previously produced a successful response with no images.
+ */
+function parseCount(value: unknown): number {
+  if (value === null || value === undefined || value === "") return 1;
+  const parsed =
+    typeof value === "number" ? value : parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || (parsed as number) < 1) {
+    throw new Error(`Invalid n: must be a positive integer, got ${value}`);
+  }
+  return parsed as number;
+}
+
+/**
  * Read a File/Blob from FormData and convert to base64 string
  */
 async function fileToBase64(
@@ -144,15 +160,27 @@ export async function collectInputImages(
       prompt = (formData.get("prompt") as string) ?? "";
     }
     modelId = (formData.get("model") as string) || config.defaultModel;
-    n = parseInt(formData.get("n") as string) || 1;
+    n = parseCount(formData.get("n"));
     returnBase64 = formData.get("response_format") === "b64_json";
 
     for (const key of config.params) {
       const value = formData.get(key) as string | null;
-      if (value) explicitParams[key] = coerceFormParam(key, value);
+      // Presence check, not truthiness: form fields arrive as strings so
+      // "0" must survive (matching the JSON path's !== undefined).
+      if (value !== null && value !== "") {
+        explicitParams[key] = coerceFormParam(key, value);
+      }
     }
   } else {
-    const body = (await request.json()) as Record<string, any>;
+    const parsed: unknown = await request.json();
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error("Request body must be a JSON object");
+    }
+    const body = parsed as Record<string, any>;
 
     imageDataArr = collectJsonImages(body, imageKeys);
     for (const key of maskKeys) {
@@ -166,7 +194,7 @@ export async function collectInputImages(
       prompt = body.prompt ?? "";
     }
     modelId = body.model || config.defaultModel;
-    n = body.n || 1;
+    n = parseCount(body.n);
     returnBase64 = body.response_format === "b64_json";
 
     for (const key of config.params) {
