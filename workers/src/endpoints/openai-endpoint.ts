@@ -4,7 +4,10 @@
 // ============================================================================
 
 import type { Env, OpenAIImageResponse } from "../types.js";
-import { ImageGeneratorService } from "../services/image-generator.js";
+import {
+  ImageGeneratorService,
+  type BatchResult,
+} from "../services/image-generator.js";
 import { corsHeaders } from "../utils/cors.js";
 import {
   buildImageResponse,
@@ -101,10 +104,16 @@ export class OpenAIEndpoint {
       // Malformed JSON bodies surface here (request.json() rejects
       // inside collectInputImages): a bad request, not a service failure.
       if (this.isMalformedJsonError(error)) {
+        const message =
+          error instanceof SyntaxError
+            ? "Invalid JSON in request body"
+            : error instanceof Error
+              ? error.message
+              : String(error);
         return new Response(
           JSON.stringify({
             error: {
-              message: "Invalid JSON in request body",
+              message,
               type: "invalid_request_error",
               code: null,
             },
@@ -124,11 +133,17 @@ export class OpenAIEndpoint {
 
   /**
    * request.json() rejects with a SyntaxError when the body is not valid
-   * JSON. The handle try-block only wraps routing plus input collection,
-   * so a SyntaxError surfacing here can only come from body parsing.
+   * JSON; collectInputImages throws a plain Error with this prefix when
+   * the parsed body is not an object. The handle try-block only wraps
+   * routing plus input collection, so either surfacing here can only
+   * come from body parsing: both are 400s, not service failures.
    */
   private isMalformedJsonError(error: unknown): boolean {
-    return error instanceof SyntaxError;
+    return (
+      error instanceof SyntaxError ||
+      (error instanceof Error &&
+        error.message.startsWith("Request body must be"))
+    );
   }
 
   /**
@@ -164,15 +179,7 @@ export class OpenAIEndpoint {
     );
 
     if (!result.success) {
-      return new Response(
-        JSON.stringify({
-          error: { message: result.error, type: "api_error" },
-        }),
-        {
-          status: 500,
-          headers: { ...this.corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return this.failureResponse(result);
     }
 
     // Build response based on response_format
@@ -208,6 +215,7 @@ export class OpenAIEndpoint {
           error: {
             message: "image and prompt are required",
             type: "invalid_request_error",
+            code: null,
           },
         }),
         {
@@ -247,15 +255,7 @@ export class OpenAIEndpoint {
         );
 
     if (!result.success) {
-      return new Response(
-        JSON.stringify({
-          error: { message: result.error, type: "api_error" },
-        }),
-        {
-          status: 500,
-          headers: { ...this.corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return this.failureResponse(result);
     }
 
     // Build OpenAI-compatible response (same pattern as handleGenerations)
@@ -284,6 +284,7 @@ export class OpenAIEndpoint {
           error: {
             message: "image is required",
             type: "invalid_request_error",
+            code: null,
           },
         }),
         {
@@ -309,15 +310,7 @@ export class OpenAIEndpoint {
     );
 
     if (!result.success) {
-      return new Response(
-        JSON.stringify({
-          error: { message: result.error, type: "api_error" },
-        }),
-        {
-          status: 500,
-          headers: { ...this.corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return this.failureResponse(result);
     }
 
     // Build OpenAI-compatible response
@@ -370,6 +363,28 @@ export class OpenAIEndpoint {
         description: help,
       }),
       {
+        headers: { ...this.corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  /**
+   * Map a failed seam result to the OpenAI envelope. Validation failures
+   * (invalid caller input) are 400 invalid_request_error; operational
+   * failures are 500 api_error. Every envelope carries code: null.
+   */
+  private failureResponse(result: BatchResult): Response {
+    const validation = result.validationError === true;
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: result.error,
+          type: validation ? "invalid_request_error" : "api_error",
+          code: null,
+        },
+      }),
+      {
+        status: validation ? 400 : 500,
         headers: { ...this.corsHeaders, "Content-Type": "application/json" },
       }
     );

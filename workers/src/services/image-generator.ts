@@ -39,12 +39,41 @@ export interface SingleResult {
   imageId?: string;
   base64Data?: string;
   error?: string;
+  /** True when the failure is invalid caller input (maps to 400). */
+  validationError?: boolean;
 }
 
 export interface BatchResult {
   success: boolean;
   images: GeneratedImage[];
   error?: string;
+  /** True when the failure is invalid caller input (maps to 400). */
+  validationError?: boolean;
+}
+
+/**
+ * Thrown (internally) for invalid caller input: bad sizes, out-of-range
+ * numbers, malformed params. Caught in runOnce and surfaced via the
+ * validationError flag so endpoints map it to 400; operational failures
+ * (transport, storage) stay flag-free and map to 500.
+ */
+class ValidationError extends Error {}
+
+/**
+ * ParamParser.parse, with plain-Error validation throws reclassified as
+ * ValidationError so runOnce can flag them for the 400 mapping.
+ */
+function parseParams(
+  prompt: string | Record<string, any>,
+  explicitParams: Record<string, any>,
+  model: ModelConfig
+) {
+  try {
+    return ParamParser.parse(prompt, explicitParams, model);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ValidationError(message);
+  }
 }
 
 export class ImageGeneratorService {
@@ -223,6 +252,9 @@ export class ImageGeneratorService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Image generation failed: ${message}`);
+      if (error instanceof ValidationError) {
+        return { success: false, validationError: true, error: message };
+      }
       return { success: false, error: message };
     }
   }
@@ -245,7 +277,9 @@ export class ImageGeneratorService {
         ...request,
         explicitParams: {
           ...baseExplicit,
-          seed,
+          // Omit the key when no base seed: writing seed: undefined would
+          // clobber a --seed=... parsed from a string prompt.
+          ...(seed !== undefined ? { seed } : {}),
         },
       });
 
@@ -262,7 +296,12 @@ export class ImageGeneratorService {
           };
         }
       } else {
-        return { success: false, images: results, error: result.error };
+        return {
+          success: false,
+          images: results,
+          error: result.error,
+          ...(result.validationError ? { validationError: true } : {}),
+        };
       }
     }
 
@@ -278,8 +317,8 @@ export class ImageGeneratorService {
     explicitParams: Record<string, any>,
     returnBase64: boolean
   ): Promise<SingleResult> {
-    // Parse parameters
-    const params = ParamParser.parse(request.prompt, explicitParams, model);
+    // Parse parameters (throws ValidationError on invalid caller input)
+    const params = parseParams(request.prompt, explicitParams, model);
 
     // Build Cloudflare AI payload
     const payload = ParamParser.toCFPayload(params, model);
@@ -340,8 +379,8 @@ export class ImageGeneratorService {
     // For single image, set image param for ParamParser
     const mergedExplicit = { ...explicitParams, image: images[0] };
 
-    // Parse parameters with image
-    const params = ParamParser.parse(request.prompt, mergedExplicit, model);
+    // Parse parameters with image (throws ValidationError on invalid input)
+    const params = parseParams(request.prompt, mergedExplicit, model);
 
     // Build payload with image
     const payload = ParamParser.toCFPayload(params, model);
@@ -394,7 +433,7 @@ export class ImageGeneratorService {
       };
     }
 
-    const params = ParamParser.parse(
+    const params = parseParams(
       request.prompt,
       { ...explicitParams, image: request.images, mask: request.mask },
       model

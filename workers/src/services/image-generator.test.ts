@@ -205,6 +205,18 @@ describe("runOnce text-to-image", () => {
       error: "Cloudflare AI API error (500): boom",
     });
   });
+
+  test("invalid params flag validation (maps to 400, not 500)", async () => {
+    const { generator } = setup();
+
+    const result = await generator.runOnce(
+      textRequest({ explicitParams: { size: "bogus" } })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.validationError).toBe(true);
+    expect(result.error).toMatch("Invalid size format");
+  });
 });
 
 describe("runOnce image-to-image", () => {
@@ -367,6 +379,16 @@ describe("runMany", () => {
     expect(
       transport.calls.map((call) => (call.payload as { seed?: number }).seed)
     ).toEqual([0, 1, 2]);
+  });
+
+  test("prompt-embedded seed survives when no base seed is given", async () => {
+    const { generator, transport } = setup();
+
+    await generator.runMany(textRequest({ prompt: "a cat --seed=7" }), 2);
+
+    expect(
+      transport.calls.map((call) => (call.payload as { seed?: number }).seed)
+    ).toEqual([7, 7]);
   });
 
   test("batch base64 runs return inline payloads without uploading", async () => {

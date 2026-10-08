@@ -203,6 +203,58 @@ describe("collectInputImages from multipart", () => {
   });
 });
 
+describe("count and body validation", () => {
+  test("multipart zero-valued params survive (presence, not truthiness)", async () => {
+    const formData = new FormData();
+    formData.append("image", pngFile("Hello"));
+    formData.append("prompt", "p");
+    formData.append("seed", "0");
+    formData.append("guidance", "0");
+    const request = new Request("https://worker.test/v1/images/edits", {
+      method: "POST",
+      body: formData,
+    });
+
+    const collected = await collectInputImages(request, EDIT_CONFIG);
+    expect(collected.explicitParams).toEqual({ seed: 0, guidance: 0 });
+  });
+
+  test("non-numeric n throws instead of producing an empty success", async () => {
+    const request = jsonRequest("/v1/images/generations", {
+      prompt: "p",
+      n: "abc",
+    });
+
+    await expect(
+      collectInputImages(request, GENERATION_CONFIG)
+    ).rejects.toThrow("Invalid n");
+  });
+
+  test("fractional and non-positive n throw", async () => {
+    for (const n of [2.5, 0, -1]) {
+      const request = jsonRequest("/v1/images/generations", {
+        prompt: "p",
+        n,
+      });
+      await expect(
+        collectInputImages(request, GENERATION_CONFIG)
+      ).rejects.toThrow("Invalid n");
+    }
+  });
+
+  test("null JSON body throws a 400-mapped collection error", async () => {
+    const request = new Request("https://worker.test/v1/images/generations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "null",
+    });
+
+    await expect(
+      collectInputImages(request, GENERATION_CONFIG)
+    ).rejects.toThrow("Request body must be a JSON object");
+  });
+});
+
 describe("buildImageResponse", () => {
   test("shapes b64_json output with only the requested field", () => {
     expect(
