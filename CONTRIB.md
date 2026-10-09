@@ -89,6 +89,10 @@ Pre-push runs `workers` typecheck (`npm run check`).
 Invoke prettier only via `workers/node_modules/.bin/prettier` — bare `npx`
 may resolve a different major with different formatting.
 
+Releases: bump `workers/package.json` `version` on main; `tag-release.yml`
+mints the tag automatically (never hand-tag). Full procedure:
+`docs/RELEASING.md`.
+
 ## Testing
 
 Unit tests are pure logic, run from the repo root with no backend needed:
