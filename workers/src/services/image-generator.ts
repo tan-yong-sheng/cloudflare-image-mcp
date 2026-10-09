@@ -297,20 +297,21 @@ export class ImageGeneratorService {
           : hasSeed
             ? rawSeed
             : undefined;
+      // Null counts as absent: delete a retained seed: null outright (a
+      // present-but-undefined key would still clobber a prompt-embedded
+      // --seed=... in the downstream merge, same as writing it would).
+      const nextExplicit: Record<string, any> = {
+        ...baseExplicit,
+        // Omit the key when no base seed: writing seed: undefined would
+        // clobber a --seed=... parsed from a string prompt.
+        ...(seed !== undefined ? { seed } : {}),
+      };
+      if (rawSeed === null) {
+        delete nextExplicit.seed;
+      }
       const result = await this.runOnce({
         ...request,
-        explicitParams: {
-          ...baseExplicit,
-          // Omit the key when no base seed: writing seed: undefined would
-          // clobber a --seed=... parsed from a string prompt. Null counts
-          // as absent too, so overwrite a retained seed: null (ParamParser
-          // rejects non-undefined null downstream).
-          ...(seed !== undefined
-            ? { seed }
-            : rawSeed === null
-              ? { seed: undefined }
-              : {}),
-        },
+        explicitParams: nextExplicit,
       });
 
       if (result.success) {

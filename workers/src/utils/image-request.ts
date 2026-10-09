@@ -50,6 +50,11 @@ export type GeneratedImage = { url: string; id: string } | { b64_json: string };
 // Strict: the whole string must parse (parseInt/parseFloat would silently
 // accept "20junk"/"1.2junk" prefixes). Failures are CollectionErrors.
 function coerceFormParam(key: string, value: string): any {
+  // Blank strings are not zero: Number("   ") is 0, which would silently
+  // accept whitespace-only input as seed/steps/guidance 0.
+  if (value.trim() === "") {
+    throw new CollectionError(`Invalid ${key}: must not be blank`);
+  }
   if (key === "steps" || key === "seed") {
     const parsed = Number(value);
     if (!Number.isInteger(parsed)) {
