@@ -1,0 +1,141 @@
+name: Tag release
+
+# Phase 1 of versioned releases (issue #8): every production deployment
+# gets a version + GitHub Release with notes, with zero change to how
+# deploys happen. Continuous delivery on default-branch push is untouched
+# (see deploy-workers.yml) — this workflow only observes version bumps.
+#
+# Design blended from storytold/photocraft's release pipeline (see
+# docs/research/release-mechanism-photocraft.md): keep our main-push
+# autotag shape, fill every unspecified mechanism with their patterns.
+# Deliberately NOT adopted for phase 1: dedicated release branch, draft
+# stage, dispatch version-override (all need artifacts worth inspecting
+# or builds worth test-running; ours has neither).
+#
+# Decisions (phase 1, per issue #8 + grill):
+# - Version source (single + declared): `version` in workers/package.json.
+# - Tag format: `v<semver>` (e.g. `v0.1.0`); prerelease suffixes
+#   (`-rc.1`) mark the GitHub Release as prerelease.
+# - Bump process: manual — maintainer edits the version field through
+#   normal review flow. No bot commits, no auto-increment.
+# - Release notes: auto-generated (--generate-notes), no changelog upkeep.
+# - Re-pushing the same version is a no-op (existence checks below).
+# - Auth: GITHUB_TOKEN only (contents: write on this job). No secrets.
+
+on:
+  # `branches` + `paths` is an AND: only pushes to main that touch the
+  # version source (or this workflow) fire. Any version bump touches
+  # workers/package.json, so every release is observed exactly once.
+  push:
+    branches:
+      - main
+    paths:
+      - "workers/package.json"
+      - ".github/workflows/tag-release.yml"
+  # Escape hatch: re-run by hand to backfill a tag/release after a
+  # transient failure, without pushing an empty commit. No version
+  # override input — the run takes seconds, so re-push instead, and an
+  # override would invite tag/version skew.
+  workflow_dispatch:
+
+# Serialize tag runs: a second push of the same version waits for the
+# first, so its existence check sees the minted tag and becomes a no-op
+# instead of racing to create a duplicate.
+concurrency:
+  group: tag-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag-and-release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    # Tags + releases are repo contents; GITHUB_TOKEN only, no secrets.
+    permissions:
+      contents: write
+    # Minting a tag + release is two API calls; a stall must fail, never
+    # hold the queue behind the concurrency group above.
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./workers/package.json').version")"
+          VERSION="${VERSION#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+            echo "::error::workers/package.json version is not strict semver: '$VERSION'"
+            exit 1
+          fi
+          TAG="v$VERSION"
+          case "$VERSION" in
+            *"-"*) PRERELEASE=true ;;
+            *) PRERELEASE=false ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION → tag $TAG (prerelease: $PRERELEASE)"
+
+      - name: Check existing tag and release
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f2)" ]; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG not found"
+          fi
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists"
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG not found"
+          fi
+
+      - name: Create and push tag
+        if: steps.existing.outputs.tag_exists == 'false'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG" "${{ github.sha }}"
+          git push origin "$TAG"
+          echo "Tag $TAG created"
+
+      - name: Create GitHub Release
+        if: steps.existing.outputs.release_exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          FLAGS="--title \"cloudflare-image-mcp $TAG\" --target \"${{ github.sha }}\" --generate-notes"
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then
+            FLAGS="$FLAGS --prerelease"
+          fi
+          # shellcheck disable=SC2086
+          gh release create "$TAG" $FLAGS
+          echo "Release $TAG published"
+
+      - name: Release summary
+        if: always() && steps.version.outputs.tag != ''
+        run: |
+          {
+            echo "## Tag release: ${{ steps.version.outputs.tag }}"
+            echo ""
+            echo "**Version source:** workers/package.json (${{ steps.version.outputs.version }})"
+            echo "**Commit:** ${{ github.sha }}"
+            echo ""
+            if [ "${{ steps.existing.outputs.tag_exists }}" = "true" ] && [ "${{ steps.existing.outputs.release_exists }}" = "true" ]; then
+              echo "Tag and release already existed — no-op, nothing duplicated."
+            else
+              echo "Tag: created (or already existed)"
+              echo "Release: published (or already existed)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
