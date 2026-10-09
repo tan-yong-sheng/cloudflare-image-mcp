@@ -5,13 +5,12 @@ name: Tag release
 # deploys happen. Continuous delivery on default-branch push is untouched
 # (see deploy-workers.yml) — this workflow only observes version bumps.
 #
-# Design blended from storytold/photocraft's release pipeline: keep our
-# main-push autotag shape, fill every unspecified mechanism with their
-# patterns (workflow-minted v<semver> tags, existence-check idempotency,
-# serialize-never-cancel concurrency, GITHUB_TOKEN-only, --generate-notes).
-# Deliberately NOT adopted for phase 1: dedicated release branch, draft
-# stage, dispatch version-override (all need artifacts worth inspecting
-# or builds worth test-running; ours has neither).
+# Design: main-push autotag — the workflow mints v<semver> tags,
+# existence checks make re-pushes no-ops, concurrent bumps serialize
+# (never cancel), GITHUB_TOKEN-only auth, --generate-notes.
+# Deliberately NOT in phase 1: dedicated release branch, draft stage,
+# dispatch version-override (all need artifacts worth inspecting or
+# builds worth test-running; ours has neither).
 #
 # Decisions (phase 1, per issue #8 + grill):
 # - Version source (single + declared): `version` in workers/package.json.
