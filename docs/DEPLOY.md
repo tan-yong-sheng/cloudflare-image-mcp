@@ -97,6 +97,8 @@ The file `.github/workflows/deploy-workers.yml` handles everything:
 
 > ⚠️ **Important**: The `wrangler.toml` in the repo is only for local development. CI/CD generates its own.
 
+To cut a versioned release (bump `workers/package.json`, auto-tag + Release notes), see `RELEASING.md`.
+
 ---
 
 ## 📋 Troubleshooting
