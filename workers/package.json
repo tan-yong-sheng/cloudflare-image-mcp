@@ -1,6 +1,6 @@
 {
   "name": "cloudflare-image-workers",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "description": "Cloudflare Workers for Image Generation - OpenAI-compatible API + HTTP MCP + Frontend",
   "main": "src/index.ts",
   "type": "module",
