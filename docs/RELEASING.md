@@ -53,7 +53,9 @@ release. The RC stays published as pre-release history.
 - **Transient failure left a version half-minted:** use the workflow's
   `workflow_dispatch` (Actions → Tag release → Run workflow) as a
   backfill — no empty commit needed, no version override (re-push
-  instead; the run takes seconds).
+  instead; the run takes seconds). Select `main` in the Run workflow
+  branch picker: dispatching from any other branch skips the job by
+  design and mints nothing.
 - **Two version bumps in rapid succession:** runs serialize on a
   concurrency group; the second waits, sees the first's tag, and either
   mints its own (different version) or no-ops (same version).
