@@ -46,9 +46,11 @@ on:
   # override would invite tag/version skew.
   workflow_dispatch:
 
-# Serialize tag runs: a second push of the same version waits for the
-# first, so its existence check sees the minted tag and becomes a no-op
-# instead of racing to create a duplicate.
+# Serialize tag runs: concurrent pushes wait instead of racing on tag
+# creation. Guarantee is serialization only — under sustained rapid
+# pushes GitHub keeps one running + one pending run, so an intermediate
+# queued run can be replaced and its version skipped; backfill it via
+# workflow_dispatch (visible as a missing tag, never silent).
 concurrency:
   group: tag-release-${{ github.ref }}
   cancel-in-progress: false
@@ -85,7 +87,10 @@ jobs:
           fi
           VERSION="${RAW#v}"
           TAG="v$VERSION"
-          case "$VERSION" in
+          # Prerelease iff the core (before any +build metadata) carries
+          # a hyphen: 1.2.3+build-7 is stable, 1.2.3-rc.1+b.1 is not.
+          CORE_AND_PRERELEASE="${VERSION%%+*}"
+          case "$CORE_AND_PRERELEASE" in
             *"-"*) PRERELEASE=true ;;
             *) PRERELEASE=false ;;
           esac
