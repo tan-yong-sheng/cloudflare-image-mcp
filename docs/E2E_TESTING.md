@@ -292,3 +292,5 @@ Current E2E coverage includes:
 - ✅ Error handling
 - ✅ CORS headers
 - ✅ Response formats (URL and base64)
+
+<!-- trial-b gate overlap probe -->
