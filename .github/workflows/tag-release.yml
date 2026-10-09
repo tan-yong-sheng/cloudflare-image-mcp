@@ -18,6 +18,11 @@ name: Tag release
 #   (`-rc.1`) mark the GitHub Release as prerelease.
 # - Bump process: manual — maintainer edits the version field through
 #   normal review flow. No bot commits, no auto-increment.
+# - Numbering: forward-only semver from the 0.1.0 manifest baseline
+#   (never released, but history). MINOR for new surface (spec #14's
+#   seam/modules/envelopes = 0.2.0-class), PATCH for fixes, MAJOR when
+#   compatibility is staked. Suggested first line: 0.2.0-rc.1 -> 0.2.0
+#   (verify the RC, then release the bare version).
 # - Release notes: auto-generated (--generate-notes), no changelog upkeep.
 # - Re-pushing the same version is a no-op (existence checks below).
 # - Auth: GITHUB_TOKEN only (contents: write on this job). No secrets.
