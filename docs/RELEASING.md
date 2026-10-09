@@ -27,8 +27,12 @@ verify it, then release the bare version. Suggested first line:
 
 ## Cut the release
 
-1. **PR bumping `workers/package.json` `version`** through normal
-   review, then merge. This is the only manual step — the workflow mints
+1. **PR from a gated branch (`prerelease/*` or `release/*`)**
+   bumping `workers/package.json` `version` through normal
+   review, then merge. The gated prefix forces the full E2E gate
+   (deploy → smoke → cleanup → Sentinel); any other prefix skips
+   in seconds. Gate table: `docs/E2E_TESTING.md#cicd-integration`.
+   This is the only manual step — the workflow mints
    the tag and Release from the push. Never hand-tag.
 2. **Watch the `tag-release.yml` run** on the merge commit. It resolves
    the version, validates strict semver (fails loudly on mismatch),
