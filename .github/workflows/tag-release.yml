@@ -60,11 +60,10 @@ jobs:
     # from any branch: refuse to mint tags from anything but main.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Tags + releases are repo contents; GITHUB_TOKEN only, no secrets.
+    # GITHUB_TOKEN only; no new secrets, no environment.
     permissions:
       contents: write
-    # Minting a tag + release is two API calls; a stall must fail, never
-    # hold the queue behind the concurrency group above.
+    # A stall must fail, never hold the queue behind the concurrency group above.
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -84,7 +83,7 @@ jobs:
             echo "::error::workers/package.json version is not strict semver: '$RAW'"
             exit 1
           fi
-          VERSION="${RAW#v}" # normalized: tag from the stripped form
+          VERSION="${RAW#v}"
           TAG="v$VERSION"
           case "$VERSION" in
             *"-"*) PRERELEASE=true ;;
