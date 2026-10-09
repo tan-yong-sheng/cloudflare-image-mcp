@@ -166,10 +166,21 @@ const TEST_IMAGE_BASE64 =
 
 ### GitHub Actions
 
-The E2E workflow (`.github/workflows/e2e-tests.yml`) runs on:
+The E2E workflow (`.github/workflows/e2e-tests.yml`) triggers on every PR
+to `main` (no paths filter, so the `e2e`-label opt-in can't be silently
+blocked), plus a weekly canary schedule and manual dispatch. Job-level
+guards decide what actually runs:
 
-1. **Pull requests** touching `workers/` or `e2e/` — tests the deployed staging worker
-2. **Manual dispatch** (`workflow_dispatch`) — test staging, production, or a custom URL
+1. **Release-integration PRs** (head branch `prerelease/*` or `release/*`,
+   case-insensitive) and **PRs labeled `e2e`** — full gate: deploy a shared
+   staging worker, run the smoke/canary tiers, delete the worker. Overlapping
+   gated runs serialize on one concurrency group (`e2e-staging-worker`,
+   queued, never cancelled); feature PRs wait behind an active staging run
+   before their skip is reported.
+2. **Other pull requests** — skip in seconds. The `E2E Gate Sentinel` check
+   stays green (branch protection must require the sentinel, which can
+   fail, not the raw E2E job, which reads skipped as success).
+3. **Manual dispatch** (`workflow_dispatch`) — test staging, production, or a custom URL
 
 Optional input: `test_pattern` (e.g. `tests/api/mcp/mcp-sdk.spec.ts`) to run a subset.
 

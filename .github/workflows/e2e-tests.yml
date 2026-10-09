@@ -74,15 +74,21 @@ on:
 env:
   NODE_VERSION: "24"
 
-# Serialization scope: every run of this workflow that touches the shared
-# staging worker (deploy -> test -> delete) holds this single group for the
-# whole run. Fixed string on purpose — per-PR scoping would NOT protect one
-# shared worker. cancel-in-progress stays false: queued runs must wait, and
-# a cancelled stale run releases the group promptly via job timeouts.
-# queue: max (not the single-pending default): a third run must wait behind
-# a pending run, never replace it — otherwise a release PR could silently
-# lose its queued gate. Runs proceed FIFO; queue: max + cancel-in-progress:
-# true is rejected by workflow validation, and we want false here anyway.
+# Serialization scope: every run of this workflow — including feature-PR
+# runs whose jobs skip in seconds — holds this single group for the whole
+# run. Fixed string on purpose: per-PR scoping would NOT protect one
+# shared worker, and non-staging runs queue behind staging runs (a feature
+# PR opened mid-matrix waits for the gate to clear before its skip is
+# reported; typically minutes on gated runs, longer on full-matrix
+# dispatch — accepted cost of one shared worker).
+# cancel-in-progress stays false: queued runs must wait; nothing cancels
+# stale runs, so a stuck run holds the group until its job timeouts fire
+# (deploy 30m + e2e 30m + cleanup 10m bounds the worst case).
+# queue: max (not the single-pending default): a third run waits behind a
+# pending run instead of replacing it — but note the platform caps the
+# queue and cancels overflow runs, so sustained pile-ups can still lose a
+# queued gate; backfill via workflow_dispatch in that case. Ordering is
+# FIFO by wait-start but not guaranteed — do not rely on exact order.
 concurrency:
   group: e2e-staging-worker
   cancel-in-progress: false
@@ -401,7 +407,9 @@ jobs:
     # (which can fail) rather than the raw job. Fails closed: a gated branch
     # whose E2E did not succeed — skipped or failed — blocks the merge.
     # Non-gated branches/events always pass, keeping the feature-PR fast path.
-    needs: [e2e-tests]
+    # cleanup-staging is included: E2E-green plus a failed delete would
+    # otherwise report success while leaking the shared worker.
+    needs: [e2e-tests, cleanup-staging]
     if: always()
     runs-on: ubuntu-latest
     # Decision check only; bound it so it can never hold the gate open.
@@ -417,13 +425,22 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
           E2E_RESULT: ${{ needs.e2e-tests.result }}
+          CLEANUP_RESULT: ${{ needs.cleanup-staging.result }}
+          HAS_E2E_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'e2e') }}
         run: |
-          # Prefix-only match on the source branch. Fork PRs from gated
-          # prefixes fail closed here (their e2e-tests skips on the fork
-          # guard), which is the safe direction for a merge gate.
-          if [[ "$HEAD_REF" == prerelease/* || "$HEAD_REF" == release/* ]]; then
+          # Gated = release-integration prefix (case-insensitive: the job
+          # guards use startsWith, which ignores case, so Prerelease/x
+          # gates) OR the opt-in e2e label. Fork PRs from gated prefixes
+          # fail closed here (their e2e-tests skips on the fork guard),
+          # which is the safe direction for a merge gate.
+          shopt -s nocasematch
+          if [[ "$HEAD_REF" == prerelease/* || "$HEAD_REF" == release/* ]] || [[ "$HAS_E2E_LABEL" == "true" ]]; then
             if [[ "$E2E_RESULT" != "success" ]]; then
               echo "❌ E2E did not succeed on gated branch '$HEAD_REF' (result: $E2E_RESULT) — blocking merge"
+              exit 1
+            fi
+            if [[ "$CLEANUP_RESULT" != "success" && "$CLEANUP_RESULT" != "skipped" ]]; then
+              echo "❌ E2E passed but staging cleanup failed (result: $CLEANUP_RESULT) — blocking merge"
               exit 1
             fi
             echo "✅ E2E succeeded on gated branch '$HEAD_REF'"
