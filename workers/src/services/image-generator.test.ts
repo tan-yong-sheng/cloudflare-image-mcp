@@ -428,6 +428,21 @@ describe("runMany", () => {
     ).toEqual([5, 6]);
   });
 
+  test("null seed behaves as absent (no validation error)", async () => {
+    const { generator, transport } = setup();
+
+    const result = await generator.runMany(
+      textRequest({ explicitParams: { seed: null as unknown as number } }),
+      2
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.images).toHaveLength(2);
+    expect(
+      transport.calls.map((call) => (call.payload as { seed?: number }).seed)
+    ).toEqual([undefined, undefined]);
+  });
+
   test("prompt-embedded seed survives when no base seed is given", async () => {
     const { generator, transport } = setup();
 

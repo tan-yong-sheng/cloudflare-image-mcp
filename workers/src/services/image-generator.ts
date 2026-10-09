@@ -302,8 +302,14 @@ export class ImageGeneratorService {
         explicitParams: {
           ...baseExplicit,
           // Omit the key when no base seed: writing seed: undefined would
-          // clobber a --seed=... parsed from a string prompt.
-          ...(seed !== undefined ? { seed } : {}),
+          // clobber a --seed=... parsed from a string prompt. Null counts
+          // as absent too, so overwrite a retained seed: null (ParamParser
+          // rejects non-undefined null downstream).
+          ...(seed !== undefined
+            ? { seed }
+            : rawSeed === null
+              ? { seed: undefined }
+              : {}),
         },
       });
 

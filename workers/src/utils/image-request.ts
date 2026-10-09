@@ -47,9 +47,27 @@ export type GeneratedImage = { url: string; id: string } | { b64_json: string };
 // FormData string coercions mirror the previous per-handler extraction:
 // steps/seed are integers, guidance/strength are floats, everything else
 // passes through as a string. JSON bodies keep their parsed values as-is.
+// Strict: the whole string must parse (parseInt/parseFloat would silently
+// accept "20junk"/"1.2junk" prefixes). Failures are CollectionErrors.
 function coerceFormParam(key: string, value: string): any {
-  if (key === "steps" || key === "seed") return parseInt(value);
-  if (key === "guidance" || key === "strength") return parseFloat(value);
+  if (key === "steps" || key === "seed") {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) {
+      throw new CollectionError(
+        `Invalid ${key}: must be an integer, got ${value}`
+      );
+    }
+    return parsed;
+  }
+  if (key === "guidance" || key === "strength") {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      throw new CollectionError(
+        `Invalid ${key}: must be a number, got ${value}`
+      );
+    }
+    return parsed;
+  }
   return value;
 }
 
@@ -101,7 +119,16 @@ function collectJsonImages(
   for (const key of keys) {
     const raw = body[key];
     if (Array.isArray(raw)) {
-      return raw.filter(isNonEmptyString);
+      // Reject, don't filter: silently dropping members changes the
+      // requested image set (e.g. ["valid", 42] running as one edit).
+      for (const member of raw) {
+        if (!isNonEmptyString(member)) {
+          throw new CollectionError(
+            `Invalid image entry for '${key}': must be a non-empty base64 string`
+          );
+        }
+      }
+      return raw as string[];
     }
     if (isNonEmptyString(raw)) {
       return [raw];

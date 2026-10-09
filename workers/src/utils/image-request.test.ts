@@ -10,6 +10,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildImageResponse,
+  CollectionError,
   collectInputImages,
   type CollectConfig,
 } from "./image-request.js";
@@ -240,6 +241,38 @@ describe("count and body validation", () => {
         collectInputImages(request, GENERATION_CONFIG)
       ).rejects.toThrow("Invalid n");
     }
+  });
+
+  test("malformed numeric strings throw instead of coercing", async () => {
+    for (const [key, value] of [
+      ["steps", "20junk"],
+      ["seed", "42junk"],
+      ["guidance", "1.2junk"],
+      ["strength", "0.5junk"],
+    ]) {
+      const formData = new FormData();
+      formData.append("image", pngFile("Hello"));
+      formData.append("prompt", "p");
+      formData.append(key, value);
+      const request = new Request("https://worker.test/v1/images/edits", {
+        method: "POST",
+        body: formData,
+      });
+      await expect(collectInputImages(request, EDIT_CONFIG)).rejects.toThrow(
+        CollectionError
+      );
+    }
+  });
+
+  test("non-string JSON image members are rejected, not filtered", async () => {
+    const request = jsonRequest("/v1/images/edits", {
+      image: ["aGVsbG8=", 42],
+      prompt: "p",
+    });
+
+    await expect(collectInputImages(request, EDIT_CONFIG)).rejects.toThrow(
+      CollectionError
+    );
   });
 
   test("null JSON body throws a 400-mapped collection error", async () => {
