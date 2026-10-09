@@ -5,15 +5,15 @@ on:
     branches:
       - main
     paths:
-      - 'workers/**'
-      - '.github/workflows/deploy-workers.yml'
+      - "workers/**"
+      - ".github/workflows/deploy-workers.yml"
 
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Deployment environment'
+        description: "Deployment environment"
         required: true
-        default: 'production'
+        default: "production"
         type: choice
         options:
           - staging
@@ -22,17 +22,17 @@ on:
   workflow_call:
     inputs:
       environment:
-        description: 'Deployment environment'
+        description: "Deployment environment"
         required: false
-        default: 'production'
+        default: "production"
         type: string
     outputs:
       workers_url:
-        description: 'Deployed Workers base URL'
+        description: "Deployed Workers base URL"
         value: ${{ jobs.deploy.outputs.workers_url }}
 
 env:
-  NODE_VERSION: '24'
+  NODE_VERSION: "24"
 
 jobs:
   deploy:
@@ -46,13 +46,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: workers/package-lock.json
 
       - name: Install dependencies
@@ -161,7 +161,7 @@ jobs:
           echo "✅ Secrets check completed"
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
