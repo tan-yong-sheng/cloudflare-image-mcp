@@ -53,6 +53,9 @@ concurrency:
 jobs:
   tag-and-release:
     name: Tag and release
+    # The push trigger is scoped to main, but workflow_dispatch can be run
+    # from any branch: refuse to mint tags from anything but main.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Tags + releases are repo contents; GITHUB_TOKEN only, no secrets.
     permissions:
@@ -67,12 +70,15 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          VERSION="$(node -p "require('./workers/package.json').version")"
-          VERSION="${VERSION#v}"
-          if ! printf '%s' "$VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
-            echo "::error::workers/package.json version is not strict semver: '$VERSION'"
+          RAW="$(node -p "require('./workers/package.json').version")"
+          # Optional leading v is accepted and normalized (not silently
+          # stripped: the regex below names it). Build metadata (+build)
+          # is semver-legal; leading-zero numerics stay rejected.
+          if ! printf '%s' "$RAW" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+            echo "::error::workers/package.json version is not strict semver: '$RAW'"
             exit 1
           fi
+          VERSION="${RAW#v}" # normalized: tag from the stripped form
           TAG="v$VERSION"
           case "$VERSION" in
             *"-"*) PRERELEASE=true ;;
@@ -120,12 +126,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          FLAGS="--title \"cloudflare-image-mcp $TAG\" --target \"${{ github.sha }}\" --generate-notes"
+          ARGS=(
+            --title "cloudflare-image-mcp $TAG"
+            --target "${{ github.sha }}"
+            --generate-notes
+          )
           if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then
-            FLAGS="$FLAGS --prerelease"
+            ARGS+=(--prerelease)
           fi
-          # shellcheck disable=SC2086
-          gh release create "$TAG" $FLAGS
+          gh release create "$TAG" "${ARGS[@]}"
           echo "Release $TAG published"
 
       - name: Release summary
