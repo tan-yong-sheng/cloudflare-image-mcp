@@ -264,6 +264,22 @@ describe("count and body validation", () => {
     }
   });
 
+  test("whitespace-only numerics are rejected, not zero", async () => {
+    for (const key of ["steps", "seed", "guidance", "strength"]) {
+      const formData = new FormData();
+      formData.append("image", pngFile("Hello"));
+      formData.append("prompt", "p");
+      formData.append(key, "   ");
+      const request = new Request("https://worker.test/v1/images/edits", {
+        method: "POST",
+        body: formData,
+      });
+      await expect(collectInputImages(request, EDIT_CONFIG)).rejects.toThrow(
+        CollectionError
+      );
+    }
+  });
+
   test("non-string JSON image members are rejected, not filtered", async () => {
     const request = jsonRequest("/v1/images/edits", {
       image: ["aGVsbG8=", 42],

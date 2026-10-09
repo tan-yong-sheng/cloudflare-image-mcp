@@ -443,6 +443,22 @@ describe("runMany", () => {
     ).toEqual([undefined, undefined]);
   });
 
+  test("null seed preserves prompt-embedded seed", async () => {
+    const { generator, transport } = setup();
+
+    await generator.runMany(
+      textRequest({
+        prompt: "a cat --seed=42",
+        explicitParams: { seed: null as unknown as number },
+      }),
+      2
+    );
+
+    expect(
+      transport.calls.map((call) => (call.payload as { seed?: number }).seed)
+    ).toEqual([42, 42]);
+  });
+
   test("prompt-embedded seed survives when no base seed is given", async () => {
     const { generator, transport } = setup();
 
