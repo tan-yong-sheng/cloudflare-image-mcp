@@ -2,9 +2,8 @@
 
 How a maintainer ships a versioned release. Mechanism lives in
 `.github/workflows/tag-release.yml` (read its header for trigger and
-idempotency details); why it looks that way lives in
-`docs/research/release-mechanism-photocraft.md` and issue #8. This file
-is the procedure, nothing else.
+idempotency details); why it looks that way lives in issue #8. This
+file is the procedure, nothing else.
 
 ## Decide the version
 

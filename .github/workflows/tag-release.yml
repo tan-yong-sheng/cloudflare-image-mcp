@@ -5,9 +5,10 @@ name: Tag release
 # deploys happen. Continuous delivery on default-branch push is untouched
 # (see deploy-workers.yml) — this workflow only observes version bumps.
 #
-# Design blended from storytold/photocraft's release pipeline (see
-# docs/research/release-mechanism-photocraft.md): keep our main-push
-# autotag shape, fill every unspecified mechanism with their patterns.
+# Design blended from storytold/photocraft's release pipeline: keep our
+# main-push autotag shape, fill every unspecified mechanism with their
+# patterns (workflow-minted v<semver> tags, existence-check idempotency,
+# serialize-never-cancel concurrency, GITHUB_TOKEN-only, --generate-notes).
 # Deliberately NOT adopted for phase 1: dedicated release branch, draft
 # stage, dispatch version-override (all need artifacts worth inspecting
 # or builds worth test-running; ours has neither).
