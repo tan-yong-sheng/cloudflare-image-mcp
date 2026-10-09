@@ -29,14 +29,17 @@ name: Tag release
 
 on:
   # `branches` + `paths` is an AND: only pushes to main that touch the
-  # version source (or this workflow) fire. Any version bump touches
-  # workers/package.json, so every release is observed exactly once.
+  # version source fire. Any version bump touches workers/package.json,
+  # so every release is observed exactly once.
   push:
     branches:
       - main
+    # workers/package.json ONLY (not this workflow file): including it
+    # would mint the unchanged baseline version on the very PR that
+    # lands this workflow. Trigger fixes ride along with the next version
+    # bump, or use workflow_dispatch as backfill.
     paths:
       - "workers/package.json"
-      - ".github/workflows/tag-release.yml"
   # Escape hatch: re-run by hand to backfill a tag/release after a
   # transient failure, without pushing an empty commit. No version
   # override input — the run takes seconds, so re-push instead, and an
@@ -73,8 +76,11 @@ jobs:
           RAW="$(node -p "require('./workers/package.json').version")"
           # Optional leading v is accepted and normalized (not silently
           # stripped: the regex below names it). Build metadata (+build)
-          # is semver-legal; leading-zero numerics stay rejected.
-          if ! printf '%s' "$RAW" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+          # is semver-legal. Leading zeroes rejected everywhere numeric:
+          # core identifiers AND numeric prerelease identifiers (SemVer
+          # 2.0 section 9 — alphanumeric prerelease identifiers like
+          # alpha.01 keep their zeroes).
+          if ! printf '%s' "$RAW" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
             echo "::error::workers/package.json version is not strict semver: '$RAW'"
             exit 1
           fi
