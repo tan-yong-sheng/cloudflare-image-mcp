@@ -45,7 +45,7 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
 
   const server = new McpServer({
     name: "cloudflare-image-mcp",
-    version: "0.1.0-rc.1",
+    version: "0.1.0",
   });
 
   if (deps.mode === "single-model") {
