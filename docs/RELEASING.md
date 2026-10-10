@@ -32,6 +32,11 @@ verify it, then release the bare version. Suggested first line:
    review, then merge. The gated prefix forces the full E2E gate
    (deploy → smoke → cleanup → Sentinel); any other prefix skips
    in seconds. Gate table: `docs/E2E_TESTING.md#cicd-integration`.
+   Version-consistency checklist (until `version.ts` single-sources it):
+   the bump PR must update all four together — `workers/package.json`,
+   `workers/src/index.ts` (`/health`), `workers/src/endpoints/mcp-sdk-server.ts`
+   (MCP metadata), `workers/package-lock.json` (via `npm install`).
+   Reviewer: reject version PRs where these disagree.
    This is the only manual step — the workflow mints
    the tag and Release from the push. Never hand-tag.
 2. **Watch the `tag-release.yml` run** on the merge commit. It resolves
