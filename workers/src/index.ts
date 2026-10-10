@@ -102,7 +102,7 @@ export default {
             timestamp: Date.now(),
             currentTime,
             timezone,
-            version: "0.1.0-rc.1",
+            version: "0.1.0",
             deployedAt: deployedAtFormatted,
             commitSha: env.COMMIT_SHA || "unknown",
             authEnabled: !!env.API_KEYS,
