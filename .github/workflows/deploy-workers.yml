@@ -165,7 +165,7 @@ jobs:
         # path): same credentials the secret-put steps below already use.
         # Wrangler reads CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID from env.
         working-directory: workers
-        run: npx wrangler deploy --name ${{ env.WORKERS_NAME }}
+        run: npx wrangler deploy --name "$WORKERS_NAME"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
