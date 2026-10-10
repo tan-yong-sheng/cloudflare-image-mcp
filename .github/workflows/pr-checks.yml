@@ -63,6 +63,7 @@ jobs:
         # src/version.ts mirrors it for runtime surfaces (/health, MCP
         # metadata). Fail the PR if they disagree. Lockfile root follows
         # via npm install; root/e2e manifests are intentionally independent.
+        working-directory: workers
         run: |
           PKG="$(node -p "require('./package.json').version")"
           SRC="$(node -p "require('fs').readFileSync('src/version.ts','utf8').match(/WORKER_VERSION = \"([^\"]+)\"/)[1]")"
