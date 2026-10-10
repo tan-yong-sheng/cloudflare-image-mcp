@@ -45,7 +45,7 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
 
   const server = new McpServer({
     name: "cloudflare-image-mcp",
-    version: "0.1.0",
+    version: "0.1.0-rc.1",
   });
 
   if (deps.mode === "single-model") {
@@ -114,10 +114,13 @@ export async function handleMcpRequest(
     console.error(`MCP transport failed: ${message}`);
     // Echo the request ID when determinable so clients can correlate the
     // failure (null only when the body is unreadable, e.g. parse errors).
-    const body = await request.clone().json().catch(() => null);
+    const body = await request
+      .clone()
+      .json()
+      .catch(() => null);
     const id =
       body && typeof body === "object" && "id" in body
-        ? (body as { id: unknown }).id ?? null
+        ? ((body as { id: unknown }).id ?? null)
         : null;
     return new Response(
       JSON.stringify({
