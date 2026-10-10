@@ -56,3 +56,18 @@ jobs:
       - name: Unit tests
         working-directory: workers
         run: npm test
+
+      - name: Version consistency
+        # Mechanical guard for the release version: workers/package.json is
+        # the declared source (tag-release.yml mints tags from it) and
+        # src/version.ts mirrors it for runtime surfaces (/health, MCP
+        # metadata). Fail the PR if they disagree. Lockfile root follows
+        # via npm install; root/e2e manifests are intentionally independent.
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          SRC="$(node -p "require('fs').readFileSync('src/version.ts','utf8').match(/WORKER_VERSION = \"([^\"]+)\"/)[1]")"
+          if [ "$PKG" != "$SRC" ]; then
+            echo "::error::version skew: package.json ($PKG) != src/version.ts ($SRC) — bump both in the same PR"
+            exit 1
+          fi
+          echo "✅ Version consistent: $PKG"

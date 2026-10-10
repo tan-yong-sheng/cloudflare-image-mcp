@@ -4,6 +4,7 @@
 // ============================================================================
 
 import type { Env } from "./types.js";
+import { WORKER_VERSION } from "./version.js";
 import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
@@ -102,7 +103,7 @@ export default {
             timestamp: Date.now(),
             currentTime,
             timezone,
-            version: "0.1.0",
+            version: WORKER_VERSION,
             deployedAt: deployedAtFormatted,
             commitSha: env.COMMIT_SHA || "unknown",
             authEnabled: !!env.API_KEYS,
