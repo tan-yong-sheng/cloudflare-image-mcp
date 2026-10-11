@@ -41,6 +41,16 @@ describe("router public paths", () => {
     expect(html).toContain("<!DOCTYPE html>");
   });
 
+  test("login modal validates the key against an authenticated route", async () => {
+    const response = await worker.fetch(get("/"), env());
+    const html = await response.text();
+    // /health is public by design, so validating login against it lets
+    // any key dismiss the modal (#49). /v1/models requires auth when
+    // API_KEYS is set (and stays 200 in open-by-default mode).
+    expect(html).toContain("fetch(API_BASE + '/models'");
+    expect(html).not.toContain("fetch('/health'");
+  });
+
   test("unknown routes return 404", async () => {
     const response = await worker.fetch(get("/no-such-route"), env());
 
