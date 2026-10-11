@@ -104,6 +104,31 @@ function textRequest(
   return { modelId: TEXT_MODEL, prompt: "a cat", ...overrides };
 }
 
+describe("listModels delegation (C3)", () => {
+  // Q3 freeze: the service list is a projection of the config registry.
+  // Every service entry must match its registry entry field-for-field;
+  // the config list is the single source of truth.
+  test("service list projects the config registry exactly", async () => {
+    const { generator } = setup();
+    const { MODEL_CONFIGS } = await import("../config/models.js");
+    const listed = generator.listModels();
+    expect(listed.map((m) => m.id).sort()).toEqual(
+      Object.keys(MODEL_CONFIGS).sort()
+    );
+    for (const entry of listed) {
+      const cfg = MODEL_CONFIGS[entry.id];
+      expect(entry.name).toBe(cfg.name);
+      expect(entry.description).toBe(cfg.description);
+      expect(entry.provider).toBe(cfg.provider);
+      expect(entry.supportedSizes).toEqual(cfg.limits.supportedSizes);
+      expect(entry.taskTypes).toEqual(cfg.supportedTasks);
+      expect(entry.editCapabilities ?? null).toEqual(
+        cfg.editCapabilities ?? null
+      );
+    }
+  });
+});
+
 describe("runOnce text-to-image", () => {
   test("returns the stored image URL and records upload metadata", async () => {
     const { generator, transport, store } = setup();

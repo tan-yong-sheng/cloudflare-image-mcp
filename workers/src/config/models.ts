@@ -630,6 +630,10 @@ export function listModels(): Array<{
   // controls and clamp sliders per model without hardcoding (#50).
   parameters: ModelConfig["parameters"];
   limits: ModelConfig["limits"];
+  // Superset fields for service-side consumers (C3): the generator
+  // projects its list from this registry instead of hand-writing one.
+  provider: string;
+  supportedSizes: string[];
 }> {
   return Object.values(MODEL_CONFIGS).map((config) => ({
     id: config.id,
@@ -640,5 +644,7 @@ export function listModels(): Array<{
     editCapabilities: config.editCapabilities,
     parameters: config.parameters,
     limits: config.limits,
+    provider: config.provider,
+    supportedSizes: config.limits.supportedSizes,
   }));
 }
