@@ -7,6 +7,7 @@
 // multi-model (/mcp, /mcp/smart) and single-model (/mcp/simple?model=...).
 
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
+import { WORKER_VERSION } from "../version.js";
 import type { Env } from "../types.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
 import {
@@ -45,7 +46,7 @@ export function buildMcpServer(deps: McpHandlerDeps): McpServer {
 
   const server = new McpServer({
     name: "cloudflare-image-mcp",
-    version: "0.1.0",
+    version: WORKER_VERSION,
   });
 
   if (deps.mode === "single-model") {

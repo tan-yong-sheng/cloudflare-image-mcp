@@ -83,6 +83,8 @@ inline `// Route:` / `// Validate required fields` markers.
 Mechanical: `.js` import extensions; `import type` for types;
 `npm run check` (strict TS, ES2022, WebWorker lib) as gate;
 `models.json` source of truth mirrored in `models.ts`;
+release version single-sourced in `src/version.ts` (never hardcode a
+version string in runtime code; bump with `workers/package.json`);
 secrets only via `wrangler secret put`, never committed;
 never commit generated `wrangler.toml`; JSON-RPC errors always HTTP 200;
 never let `throw` cross an endpoint boundary (map via
