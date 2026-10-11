@@ -101,6 +101,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       image: {
         cfParam: "image",
         type: "string",
+        required: false,
         description: "Input image for img2img (base64 encoded, up to 4 images)",
       },
     },
@@ -173,6 +174,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       image: {
         cfParam: "image",
         type: "string",
+        required: false,
         description: "Input image for img2img (base64 encoded, up to 4 images)",
       },
     },
@@ -246,6 +248,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       image: {
         cfParam: "image",
         type: "string",
+        required: false,
         description: "Input image for img2img (base64 encoded, up to 4 images)",
       },
     },
@@ -608,7 +611,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   "@cf/leonardo/phoenix-1.0": {
     id: "@cf/leonardo/phoenix-1.0",
     name: "Phoenix 1.0",
-    description: "Leonardo.AI model with exceptional prompt adherence",
+    description:
+      "Leonardo.AI model with exceptional prompt adherence and coherent text",
     provider: "leonardo",
     apiVersion: 2,
     inputFormat: "json",
