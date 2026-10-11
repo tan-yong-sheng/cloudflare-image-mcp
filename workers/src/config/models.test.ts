@@ -87,8 +87,7 @@ describe("models.json mirror", () => {
         if (jp.description) expect(tp.description).toBe(jp.description);
         if ("default" in jp)
           expect(tp.default ?? null).toBe(jp.default ?? null);
-        if ("required" in jp)
-          expect(tp.required ?? false).toBe(jp.required);
+        if ("required" in jp) expect(tp.required ?? false).toBe(jp.required);
       }
     }
   });
