@@ -567,7 +567,12 @@ export function getFrontendHTML(): string {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 modelRegistry = await response.json();
                 modelSelect.innerHTML = '';
-                for (const m of modelRegistry) {
+                // Prompt-only UI: image-to-image-only models have no
+                // input-image control, so exclude them (CodeRabbit + OCR).
+                const textModels = modelRegistry.filter((m) =>
+                    (m.taskTypes || []).includes('text-to-image')
+                );
+                for (const m of textModels) {
                     const option = document.createElement('option');
                     option.value = m.id;
                     option.textContent = m.id;
@@ -591,13 +596,17 @@ export function getFrontendHTML(): string {
             const params = (config && config.parameters) || {};
             const has = (key) => params[key] !== undefined;
             // Send only params the model declares: anything else would be
-            // silently dropped by toCFPayload (#50). Steps covers num_steps
-            // models via the backend alias.
+            // silently dropped by toCFPayload (#50). toCFPayload reads
+            // params[num_steps] for num_steps models, so send the
+            // declared key, not the UI alias (OCR: steps was still dead
+            // on SDXL/Leonardo).
             const body = { model: model, prompt: prompt, n: parseInt(document.getElementById('n').value) };
             if (has('width') && has('height')) {
                 body.size = document.getElementById('width').value + 'x' + document.getElementById('height').value;
             }
-            if (has('steps') || has('num_steps')) {
+            if (has('num_steps')) {
+                body.num_steps = parseInt(document.getElementById('steps').value);
+            } else if (has('steps')) {
                 body.steps = parseInt(document.getElementById('steps').value);
             }
             if (has('guidance')) {

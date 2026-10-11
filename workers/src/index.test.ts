@@ -62,6 +62,10 @@ describe("router public paths", () => {
     expect(html).toContain("aiImage.onerror");
     // Generation failures surface inline, not via alert().
     expect(html).not.toContain("alert('Error: '");
+    // Prompt-only UI excludes image-to-image-only models; num_steps
+    // models get the declared key, not the steps alias.
+    expect(html).toContain("includes('text-to-image')");
+    expect(html).toContain("body.num_steps");
   });
 
   test("unknown routes return 404", async () => {
