@@ -345,6 +345,10 @@ export function listModels(): Array<{
   capabilities: string[];
   taskTypes: string[];
   editCapabilities?: ModelConfig['editCapabilities'];
+  // Full parameter table + limits so the frontend can hide unsupported
+  // controls and clamp sliders per model without hardcoding (#50).
+  parameters: ModelConfig['parameters'];
+  limits: ModelConfig['limits'];
 }> {
   return Object.values(MODEL_CONFIGS).map((config) => ({
     id: config.id,
@@ -353,5 +357,7 @@ export function listModels(): Array<{
     capabilities: Object.keys(config.parameters),
     taskTypes: config.supportedTasks,
     editCapabilities: config.editCapabilities,
+    parameters: config.parameters,
+    limits: config.limits,
   }));
 }
