@@ -51,6 +51,19 @@ describe("router public paths", () => {
     expect(html).not.toContain("fetch('/health'");
   });
 
+  test("frontend model controls come from /api/internal/models (#50)", async () => {
+    const response = await worker.fetch(get("/"), env());
+    const html = await response.text();
+    // Dropdown populated at runtime: no hardcoded model <option>s.
+    expect(html).not.toContain('<option value="@cf/');
+    expect(html).toContain("/api/internal/models");
+    // Dead copyParamsButton removed; result image has an error path.
+    expect(html).not.toContain("copyParamsButton");
+    expect(html).toContain("aiImage.onerror");
+    // Generation failures surface inline, not via alert().
+    expect(html).not.toContain("alert('Error: '");
+  });
+
   test("unknown routes return 404", async () => {
     const response = await worker.fetch(get("/no-such-route"), env());
 

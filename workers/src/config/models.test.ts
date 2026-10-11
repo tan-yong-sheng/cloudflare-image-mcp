@@ -48,6 +48,18 @@ describe("model registry validity", () => {
       expect(entry.capabilities).toContain("prompt");
     }
   });
+
+  test("listModels exposes parameters and limits for UI control mapping (#50)", () => {
+    // The frontend populates per-model controls from this endpoint, so
+    // each entry must carry the parameter table and limits: without
+    // them the UI cannot hide unsupported controls or clamp sliders.
+    for (const entry of listModels()) {
+      expect(Object.keys(entry.parameters).length).toBeGreaterThan(0);
+      expect(entry.parameters.prompt.required).toBe(true);
+      expect(entry.limits.maxSteps).toBeGreaterThanOrEqual(1);
+      expect(entry.limits.minWidth).toBeLessThanOrEqual(entry.limits.maxWidth);
+    }
+  });
 });
 
 describe("models.json mirror", () => {

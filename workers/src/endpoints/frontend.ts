@@ -237,16 +237,9 @@ export function getFrontendHTML(): string {
                             <i class="fa-solid fa-robot mr-1"></i>Model
                         </label>
                         <select id="model" class="w-full">
-                            <option value="@cf/black-forest-labs/flux-1-schnell">@cf/black-forest-labs/flux-1-schnell</option>
-                            <option value="@cf/black-forest-labs/flux-2-klein-4b">@cf/black-forest-labs/flux-2-klein-4b</option>
-                            <option value="@cf/black-forest-labs/flux-2-klein-9b">@cf/black-forest-labs/flux-2-klein-9b</option>
-                            <option value="@cf/black-forest-labs/flux-2-dev">@cf/black-forest-labs/flux-2-dev</option>
-                            <option value="@cf/stabilityai/stable-diffusion-xl-base-1.0">@cf/stabilityai/stable-diffusion-xl-base-1.0</option>
-                            <option value="@cf/bytedance/stable-diffusion-xl-lightning">@cf/bytedance/stable-diffusion-xl-lightning</option>
-                            <option value="@cf/lykon/dreamshaper-8-lcm">@cf/lykon/dreamshaper-8-lcm</option>
-                            <option value="@cf/leonardo/lucid-origin">@cf/leonardo/lucid-origin</option>
-                            <option value="@cf/leonardo/phoenix-1.0">@cf/leonardo/phoenix-1.0</option>
+                            <option value="">Loading models…</option>
                         </select>
+                        <p id="modelError" class="text-sm text-red-500 hidden"></p>
                     </div>
 
                     <div>
@@ -256,7 +249,7 @@ export function getFrontendHTML(): string {
                         <textarea id="prompt" rows="3" placeholder="Describe your image... Use --param=value for additional settings" class="w-full">cyberpunk cat</textarea>
                     </div>
 
-                    <div>
+                    <div id="negativePromptWrap">
                         <label for="negative_prompt" class="block text-sm font-medium mb-1">
                             <i class="fa-solid fa-ban mr-1"></i>Negative Prompt
                         </label>
@@ -276,7 +269,7 @@ export function getFrontendHTML(): string {
                     </div>
 
                     <div id="advancedOptions" class="space-y-3 hidden">
-                        <div>
+                        <div id="sizeWrap">
                             <div class="flex justify-between items-center">
                                 <label class="block text-sm font-medium">Width</label>
                                 <span id="widthValue" class="text-sm font-mono">1024px</span>
@@ -284,7 +277,7 @@ export function getFrontendHTML(): string {
                             <input type="range" id="width" min="256" max="2048" step="64" value="1024" class="slider w-full">
                         </div>
 
-                        <div>
+                        <div id="sizeWrapHeight">
                             <div class="flex justify-between items-center">
                                 <label class="block text-sm font-medium">Height</label>
                                 <span id="heightValue" class="text-sm font-mono">1024px</span>
@@ -292,7 +285,7 @@ export function getFrontendHTML(): string {
                             <input type="range" id="height" min="256" max="2048" step="64" value="1024" class="slider w-full">
                         </div>
 
-                        <div>
+                        <div id="stepsWrap">
                             <div class="flex justify-between items-center">
                                 <label class="block text-sm font-medium">Steps</label>
                                 <span id="stepsValue" class="text-sm font-mono">4</span>
@@ -300,7 +293,7 @@ export function getFrontendHTML(): string {
                             <input type="range" id="steps" min="1" max="20" step="1" value="4" class="slider w-full">
                         </div>
 
-                        <div>
+                        <div id="guidanceWrap">
                             <div class="flex justify-between items-center">
                                 <label class="block text-sm font-medium">Guidance</label>
                                 <span id="guidanceValue" class="text-sm font-mono">7.5</span>
@@ -338,9 +331,6 @@ export function getFrontendHTML(): string {
                             <i class="fa-solid fa-image mr-2 text-primary"></i>Result
                         </h2>
                         <div class="flex space-x-2">
-                            <button id="copyParamsButton" class="btn btn-secondary text-sm py-1 px-3 hidden">
-                                <i class="fa-solid fa-copy mr-1"></i>Copy Params
-                            </button>
                             <button id="downloadButton" class="btn btn-secondary text-sm py-1 px-3 hidden">
                                 <i class="fa-solid fa-download mr-1"></i>Download
                             </button>
@@ -360,6 +350,8 @@ export function getFrontendHTML(): string {
                         </div>
                         <img id="aiImage" class="max-h-full max-w-full rounded hidden" alt="Generated image">
                     </div>
+
+                    <div id="generateError" class="text-sm text-red-500 hidden"></div>
 
                     <div id="imageInfo" class="space-y-3 mt-2">
                         <div class="grid grid-cols-2 gap-3 text-sm">
@@ -504,24 +496,130 @@ export function getFrontendHTML(): string {
             document.getElementById('seed').value = Math.floor(Math.random() * 4294967295);
         });
 
+        // Model registry from the backend source of truth. Populates the
+        // dropdown and drives per-model control visibility + slider bounds
+        // so the UI can never offer a param the model drops (#50).
+        let modelRegistry = [];
+        const modelSelect = document.getElementById('model');
+        const modelError = document.getElementById('modelError');
+        const generateError = document.getElementById('generateError');
+
+        function showGenerateError(message) {
+            generateError.textContent = message;
+            generateError.classList.remove('hidden');
+        }
+
+        function clearGenerateError() {
+            generateError.textContent = '';
+            generateError.classList.add('hidden');
+        }
+
+        function currentModelConfig() {
+            return modelRegistry.find((m) => m.id === modelSelect.value) || null;
+        }
+
+        function setSlider(id, param, fallback) {
+            const slider = document.getElementById(id);
+            const label = document.getElementById(id + 'Value');
+            const min = param && param.min !== undefined ? param.min : fallback.min;
+            const max = param && param.max !== undefined ? param.max : fallback.max;
+            const step = param && param.step !== undefined ? param.step : fallback.step;
+            const def = param && param.default !== undefined ? param.default : fallback.def;
+            slider.min = min;
+            slider.max = max;
+            slider.step = step;
+            slider.value = Math.min(max, Math.max(min, def));
+            label.textContent = slider.value + (id === 'guidance' ? '' : 'px');
+        }
+
+        function applyModelControls() {
+            const config = currentModelConfig();
+            if (!config) return;
+            const params = config.parameters || {};
+            const limits = config.limits || {};
+            const has = (key) => params[key] !== undefined;
+            // Size sliders need width+height params; steps needs steps or
+            // num_steps (backend parses both, payload maps via cfParam).
+            const showSize = has('width') && has('height');
+            const showSteps = has('steps') || has('num_steps');
+            const showGuidance = has('guidance');
+            const showNegative = has('negative_prompt');
+            document.getElementById('sizeWrap').classList.toggle('hidden', !showSize);
+            document.getElementById('sizeWrapHeight').classList.toggle('hidden', !showSize);
+            document.getElementById('stepsWrap').classList.toggle('hidden', !showSteps);
+            document.getElementById('guidanceWrap').classList.toggle('hidden', !showGuidance);
+            document.getElementById('negativePromptWrap').classList.toggle('hidden', !showNegative);
+            if (showSize) {
+                setSlider('width', params.width, { min: limits.minWidth || 256, max: limits.maxWidth || 2048, step: 64, def: 1024 });
+                setSlider('height', params.height, { min: limits.minHeight || 256, max: limits.maxHeight || 2048, step: 64, def: 1024 });
+            }
+            if (showSteps) {
+                setSlider('steps', params.steps || params.num_steps, { min: 1, max: limits.maxSteps || 20, step: 1, def: limits.defaultSteps || 4 });
+            }
+            if (showGuidance) {
+                setSlider('guidance', params.guidance, { min: 1, max: 30, step: 0.5, def: 7.5 });
+            }
+        }
+
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/internal/models');
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                modelRegistry = await response.json();
+                modelSelect.innerHTML = '';
+                for (const m of modelRegistry) {
+                    const option = document.createElement('option');
+                    option.value = m.id;
+                    option.textContent = m.id;
+                    modelSelect.appendChild(option);
+                }
+                applyModelControls();
+            } catch (error) {
+                modelError.textContent = 'Could not load models: ' + error.message;
+                modelError.classList.remove('hidden');
+            }
+        }
+
+        modelSelect.addEventListener('change', applyModelControls);
+        loadModels();
+
         // Generate image
         submitButton.addEventListener('click', async () => {
-            const model = document.getElementById('model').value;
+            const model = modelSelect.value;
             const prompt = document.getElementById('prompt').value;
-            const negativePrompt = document.getElementById('negative_prompt').value;
-            const width = document.getElementById('width').value;
-            const height = document.getElementById('height').value;
-            const steps = document.getElementById('steps').value;
-            const guidance = document.getElementById('guidance').value;
+            const config = currentModelConfig();
+            const params = (config && config.parameters) || {};
+            const has = (key) => params[key] !== undefined;
+            // Send only params the model declares: anything else would be
+            // silently dropped by toCFPayload (#50). Steps covers num_steps
+            // models via the backend alias.
+            const body = { model: model, prompt: prompt, n: parseInt(document.getElementById('n').value) };
+            if (has('width') && has('height')) {
+                body.size = document.getElementById('width').value + 'x' + document.getElementById('height').value;
+            }
+            if (has('steps') || has('num_steps')) {
+                body.steps = parseInt(document.getElementById('steps').value);
+            }
+            if (has('guidance')) {
+                body.guidance = parseFloat(document.getElementById('guidance').value);
+            }
+            if (has('negative_prompt')) {
+                body.negative_prompt = document.getElementById('negative_prompt').value;
+            }
             const seed = document.getElementById('seed').value;
-            const n = document.getElementById('n').value;
+            if (seed) body.seed = parseInt(seed);
 
             if (!prompt.trim()) {
-                alert('Please enter a prompt');
+                showGenerateError('Please enter a prompt');
+                return;
+            }
+            if (!model) {
+                showGenerateError('Models are still loading — please wait');
                 return;
             }
 
             // Show loading
+            clearGenerateError();
             initialPrompt.classList.add('hidden');
             aiImage.classList.add('hidden');
             downloadButton.classList.add('hidden');
@@ -579,7 +677,6 @@ export function getFrontendHTML(): string {
                 const elapsedSeconds = (elapsed / 1000).toFixed(1);
 
                 // Display image
-                aiImage.src = imageUrl;
                 aiImage.onload = () => {
                     loadingOverlay.classList.add('hidden');
                     aiImage.classList.remove('hidden');
@@ -589,11 +686,19 @@ export function getFrontendHTML(): string {
                     document.getElementById('usedModel').textContent = model;
                     document.getElementById('generationTime').textContent = elapsedSeconds + 's';
                 };
+                // Expired/blocked R2 URLs never fire onload: without
+                // onerror the spinner would run forever (#50 B4).
+                aiImage.onerror = () => {
+                    loadingOverlay.classList.add('hidden');
+                    initialPrompt.classList.remove('hidden');
+                    showGenerateError('Could not load the generated image (expired or blocked URL)');
+                };
+                aiImage.src = imageUrl;
 
             } catch (error) {
                 loadingOverlay.classList.add('hidden');
                 initialPrompt.classList.remove('hidden');
-                alert('Error: ' + error.message);
+                showGenerateError('Error: ' + error.message);
             }
         });
 
@@ -613,7 +718,7 @@ export function getFrontendHTML(): string {
                 document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
             } catch (error) {
-                alert('Download failed: ' + error.message);
+                showGenerateError('Download failed: ' + error.message);
             }
         });
     </script>
