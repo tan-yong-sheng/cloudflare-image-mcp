@@ -69,4 +69,25 @@ describe("models.json mirror", () => {
     ).sort();
     expect(Object.keys(MODEL_CONFIGS).sort()).toEqual(jsonIds);
   });
+
+  test("parameter metadata mirrors the JSON source of truth (#53)", () => {
+    // listModels() exposes the parameter table to drive UI controls,
+    // so descriptions, defaults, and key names must match the JSON:
+    // invisible drift here becomes silent UI misbehavior.
+    const json = modelsJson as {
+      models: Record<string, { parameters: Record<string, any> }>;
+    };
+    for (const [id, jcfg] of Object.entries(json.models)) {
+      const tcfg = MODEL_CONFIGS[id];
+      expect(Object.keys(tcfg.parameters).sort()).toEqual(
+        Object.keys(jcfg.parameters).sort()
+      );
+      for (const [key, jp] of Object.entries(jcfg.parameters)) {
+        const tp = tcfg.parameters[key] as any;
+        if (jp.description) expect(tp.description).toBe(jp.description);
+        if ("default" in jp)
+          expect(tp.default ?? null).toBe(jp.default ?? null);
+      }
+    }
+  });
 });
