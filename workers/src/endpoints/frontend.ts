@@ -529,7 +529,7 @@ export function getFrontendHTML(): string {
             slider.max = max;
             slider.step = step;
             slider.value = Math.min(max, Math.max(min, def));
-            label.textContent = slider.value + (id === 'guidance' ? '' : 'px');
+            label.textContent = slider.value + (id === 'width' || id === 'height' ? 'px' : '');
         }
 
         function applyModelControls() {
@@ -575,7 +575,7 @@ export function getFrontendHTML(): string {
                 }
                 applyModelControls();
             } catch (error) {
-                modelError.textContent = 'Could not load models: ' + error.message;
+                modelError.textContent = 'Could not load models: ' + (error instanceof Error ? error.message : String(error));
                 modelError.classList.remove('hidden');
             }
         }
@@ -636,16 +636,7 @@ export function getFrontendHTML(): string {
                 const response = await fetch(API_BASE + '/images/generations', {
                     method: 'POST',
                     headers: headers,
-                    body: JSON.stringify({
-                        model: model,
-                        prompt: prompt,
-                        n: parseInt(n),
-                        size: width + 'x' + height,
-                        steps: parseInt(steps),
-                        guidance: parseFloat(guidance),
-                        negative_prompt: negativePrompt,
-                        seed: seed ? parseInt(seed) : undefined,
-                    }),
+                    body: JSON.stringify(body),
                 });
 
                 if (!response.ok) {
@@ -698,7 +689,7 @@ export function getFrontendHTML(): string {
             } catch (error) {
                 loadingOverlay.classList.add('hidden');
                 initialPrompt.classList.remove('hidden');
-                showGenerateError('Error: ' + error.message);
+                showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
             }
         });
 
@@ -718,7 +709,7 @@ export function getFrontendHTML(): string {
                 document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
             } catch (error) {
-                showGenerateError('Download failed: ' + error.message);
+                showGenerateError('Download failed: ' + (error instanceof Error ? error.message : String(error)));
             }
         });
     </script>
