@@ -16,7 +16,10 @@ import {
   type ImageStore,
 } from "./generation-adapters.js";
 import type { GeneratedImage } from "../utils/image-request.js";
-import { MODEL_CONFIGS } from "../config/models.js";
+import {
+  MODEL_CONFIGS,
+  listModels as listRegistryModels,
+} from "../config/models.js";
 import { arrayBufferToBase64, cleanBase64 } from "../utils/encoding.js";
 
 /**
@@ -556,6 +559,8 @@ export class ImageGeneratorService {
   /**
    * Get list of all available models
    */
+  // Projection of the config registry (C3): the registry owns model
+  // knowledge; this keeps the OpenAI/MCP caller shape byte-identical.
   listModels(): Array<{
     id: string;
     name: string;
@@ -565,29 +570,15 @@ export class ImageGeneratorService {
     taskTypes: string[];
     editCapabilities?: ModelConfig["editCapabilities"];
   }> {
-    const models: Array<{
-      id: string;
-      name: string;
-      description: string;
-      provider: string;
-      supportedSizes: string[];
-      taskTypes: string[];
-      editCapabilities?: ModelConfig["editCapabilities"];
-    }> = [];
-
-    for (const [id, config] of this.models) {
-      models.push({
-        id,
-        name: config.name,
-        description: config.description,
-        provider: config.provider,
-        supportedSizes: config.limits.supportedSizes,
-        taskTypes: config.supportedTasks,
-        editCapabilities: config.editCapabilities,
-      });
-    }
-
-    return models;
+    return listRegistryModels().map((config) => ({
+      id: config.id,
+      name: config.name,
+      description: config.description,
+      provider: config.provider,
+      supportedSizes: config.supportedSizes,
+      taskTypes: config.taskTypes,
+      editCapabilities: config.editCapabilities,
+    }));
   }
 
   /**
