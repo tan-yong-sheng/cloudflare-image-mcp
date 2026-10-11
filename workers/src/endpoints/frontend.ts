@@ -4,7 +4,7 @@
 // ============================================================================
 
 export function getFrontendHTML(): string {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
@@ -411,8 +411,11 @@ export function getFrontendHTML(): string {
             loginButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Logging in...';
 
             try {
-                // Validate by making a test request to /health with auth
-                const response = await fetch('/health', {
+                // Validate against an authenticated route: /health is
+                // public by design, so any key would pass (#49).
+                // /v1/models 401s on a bad key, 200s when the key is
+                // valid (or when no API_KEYS are configured).
+                const response = await fetch(API_BASE + '/models', {
                     headers: { 'Authorization': 'Bearer ' + password }
                 });
 
@@ -619,10 +622,10 @@ export function getFrontendHTML(): string {
 }
 
 export function serveFrontend(): Response {
-    return new Response(getFrontendHTML(), {
-        headers: {
-            'Content-Type': 'text/html',
-            'Cache-Control': 'no-cache',
-        },
-    });
+  return new Response(getFrontendHTML(), {
+    headers: {
+      "Content-Type": "text/html",
+      "Cache-Control": "no-cache",
+    },
+  });
 }
