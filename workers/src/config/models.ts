@@ -4,6 +4,125 @@
 
 import type { ModelConfig } from "../types.js";
 
+// Shared parameter fragments (C0): single-shape blocks referenced by
+// value across models. Read-only at runtime (iteration/serialization
+// only, never mutated) — safe to share by reference. Multi-shape
+// params (steps, num_steps, guidance, lucid dims) stay inline.
+type ParamEntry = ModelConfig["parameters"][string];
+
+const promptParam: ParamEntry = {
+  cfParam: "prompt",
+  type: "string",
+  required: true,
+  description: "Text description of the image",
+};
+
+const seedParam: ParamEntry = {
+  cfParam: "seed",
+  type: "integer",
+  default: null,
+  description: "Random seed for reproducibility",
+};
+
+const negativePromptParam: ParamEntry = {
+  cfParam: "negative_prompt",
+  type: "string",
+  default: "",
+  description: "Elements to avoid in the image",
+};
+
+const imageParam: ParamEntry = {
+  cfParam: "image",
+  type: "string",
+  required: false,
+  description: "Input image for img2img (base64 encoded, up to 4 images)",
+};
+
+const imageB64Param: ParamEntry = {
+  cfParam: "image_b64",
+  type: "string",
+  default: null,
+  description: "Input image for img2img (base64)",
+};
+
+const maskB64Param: ParamEntry = {
+  cfParam: "mask",
+  type: "string",
+  default: null,
+  description: "Mask for masked edits (base64)",
+};
+
+const strengthParam: ParamEntry = {
+  cfParam: "strength",
+  type: "number",
+  default: 1,
+  min: 0,
+  max: 1,
+  description: "Img2img transformation strength",
+};
+
+// Q5: constants as values (no factories) — one constant per identical
+// block, referenced by value in each model.
+const dims1024Width: ParamEntry = {
+  cfParam: "width",
+  type: "integer",
+  default: 1024,
+  min: 256,
+  max: 2048,
+  step: 64,
+  description: "Image width in pixels",
+};
+
+const dims1024Height: ParamEntry = {
+  cfParam: "height",
+  type: "integer",
+  default: 1024,
+  min: 256,
+  max: 2048,
+  step: 64,
+  description: "Image height in pixels",
+};
+
+const dims512Width: ParamEntry = {
+  cfParam: "width",
+  type: "integer",
+  default: 512,
+  min: 256,
+  max: 2048,
+  step: 64,
+  description: "Image width in pixels",
+};
+
+const dims512Height: ParamEntry = {
+  cfParam: "height",
+  type: "integer",
+  default: 512,
+  min: 256,
+  max: 2048,
+  step: 64,
+  description: "Image height in pixels",
+};
+
+const dimsLucidWidth: ParamEntry = {
+  cfParam: "width",
+  type: "integer",
+  default: 1120,
+  min: 256,
+  max: 2500,
+  step: 64,
+  description: "Image width in pixels",
+};
+
+const dimsLucidHeight: ParamEntry = {
+  cfParam: "height",
+  type: "integer",
+  default: 1120,
+  min: 256,
+  max: 2500,
+  step: 64,
+  description: "Image height in pixels",
+};
+
 export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   "@cf/black-forest-labs/flux-1-schnell": {
     id: "@cf/black-forest-labs/flux-1-schnell",
@@ -16,12 +135,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     responseFormat: "base64",
     supportedTasks: ["text-to-image"],
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
+      prompt: promptParam,
       steps: {
         cfParam: "steps",
         type: "integer",
@@ -30,12 +144,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 8,
         description: "Diffusion steps (higher = better quality, slower)",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
+      seed: seedParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -60,12 +169,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     supportedTasks: ["text-to-image", "image-to-image"],
     maxInputImages: 4,
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
+      prompt: promptParam,
       steps: {
         cfParam: "steps",
         type: "integer",
@@ -74,36 +178,10 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 50,
         description: "Diffusion steps",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image: {
-        cfParam: "image",
-        type: "string",
-        required: false,
-        description: "Input image for img2img (base64 encoded, up to 4 images)",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
+      image: imageParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -133,12 +211,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     supportedTasks: ["text-to-image", "image-to-image"],
     maxInputImages: 4,
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
+      prompt: promptParam,
       steps: {
         cfParam: "steps",
         type: "integer",
@@ -147,36 +220,10 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 50,
         description: "Diffusion steps",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image: {
-        cfParam: "image",
-        type: "string",
-        required: false,
-        description: "Input image for img2img (base64 encoded, up to 4 images)",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
+      image: imageParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -207,12 +254,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     supportedTasks: ["text-to-image", "image-to-image"],
     maxInputImages: 4,
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
+      prompt: promptParam,
       steps: {
         cfParam: "steps",
         type: "integer",
@@ -221,36 +263,10 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 50,
         description: "Diffusion steps",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image: {
-        cfParam: "image",
-        type: "string",
-        required: false,
-        description: "Input image for img2img (base64 encoded, up to 4 images)",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
+      image: imageParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -280,18 +296,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     supportedTasks: ["text-to-image", "image-to-image"],
     editCapabilities: { mask: "supported" },
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
-      negative_prompt: {
-        cfParam: "negative_prompt",
-        type: "string",
-        default: "",
-        description: "Elements to avoid in the image",
-      },
+      prompt: promptParam,
+      negative_prompt: negativePromptParam,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -308,50 +314,12 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 30,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image_b64: {
-        cfParam: "image_b64",
-        type: "string",
-        default: null,
-        description: "Input image for img2img (base64)",
-      },
-      mask_b64: {
-        cfParam: "mask",
-        type: "string",
-        default: null,
-        description: "Mask for masked edits (base64)",
-      },
-      strength: {
-        cfParam: "strength",
-        type: "number",
-        default: 1,
-        min: 0,
-        max: 1,
-        description: "Img2img transformation strength",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
+      image_b64: imageB64Param,
+      mask_b64: maskB64Param,
+      strength: strengthParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -382,18 +350,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     responseFormat: "binary",
     supportedTasks: ["text-to-image"],
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
-      negative_prompt: {
-        cfParam: "negative_prompt",
-        type: "string",
-        default: "",
-        description: "Elements to avoid in the image",
-      },
+      prompt: promptParam,
+      negative_prompt: negativePromptParam,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -410,30 +368,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 30,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
     },
     limits: {
       maxPromptLength: 2048,
@@ -456,18 +393,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     responseFormat: "binary",
     supportedTasks: ["text-to-image", "image-to-image"],
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
-      negative_prompt: {
-        cfParam: "negative_prompt",
-        type: "string",
-        default: "",
-        description: "Elements to avoid in the image",
-      },
+      prompt: promptParam,
+      negative_prompt: negativePromptParam,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -484,44 +411,11 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 30,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image_b64: {
-        cfParam: "image_b64",
-        type: "string",
-        default: null,
-        description: "Input image for img2img (base64)",
-      },
-      strength: {
-        cfParam: "strength",
-        type: "number",
-        default: 1,
-        min: 0,
-        max: 1,
-        description: "Img2img transformation strength",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
+      image_b64: imageB64Param,
+      strength: strengthParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -544,12 +438,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     responseFormat: "base64",
     supportedTasks: ["text-to-image"],
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
+      prompt: promptParam,
       guidance: {
         cfParam: "guidance",
         type: "number",
@@ -558,30 +447,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 10,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1120,
-        min: 256,
-        max: 2500,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1120,
-        min: 256,
-        max: 2500,
-        step: 64,
-        description: "Image height in pixels",
-      },
+      seed: seedParam,
+      width: dimsLucidWidth,
+      height: dimsLucidHeight,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -619,12 +487,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     responseFormat: "binary",
     supportedTasks: ["text-to-image"],
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
+      prompt: promptParam,
       guidance: {
         cfParam: "guidance",
         type: "number",
@@ -633,30 +496,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 10,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 1024,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
+      seed: seedParam,
+      width: dims1024Width,
+      height: dims1024Height,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -665,12 +507,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 50,
         description: "Diffusion steps",
       },
-      negative_prompt: {
-        cfParam: "negative_prompt",
-        type: "string",
-        default: "",
-        description: "Elements to avoid in the image",
-      },
+      negative_prompt: negativePromptParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -693,48 +530,12 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     responseFormat: "binary",
     supportedTasks: ["image-to-image"],
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
-      negative_prompt: {
-        cfParam: "negative_prompt",
-        type: "string",
-        default: "",
-        description: "Elements to avoid in the image",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 512,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 512,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image_b64: {
-        cfParam: "image_b64",
-        type: "string",
-        default: null,
-        description: "Input image for img2img (base64)",
-      },
-      mask_b64: {
-        cfParam: "mask",
-        type: "string",
-        default: null,
-        description: "Mask for masked edits (base64)",
-      },
+      prompt: promptParam,
+      negative_prompt: negativePromptParam,
+      width: dims512Width,
+      height: dims512Height,
+      image_b64: imageB64Param,
+      mask_b64: maskB64Param,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -743,14 +544,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 20,
         description: "Diffusion steps",
       },
-      strength: {
-        cfParam: "strength",
-        type: "number",
-        default: 1,
-        min: 0,
-        max: 1,
-        description: "Img2img transformation strength",
-      },
+      strength: strengthParam,
       guidance: {
         cfParam: "guidance",
         type: "number",
@@ -759,12 +553,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 30,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
+      seed: seedParam,
     },
     limits: {
       maxPromptLength: 2048,
@@ -788,48 +577,12 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     supportedTasks: ["image-to-image"],
     editCapabilities: { mask: "required" },
     parameters: {
-      prompt: {
-        cfParam: "prompt",
-        type: "string",
-        required: true,
-        description: "Text description of the image",
-      },
-      negative_prompt: {
-        cfParam: "negative_prompt",
-        type: "string",
-        default: "",
-        description: "Elements to avoid in the image",
-      },
-      width: {
-        cfParam: "width",
-        type: "integer",
-        default: 512,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image width in pixels",
-      },
-      height: {
-        cfParam: "height",
-        type: "integer",
-        default: 512,
-        min: 256,
-        max: 2048,
-        step: 64,
-        description: "Image height in pixels",
-      },
-      image_b64: {
-        cfParam: "image_b64",
-        type: "string",
-        default: null,
-        description: "Input image for img2img (base64)",
-      },
-      mask_b64: {
-        cfParam: "mask",
-        type: "string",
-        default: null,
-        description: "Mask for masked edits (base64)",
-      },
+      prompt: promptParam,
+      negative_prompt: negativePromptParam,
+      width: dims512Width,
+      height: dims512Height,
+      image_b64: imageB64Param,
+      mask_b64: maskB64Param,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -838,14 +591,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 20,
         description: "Diffusion steps",
       },
-      strength: {
-        cfParam: "strength",
-        type: "number",
-        default: 1,
-        min: 0,
-        max: 1,
-        description: "Img2img transformation strength",
-      },
+      strength: strengthParam,
       guidance: {
         cfParam: "guidance",
         type: "number",
@@ -854,12 +600,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         max: 30,
         description: "Prompt adherence strength",
       },
-      seed: {
-        cfParam: "seed",
-        type: "integer",
-        default: null,
-        description: "Random seed for reproducibility",
-      },
+      seed: seedParam,
     },
     limits: {
       maxPromptLength: 2048,
