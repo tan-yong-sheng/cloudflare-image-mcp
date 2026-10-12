@@ -189,7 +189,6 @@ Masked edits (inpainting) are a specialized form of image-to-image editing: it u
 | `@cf/black-forest-labs/flux-2-klein-4b`         | Black Forest Labs | img2img                                 |
 | `@cf/black-forest-labs/flux-2-dev`              | Black Forest Labs | img2img                                 |
 | `@cf/lykon/dreamshaper-8-lcm`                   | Lykon             | img2img                                 |
-| `@cf/runwayml/stable-diffusion-v1-5-img2img`    | RunwayML          | img2img                                 |
 | `@cf/runwayml/stable-diffusion-v1-5-inpainting` | RunwayML          | masked edits (mask required)            |
 
 > Note: Models specialized for masked edits are still image-to-image models; they simply require a mask.
