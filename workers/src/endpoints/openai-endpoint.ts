@@ -15,11 +15,13 @@ import {
   collectInputImages,
   type CollectConfig,
 } from "../utils/image-request.js";
+import { DEFAULT_MODEL } from "../config/models.js";
 
 // Per-route input configs: which CF params to extract and which defaults
 // apply. Handlers keep routing only; gathering lives in the shared module.
 const GENERATIONS_CONFIG: CollectConfig = {
-  defaultModel: "@cf/black-forest-labs/flux-1-schnell",
+  // R0: configured default replaces the hardcoded id.
+  defaultModel: DEFAULT_MODEL,
   params: ["size", "steps", "seed", "guidance", "negative_prompt"],
   imageKeys: [],
   includePrompt: true,

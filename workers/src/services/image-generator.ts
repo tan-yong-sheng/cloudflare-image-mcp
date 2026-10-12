@@ -18,7 +18,9 @@ import {
 import type { GeneratedImage } from "../utils/image-request.js";
 import {
   MODEL_CONFIGS,
+  isModelExposed,
   listModels as listRegistryModels,
+  resolveModelId,
 } from "../config/models.js";
 import { arrayBufferToBase64, cleanBase64 } from "../utils/encoding.js";
 
@@ -211,10 +213,13 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Get model configuration by full model ID
+   * Get model configuration by full model ID (or alias). Disabled
+   * models resolve to null so every generation path rejects them (R0).
    */
   getModelConfig(modelId: string): ModelConfig | null {
-    return this.models.get(modelId) || null;
+    const config = this.models.get(resolveModelId(modelId)) || null;
+    if (config && !isModelExposed(config)) return null;
+    return config;
   }
 
   /**

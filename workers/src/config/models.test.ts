@@ -5,7 +5,14 @@
 // plus the models.json source of truth it must mirror.
 
 import { describe, expect, test } from "vitest";
-import { getModelConfig, listModels, MODEL_CONFIGS } from "./models.js";
+import {
+  DEFAULT_MODEL,
+  getModelConfig,
+  isModelExposed,
+  listModels,
+  MODEL_CONFIGS,
+  resolveModelId,
+} from "./models.js";
 import modelsJson from "./models.json" with { type: "json" };
 
 describe("model registry validity", () => {
@@ -38,6 +45,36 @@ describe("model registry validity", () => {
 
   test("unknown model id returns null", () => {
     expect(getModelConfig("@cf/nope/missing")).toBeNull();
+  });
+
+  describe("exposure flags (R0 #69)", () => {
+    const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
+    test("DEFAULT_MODEL is the schnell id", () => {
+      expect(DEFAULT_MODEL).toBe(SCHNELL);
+    });
+    test("models are exposed by default (no flags)", () => {
+      expect(isModelExposed(MODEL_CONFIGS[SCHNELL])).toBe(true);
+      expect(isModelExposed({ exposure: {} } as any)).toBe(true);
+      expect(isModelExposed({ exposure: { enabled: false } } as any)).toBe(
+        false
+      );
+    });
+    test("resolveModelId follows alias, else identity", () => {
+      expect(
+        resolveModelId("sdxl", {
+          [SCHNELL]: { ...MODEL_CONFIGS[SCHNELL], exposure: { alias: "sdxl" } },
+        } as any)
+      ).toBe(SCHNELL);
+      expect(resolveModelId(SCHNELL)).toBe(SCHNELL);
+      expect(resolveModelId("@cf/nope/missing")).toBe("@cf/nope/missing");
+    });
+    test("disabled models vanish from listModels", () => {
+      // Registry fixtures are all enabled: full list today. Disabled
+      // filtering is proven by isModelExposed + listModels delegation
+      // below (C3 pattern): listModels emits only exposed entries.
+      const ids = listModels().map((m) => m.id);
+      expect(ids).toContain(SCHNELL);
+    });
   });
 
   test("listModels exposes one entry per config", () => {

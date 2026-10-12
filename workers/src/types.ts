@@ -26,6 +26,11 @@ export interface ModelConfig {
     mask?: "supported" | "required";
   };
   maxInputImages?: number; // Max input images for multi-reference (e.g. FLUX 2 supports up to 4)
+  exposure?: {
+    enabled?: boolean; // default true; false hides the model everywhere
+    alias?: string; // short id resolving to this model
+    excludedScopes?: string[]; // stored for R1/D1 overrides; unevaluated in R0
+  };
   parameters: Record<string, ParamConfig>;
   limits: {
     maxPromptLength: number;

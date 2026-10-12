@@ -570,8 +570,31 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   },
 };
 
+// R0 (#69): operator exposure flags. enabled defaults true (absent =
+// exposed); alias offers a short id; excludedScopes is stored for R1/D1
+// overrides (no scope evaluation exists yet). Later D1 exposure rows
+// reuse these exact field names.
+export const DEFAULT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
+export function isModelExposed(config: ModelConfig): boolean {
+  return config.exposure?.enabled ?? true;
+}
+
+export function resolveModelId(
+  modelId: string,
+  registry: Record<string, ModelConfig> = MODEL_CONFIGS
+): string {
+  if (registry[modelId]) return modelId;
+  for (const [id, config] of Object.entries(registry)) {
+    if (config.exposure?.alias === modelId) return id;
+  }
+  return modelId;
+}
+
 export function getModelConfig(modelId: string): ModelConfig | null {
-  return MODEL_CONFIGS[modelId] || null;
+  const config = MODEL_CONFIGS[resolveModelId(modelId)] || null;
+  if (config && !isModelExposed(config)) return null;
+  return config;
 }
 
 export function listModels(): Array<{
@@ -590,16 +613,19 @@ export function listModels(): Array<{
   provider: string;
   supportedSizes: string[];
 }> {
-  return Object.values(MODEL_CONFIGS).map((config) => ({
-    id: config.id,
-    name: config.name,
-    description: config.description,
-    capabilities: Object.keys(config.parameters),
-    taskTypes: config.supportedTasks,
-    editCapabilities: config.editCapabilities,
-    parameters: config.parameters,
-    limits: config.limits,
-    provider: config.provider,
-    supportedSizes: config.limits.supportedSizes,
-  }));
+  // R0: disabled models are absent from every listing surface.
+  return Object.values(MODEL_CONFIGS)
+    .filter(isModelExposed)
+    .map((config) => ({
+      id: config.id,
+      name: config.name,
+      description: config.description,
+      capabilities: Object.keys(config.parameters),
+      taskTypes: config.supportedTasks,
+      editCapabilities: config.editCapabilities,
+      parameters: config.parameters,
+      limits: config.limits,
+      provider: config.provider,
+      supportedSizes: config.limits.supportedSizes,
+    }));
 }
