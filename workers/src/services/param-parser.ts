@@ -367,12 +367,40 @@ export class ParamParser {
       }
     }
 
-    // Report caller-supplied keys no model parameter consumes
+    // Report caller-supplied keys no model parameter consumes. The
+    // parser derives aliases callers never sent (size -> width+height,
+    // image<->image_b64, mask<->mask_b64): attribute those to the
+    // supplied key instead of reporting the derived ones.
+    const supplied = new Set(Object.keys(params));
+    const derivedPairs: Array<[string, string[]]> = [
+      ["size", ["width", "height"]],
+      ["image", ["image_b64"]],
+      ["image_b64", ["image"]],
+      ["mask", ["mask_b64"]],
+      ["mask_b64", ["mask"]],
+    ];
+    const aliasOf = new Map<string, string>();
+    for (const [from, tos] of derivedPairs) {
+      if (supplied.has(from)) {
+        for (const to of tos) aliasOf.set(to, from);
+      }
+    }
     for (const key of Object.keys(params)) {
       if (key === "prompt" || key === "rawPrompt") continue;
+      if (key === "size") continue; // handled below (derived dims)
+      if (aliasOf.has(key)) continue;
       if (!declared.has(key)) {
         const value = (params as any)[key];
         if (value !== undefined && value !== null) dropped.push(key);
+      }
+    }
+    // `size` counts as consumed when both derived dims were consumed.
+    if (supplied.has("size") && !declared.has("size")) {
+      const widthConsumed = declared.has("width");
+      const heightConsumed = declared.has("height");
+      if (!(widthConsumed && heightConsumed)) {
+        const value = (params as any)["size"];
+        if (value !== undefined && value !== null) dropped.push("size");
       }
     }
 

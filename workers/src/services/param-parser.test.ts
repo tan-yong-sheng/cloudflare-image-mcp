@@ -193,6 +193,19 @@ describe("ParamParser.buildPayload (C1)", () => {
       "negative_prompt",
     ]);
   });
+
+  test("parser-derived aliases are not reported as dropped (OCR)", () => {
+    // size expands to width+height; schnell declares neither, so size
+    // is dropped but the derived dims must not double-report.
+    const params = ParamParser.parse(
+      { prompt: "cat", size: "1024x1024" },
+      {},
+      fluxConfig
+    );
+    const { payload, dropped } = ParamParser.buildPayload(params, fluxConfig);
+    expect(payload).toEqual({ prompt: "cat" });
+    expect(dropped).toEqual(["size"]);
+  });
 });
 
 describe("ParamParser.formatHelp", () => {
