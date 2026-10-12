@@ -1,6 +1,7 @@
 ---
 name: add-cf-models
-description: Guides you through adding a new Cloudflare Workers AI text-to-image model. Covers updating backend model configuration, frontend dropdowns, and creating documentation. Includes instructions for parameter setup, supported tasks, usage examples, and deployment.
+description: Add a new Cloudflare Workers AI text-to-image model to this repo.
+disable-model-invocation: true
 license: MIT
 version: 2.0.0
 models: gpt-5.2
@@ -151,15 +152,9 @@ Add the same model configuration in TypeScript format:
 },
 ```
 
-### 4. Add to Frontend Dropdown
+### 4. Verify the Frontend Dropdown (no code edit)
 
-Edit `workers/src/endpoints/frontend.ts` and add an `<option>` in the model dropdown:
-
-```html
-<option value="@cf/provider/model-name">@cf/provider/model-name</option>
-```
-
-The dropdown displays model_id only (as per project convention).
+The dropdown populates dynamically from the registry via `/api/internal/models` — do not add `<option>` elements by hand. Run the Worker locally and confirm the new model id appears in the dropdown (model ids only, as per project convention).
 
 ### 5. Create Model Documentation
 
