@@ -54,6 +54,17 @@ describe("secret scanner (plaintext tripwire)", () => {
     expect(findings.map((f) => f.line)).toEqual([3]);
   });
 
+  test("flags an all-alphabetic bearer credential", () => {
+    // The narrow bearer pattern must not be filtered by the digit heuristic:
+    // a credential need not contain a digit to be a credential.
+    const alphabetic = "abcdefghijklmnopqrstuvwxyzabcdefghij";
+    expect(
+      scanForSecrets(`Authorization: Bearer ${alphabetic}`).map(
+        (f) => f.pattern
+      )
+    ).toContain("bearer-token");
+  });
+
   test("flags a JWT-shaped literal (dotted, not base64)", () => {
     const jwt =
       "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk";
@@ -74,6 +85,16 @@ describe("secret scanner (plaintext tripwire)", () => {
     const md =
       "See https://raw.githubusercontent.com/cloudflare/workers-sdk/wrangler/main/README for details";
     expect(scanForSecrets(md)).toEqual([]);
+  });
+
+  test("flags a quoted base64 secret that contains slashes", () => {
+    // Slashes are only path evidence in a key/value context; inside a quoted
+    // literal they are ordinary base64 and must not suppress detection.
+    const b64 = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5MA==";
+    const withSlash = `${b64.slice(0, 20)}/abcdefghij0123456789`;
+    expect(
+      scanForSecrets(`token = "${withSlash}"`).map((f) => f.pattern)
+    ).toContain("long-string-literal");
   });
 
   test("ordinary SQL produces no findings", () => {

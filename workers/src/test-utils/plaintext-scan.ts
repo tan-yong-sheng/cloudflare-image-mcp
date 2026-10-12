@@ -56,13 +56,22 @@ const ASSIGNMENT_VALUE =
  *   configuration, not a secret;
  * - in a `key: value` context a slash means a file path, not a secret.
  *
- * The specific Cloudflare and bearer patterns skip these rules: they are
- * narrow enough not to need the heuristic.
+ * The specific Cloudflare and bearer patterns are narrow enough not to need
+ * the heuristic and skip it: their own character classes already exclude
+ * ordinary config, and an all-alphabetic bearer credential is still a
+ * credential.
+ *
+ * A slash is only evidence of a path in a `key: value` context, so quoted
+ * literals keep allowing it - base64 secrets legitimately contain slashes.
  */
-function looksSecret(value: string, opts: { pathSafe?: boolean }): boolean {
+function looksSecret(
+  value: string,
+  opts: { skipHeuristic?: boolean; allowSlash?: boolean } = {}
+): boolean {
+  if (opts.skipHeuristic) return true;
   const digits = value.match(/\d/g)?.length ?? 0;
   if (digits < 2) return false;
-  if (!opts.pathSafe && value.includes("/")) return false;
+  if (!opts.allowSlash && value.includes("/")) return false;
   return true;
 }
 
@@ -79,10 +88,14 @@ function lineAt(text: string, index: number): number {
  * result is the pass condition for every artifact this guards.
  */
 export function scanForSecrets(text: string): SecretFinding[] {
-  const patterns: [string, RegExp, { pathSafe?: boolean }][] = [
-    ["cf-api-token", CF_TOKEN, { pathSafe: true }],
-    ["bearer-token", BEARER, { pathSafe: true }],
-    ["long-string-literal", LONG_LITERAL, { pathSafe: true }],
+  const patterns: [
+    string,
+    RegExp,
+    { skipHeuristic?: boolean; allowSlash?: boolean },
+  ][] = [
+    ["cf-api-token", CF_TOKEN, { skipHeuristic: true }],
+    ["bearer-token", BEARER, { skipHeuristic: true }],
+    ["long-string-literal", LONG_LITERAL, { allowSlash: true }],
     ["assignment-value", ASSIGNMENT_VALUE, {}],
   ];
 
