@@ -224,13 +224,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 256,
       maxHeight: 2048,
-      supportedSizes: [
-        "256x256",
-        "512x512",
-        "768x768",
-        "1024x1024",
-        "1280x1280",
-      ],
+      // Live probe 2026-10-12: klein-4b returns 1024x1024 for every
+      // requested size — provider accepts w/h, ignores them.
+      supportedSizes: ["1024x1024"],
     },
   },
   "@cf/black-forest-labs/flux-2-dev": {
@@ -266,13 +262,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 256,
       maxHeight: 2048,
-      supportedSizes: [
-        "256x256",
-        "512x512",
-        "768x768",
-        "1024x1024",
-        "1280x1280",
-      ],
+      // Live probe 2026-10-12: klein-4b returns 1024x1024 for every
+      // requested size — provider accepts w/h, ignores them.
+      supportedSizes: ["1024x1024"],
     },
   },
   "@cf/black-forest-labs/flux-2-klein-9b": {
@@ -309,13 +301,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 256,
       maxHeight: 2048,
-      supportedSizes: [
-        "256x256",
-        "512x512",
-        "768x768",
-        "1024x1024",
-        "1280x1280",
-      ],
+      // Live probe 2026-10-12: klein-4b returns 1024x1024 for every
+      // requested size — provider accepts w/h, ignores them.
+      supportedSizes: ["1024x1024"],
     },
   },
   "@cf/stabilityai/stable-diffusion-xl-base-1.0": {
