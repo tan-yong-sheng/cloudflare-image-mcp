@@ -108,13 +108,7 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": [
-          "256x256",
-          "512x512",
-          "768x768",
-          "1024x1024",
-          "1280x1280"
-        ]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/black-forest-labs/flux-2-dev": {
@@ -181,13 +175,7 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": [
-          "256x256",
-          "512x512",
-          "768x768",
-          "1024x1024",
-          "1280x1280"
-        ]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/black-forest-labs/flux-2-klein-9b": {
@@ -254,13 +242,7 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": [
-          "256x256",
-          "512x512",
-          "768x768",
-          "1024x1024",
-          "1280x1280"
-        ]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": {

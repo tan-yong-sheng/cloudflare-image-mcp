@@ -49,6 +49,19 @@ describe("model registry validity", () => {
     }
   });
 
+  test("flux-2 models declare fixed 1024 output (live probe)", () => {
+    // Live probe 2026-10-12 (klein-4b, 512/768/1024 requests): provider
+    // always returns 1024x1024 JPEG — size params accepted, ignored.
+    for (const id of [
+      "@cf/black-forest-labs/flux-2-klein-4b",
+      "@cf/black-forest-labs/flux-2-dev",
+      "@cf/black-forest-labs/flux-2-klein-9b",
+    ]) {
+      const config = MODEL_CONFIGS[id];
+      expect(config.limits.supportedSizes).toEqual(["1024x1024"]);
+    }
+  });
+
   test("inpainting model requires a mask", () => {
     const config = getModelConfig(
       "@cf/runwayml/stable-diffusion-v1-5-inpainting"
