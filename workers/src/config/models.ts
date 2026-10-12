@@ -187,7 +187,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 512,
       maxHeight: 2048,
-      supportedSizes: ["512x512", "768x768", "1024x1024"],
+      supportedSizes: ["1024x1024"],
     },
   },
   "@cf/black-forest-labs/flux-2-klein-4b": {
@@ -350,15 +350,10 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 256,
       maxHeight: 2048,
-      supportedSizes: [
-        "256x256",
-        "512x512",
-        "768x768",
-        "1024x1024",
-        "1280x1280",
-        "1024x1792",
-        "1792x1024",
-      ],
+      // Live probes 2026-10-13: provider returns 1024x1024 for every
+      // requested size (incl. 1024x1792 portrait) — sizes accepted,
+      // ignored.
+      supportedSizes: ["1024x1024"],
     },
   },
   "@cf/bytedance/stable-diffusion-xl-lightning": {
@@ -401,7 +396,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 256,
       maxHeight: 2048,
-      supportedSizes: ["512x512", "1024x1024"],
+      supportedSizes: ["1024x1024"],
     },
   },
   "@cf/lykon/dreamshaper-8-lcm": {
@@ -446,7 +441,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 256,
       maxHeight: 2048,
-      supportedSizes: ["512x512", "768x768", "1024x1024"],
+      supportedSizes: ["512x512"],
     },
   },
   "@cf/leonardo/lucid-origin": {
@@ -488,13 +483,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2500,
       minHeight: 0,
       maxHeight: 2500,
-      supportedSizes: [
-        "512x512",
-        "768x768",
-        "1024x1024",
-        "1280x720",
-        "720x1280",
-      ],
+      // Live probe 2026-10-13: 1280x720 request returned 1120x1120
+      // (the default) — provider ignores requested size.
+      supportedSizes: ["1120x1120"],
     },
   },
   "@cf/leonardo/phoenix-1.0": {
@@ -538,7 +529,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 2048,
       minHeight: 0,
       maxHeight: 2048,
-      supportedSizes: ["512x512", "768x768", "1024x1024", "1280x1280"],
+      // Live probes 2026-10-13: 512/1024/1280 requests all returned
+      // 1024x1024 — provider ignores requested size.
+      supportedSizes: ["1024x1024"],
     },
   },
 

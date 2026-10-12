@@ -41,7 +41,7 @@
         "maxWidth": 2048,
         "minHeight": 512,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "768x768", "1024x1024"]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/black-forest-labs/flux-2-klein-4b": {
@@ -339,15 +339,7 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": [
-          "256x256",
-          "512x512",
-          "768x768",
-          "1024x1024",
-          "1280x1280",
-          "1024x1792",
-          "1792x1024"
-        ]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/bytedance/stable-diffusion-xl-lightning": {
@@ -421,7 +413,7 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "1024x1024"]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/lykon/dreamshaper-8-lcm": {
@@ -509,7 +501,7 @@
         "maxWidth": 2048,
         "minHeight": 256,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "768x768", "1024x1024"]
+        "supportedSizes": ["512x512"]
       }
     },
     "@cf/leonardo/lucid-origin": {
@@ -577,13 +569,7 @@
         "maxWidth": 2500,
         "minHeight": 0,
         "maxHeight": 2500,
-        "supportedSizes": [
-          "512x512",
-          "768x768",
-          "1024x1024",
-          "1280x720",
-          "720x1280"
-        ]
+        "supportedSizes": ["1120x1120"]
       }
     },
     "@cf/leonardo/phoenix-1.0": {
@@ -657,7 +643,7 @@
         "maxWidth": 2048,
         "minHeight": 0,
         "maxHeight": 2048,
-        "supportedSizes": ["512x512", "768x768", "1024x1024", "1280x1280"]
+        "supportedSizes": ["1024x1024"]
       }
     },
     "@cf/runwayml/stable-diffusion-v1-5-inpainting": {
