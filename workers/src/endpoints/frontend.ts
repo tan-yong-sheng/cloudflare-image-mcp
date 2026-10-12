@@ -646,8 +646,18 @@ export function getFrontendHTML(): string {
             // overlay (Slice A): only hide it when nothing was generated
             // yet. Stale model/time are cleared so they can't mislead.
             // hadResult is read by the terminal paths below.
+            // Show loading. Keep the last good image visible under the
+            // overlay (Slice A): only hide it when nothing was generated
+            // yet. Stale model/time are cleared so they can't mislead.
+            // hadResult is read by the terminal paths below.
             clearGenerateError();
             const hadResult = !!currentImageUrl && !aiImage.classList.contains('hidden');
+            // Stash the prior result BEFORE clearing: assigning src below
+            // replaces the displayed source, so on failure we restore
+            // these (review: capture-then-clear order matters).
+            const priorSrc = aiImage.src;
+            const priorModel = document.getElementById('usedModel').textContent;
+            const priorTime = document.getElementById('generationTime').textContent;
             if (!hadResult) {
                 initialPrompt.classList.add('hidden');
                 aiImage.classList.add('hidden');
@@ -660,20 +670,38 @@ export function getFrontendHTML(): string {
 
             // Capture start time for duration calculation
             const startTime = Date.now();
-            // Stash the prior result: assigning src below replaces the
-            // displayed source, so on failure we restore these (OCR).
-            const priorSrc = aiImage.src;
-            const priorModel = document.getElementById('usedModel').textContent;
-            const priorTime = document.getElementById('generationTime').textContent;
             // Abort recovery: a stalled fetch/image must not leave the
             // button disabled forever (OCR). 120s covers slow inference.
+            // The timer also drives the image-failure path: if the fetch
+            // resolved but the image load stalls, neither onload nor
+            // onerror fires, so detach both and fail explicitly (review).
             const controller = new AbortController();
-            const abortTimer = setTimeout(() => controller.abort(), 120000);
+            let restoring = false;
             const finish = () => {
                 clearTimeout(abortTimer);
                 loadingOverlay.classList.add('hidden');
                 submitButton.disabled = false;
             };
+            const imageFailed = () => {
+                finish();
+                if (hadResult && aiImage.src !== priorSrc) {
+                    restoring = true;
+                    aiImage.src = priorSrc;
+                    document.getElementById('usedModel').textContent = priorModel;
+                    document.getElementById('generationTime').textContent = priorTime;
+                } else {
+                    initialPrompt.classList.remove('hidden');
+                    aiImage.classList.add('hidden');
+                    downloadButton.classList.add('hidden');
+                }
+                showGenerateError('Could not load the generated image (expired or blocked URL)');
+            };
+            const abortTimer = setTimeout(() => {
+                controller.abort();
+                aiImage.onload = null;
+                aiImage.onerror = null;
+                imageFailed();
+            }, 120000);
 
             try {
                 const headers = { 'Content-Type': 'application/json' };
@@ -716,7 +744,6 @@ export function getFrontendHTML(): string {
                 // Display image. Commit currentImageUrl only on load of
                 // the pending URL: restoring the prior source after a
                 // failed load also fires onload and must not commit.
-                let restoring = false;
                 aiImage.onload = () => {
                     if (restoring) {
                         restoring = false;
@@ -737,21 +764,8 @@ export function getFrontendHTML(): string {
                 // Restore the prior source so the last good image
                 // survives a failed load (Slice A + OCR).
                 aiImage.onerror = () => {
-                    finish();
                     restoring = false;
-                    if (hadResult && aiImage.src !== priorSrc) {
-                        restoring = true;
-                        aiImage.src = priorSrc;
-                    } else if (!hadResult || aiImage.src === priorSrc) {
-                        initialPrompt.classList.remove('hidden');
-                        aiImage.classList.add('hidden');
-                        downloadButton.classList.add('hidden');
-                        document.getElementById('usedModel').textContent = priorModel;
-                        document.getElementById('generationTime').textContent = priorTime;
-                    } else {
-                        initialPrompt.classList.remove('hidden');
-                    }
-                    showGenerateError('Could not load the generated image (expired or blocked URL)');
+                    imageFailed();
                 };
                 aiImage.src = imageUrl;
 
