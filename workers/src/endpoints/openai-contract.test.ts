@@ -345,4 +345,42 @@ describe("GET /v1/models contract", () => {
     expect(body.data[0]).toHaveProperty("id");
     expect(body.data[0].object).toBe("model");
   });
+
+  // #62: deprecated img2img model is delisted (provider 403/5018 +
+  // docs-delisted); inpainting sibling untouched.
+  test("list excludes the removed img2img model but keeps inpainting", async () => {
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const res = await endpoint.handle(new Request(`${ORIGIN}/v1/models`));
+    const body = (await res.json()) as any;
+    const ids = body.data.map((m: any) => m.id);
+    expect(ids).not.toContain("@cf/runwayml/stable-diffusion-v1-5-img2img");
+    expect(ids).toContain("@cf/runwayml/stable-diffusion-v1-5-inpainting");
+  });
+
+  test("describe for the removed img2img id reports unknown model", async () => {
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const res = await endpoint.handle(
+      new Request(
+        `${ORIGIN}/v1/models/@cf/runwayml/stable-diffusion-v1-5-img2img`
+      )
+    );
+    const body = (await res.json()) as any;
+    expect(body.description).toMatch(/unknown model/i);
+  });
+
+  test("edits against the removed img2img id is rejected", async () => {
+    stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const res = await endpoint.handle(
+      post("/v1/images/edits", {
+        prompt: "x",
+        model: "@cf/runwayml/stable-diffusion-v1-5-img2img",
+        image:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toMatch(/unknown model/i);
+  });
 });
