@@ -5,6 +5,25 @@
 // fixtures) so a credential can never be committed by accident. Findings
 // are masked: the scanner reports where a secret-shaped value is, never the
 // value itself, so a failing assertion cannot leak the secret into logs.
+//
+// WHAT IT CATCHES
+//   - Cloudflare API tokens (`v1.0-…`)
+//   - Authorization: Bearer credentials, with or without digits
+//   - quoted opaque literals of 24+ chars that look random (base64, hex, JWT)
+//   - unquoted `KEY=value` / `key: value` assignments that look random
+//
+// WHAT IT DELIBERATELY DOES NOT CATCH
+//   - long alphabetic credentials in the broad patterns (a 32-character
+//     all-letters API token). Detecting those means dropping the digit rule,
+//     which makes the scanner fire on ordinary configuration such as
+//     `cloudflare-image-workers` and `workers/package-lock.json`. A tripwire
+//     that cries wolf is switched off, so precision wins here. The specific
+//     bearer pattern still catches alphabetic credentials.
+//   - secrets shorter than 24 chars.
+//
+// The false-positive side of that trade is pinned by a test that scans this
+// repo's real workflows and docs and requires zero findings, so widening
+// detection into noise fails loudly rather than silently.
 
 /** One secret-shaped value found in scanned text. */
 export interface SecretFinding {
