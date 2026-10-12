@@ -193,6 +193,35 @@ Masked edits (inpainting) are a specialized form of image-to-image editing: it u
 
 > Note: Models specialized for masked edits are still image-to-image models; they simply require a mask.
 
+### Model Exposure (operator config)
+
+The runtime registry is `workers/src/config/models.ts` (the JSON file
+mirrors model tables; exposure lives in the TS entries the worker
+reads). Each entry accepts an optional `exposure` block, and the file
+exports the generations default:
+
+```ts
+// workers/src/config/models.ts
+export const DEFAULT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
+"@cf/example/model": {
+  // ...
+  exposure: {
+    enabled: false,
+    alias: "example",
+    excludedScopes: ["public"],
+  },
+},
+```
+
+- `enabled: false` hides the model from `list_models`, `GET /v1/models`,
+  the frontend dropdown, and makes `describe_model` report unknown model.
+  Absent means exposed. No new bindings or endpoints.
+- `alias` offers a short id resolving to the model everywhere ids resolve.
+- `excludedScopes` is stored for future provider overrides; unevaluated.
+- `DEFAULT_MODEL` is fixed in code; changing the OpenAI generations
+  default is a code edit, not config.
+
 ## Model-Specific Parameters
 
 ### FLUX Models
