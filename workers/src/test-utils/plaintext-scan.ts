@@ -31,6 +31,41 @@ const BEARER = /bearer\s+[A-Za-z0-9._~-]{20,}/gi;
  */
 const LONG_LITERAL = /(['"])[A-Za-z0-9+/=_\-.]{24,}\1/g;
 
+/**
+ * Unquoted assignment values (`API_KEY=<opaque>`, `token: <opaque>`), which
+ * the quoted-literal pattern misses. Values containing `://` or starting with
+ * `//` are excluded by the negative lookahead, so ordinary documentation URLs
+ * do not read as secrets.
+ */
+const ASSIGNMENT_VALUE =
+  /\b[A-Za-z_][A-Za-z0-9_-]{2,}\s*[=:]\s*(?!\/\/)(?![^\s]*:\/\/)([A-Za-z0-9+/=_\-.]{24,})/g;
+
+/**
+ * Whether a broad match looks like a credential rather than ordinary config.
+ *
+ * Calibration matters more than reach here: a tripwire that fires on
+ * `workers/package-lock.json` or `cloudflare-image-workers` gets switched
+ * off, which is worse than not having it. Two rules, both checked against
+ * this repo's real docs and workflows:
+ *
+ * - a credential practically always carries several digits, while config
+ *   values (`cloudflare-image-workers`, `src/test-utils/**`) are letters,
+ *   slashes and dots only. Two digits, not one: a single digit is what a
+ *   key name contributes inside a quoted echo such as
+ *   `D1_DATABASE_NAME=cloudflare-image-mcp-providers-staging`, which is
+ *   configuration, not a secret;
+ * - in a `key: value` context a slash means a file path, not a secret.
+ *
+ * The specific Cloudflare and bearer patterns skip these rules: they are
+ * narrow enough not to need the heuristic.
+ */
+function looksSecret(value: string, opts: { pathSafe?: boolean }): boolean {
+  const digits = value.match(/\d/g)?.length ?? 0;
+  if (digits < 2) return false;
+  if (!opts.pathSafe && value.includes("/")) return false;
+  return true;
+}
+
 function lineAt(text: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index; i++) {
@@ -44,15 +79,16 @@ function lineAt(text: string, index: number): number {
  * result is the pass condition for every artifact this guards.
  */
 export function scanForSecrets(text: string): SecretFinding[] {
-  const patterns: [string, RegExp][] = [
-    ["cf-api-token", CF_TOKEN],
-    ["bearer-token", BEARER],
-    ["long-string-literal", LONG_LITERAL],
+  const patterns: [string, RegExp, { pathSafe?: boolean }][] = [
+    ["cf-api-token", CF_TOKEN, { pathSafe: true }],
+    ["bearer-token", BEARER, { pathSafe: true }],
+    ["long-string-literal", LONG_LITERAL, { pathSafe: true }],
+    ["assignment-value", ASSIGNMENT_VALUE, {}],
   ];
 
   const findings: SecretFinding[] = [];
   const seen = new Set<string>();
-  for (const [pattern, regex] of patterns) {
+  for (const [pattern, regex, opts] of patterns) {
     regex.lastIndex = 0;
     for (const match of text.matchAll(regex)) {
       const line = lineAt(text, match.index ?? 0);
@@ -61,6 +97,7 @@ export function scanForSecrets(text: string): SecretFinding[] {
       // which is the only difference between those two matches, so a secret
       // is reported once.
       const bare = match[0].replace(/^['"]|['"]$/g, "");
+      if (!looksSecret(bare, opts)) continue;
       const key = `${line}:${bare}`;
       if (seen.has(key)) continue;
       seen.add(key);

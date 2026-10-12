@@ -9,6 +9,9 @@
 // scanner on admin-API fixtures.
 
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { scanForSecrets } from "../test-utils/plaintext-scan.js";
 import {
   columnsOf,
@@ -59,6 +62,20 @@ describe("secret scanner (plaintext tripwire)", () => {
     ).toContain("long-string-literal");
   });
 
+  test("flags an unquoted assignment value", () => {
+    expect(
+      scanForSecrets("API_KEY=QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo").map(
+        (f) => f.pattern
+      )
+    ).toContain("assignment-value");
+  });
+
+  test("does not read ordinary URLs as secrets", () => {
+    const md =
+      "See https://raw.githubusercontent.com/cloudflare/workers-sdk/wrangler/main/README for details";
+    expect(scanForSecrets(md)).toEqual([]);
+  });
+
   test("ordinary SQL produces no findings", () => {
     const sql = "INSERT INTO providers (id) VALUES ('cloudflare');";
     expect(scanForSecrets(sql)).toEqual([]);
@@ -84,6 +101,24 @@ describe("provider store holds no plaintext token column", () => {
         scanForSecrets(migrationSql(file)),
         `secret-shaped value in ${file}`
       ).toEqual([]);
+    }
+  });
+
+  test("the repo's own config stays clean (scanner calibration)", () => {
+    // A tripwire that fires on ordinary config gets switched off, which is
+    // worse than not having one. Lock the calibration against real files:
+    // these must produce no findings, so detection cannot be widened into
+    // noise without this test failing.
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const files = [
+      ".github/workflows/deploy-workers.yml",
+      ".github/workflows/pr-checks.yml",
+      "docs/DEPLOY.md",
+      "CONTRIB.md",
+    ];
+    for (const rel of files) {
+      const text = readFileSync(join(repoRoot, rel), "utf8");
+      expect(scanForSecrets(text), `unexpected finding in ${rel}`).toEqual([]);
     }
   });
 });
