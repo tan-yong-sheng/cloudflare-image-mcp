@@ -95,3 +95,7 @@ Judgement: new endpoint vs service-method extension; prompt-embedded vs
 explicit params; fallback-with-`warn` vs hard 400/500; plain-text vs JSON
 for `/images/*`; deduping the two `corsHeaders` definitions
 (`openai-endpoint.ts:36-40` vs `index.ts:18-22`).
+Before marking a payload/contract edit done, re-read the exact hunks
+touched and ask "does the new code actually execute?" — green tests
+don't prove a new path runs (unserialized filtered body, dead `steps`
+key both passed the suite).
