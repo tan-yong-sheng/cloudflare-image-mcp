@@ -61,7 +61,8 @@ export function getFrontendHTML(): string {
         .btn:focus { outline: none; }
 
         .btn:focus-visible {
-            box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
         }
 
         .text-primary { color: var(--primary); }
