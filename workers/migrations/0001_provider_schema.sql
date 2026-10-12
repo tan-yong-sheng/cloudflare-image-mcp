@@ -12,10 +12,10 @@
 -- * Tokens live ONLY in credential_versions.envelope as AES-GCM envelopes
 --   (shape pinned in R1b); the data key lives in one Worker secret set via
 --   the existing secret-put path. No seed below contains a secret value.
--- * Foreign keys are declared for documentation, but D1 may parse without
---   enforcing them: the partial-unique indexes (single-active credential,
---   single default) are the real guards and ARE enforced. Tests assert
---   only what D1 enforces.
+-- * Foreign keys ARE enforced: D1 enables foreign_keys by default (verified
+--   against a real D1 instance, PRAGMA foreign_keys = 1). The test harness
+--   turns on the same pragma, so the FK guards are covered alongside the
+--   UNIQUE/CHECK ones.
 
 CREATE TABLE providers (
   id TEXT PRIMARY KEY,

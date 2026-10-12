@@ -1,69 +1,84 @@
 // ============================================================================
 // D1 provider constraint tests - R1a (#71), single-active / single-default
 // ============================================================================
-// Seam: same as schema.test.ts — migrations applied to empty node:sqlite.
-// Locks the rotation contract (insert-new-active + revoke-old, never
-// overwrite) and the single-default rule, plus rejection of bad shapes.
-// Asserts only D1-enforced behavior (UNIQUE / CHECK / partial-unique).
+// Seam: same as schema.test.ts — migrations applied to empty node:sqlite
+// with foreign_keys = ON, matching D1's default. Locks the rotation
+// contract (insert-new-active + revoke-old, never overwrite), the
+// single-default rule, and rejection of bad shapes. Asserts only
+// D1-enforced behavior (UNIQUE / CHECK / partial-unique / FK).
 
 import { describe, expect, test } from "vitest";
 import { freshDb } from "../test-utils/migration-fixtures.js";
 
-function keyId(db: ReturnType<typeof freshDb>): number {
+type Db = ReturnType<typeof freshDb>;
+
+/** One credential row: the (key, version, envelope, actor) tuple. */
+function insertVersion(
+  db: Db,
+  keyId: number,
+  version: number,
+  envelope: string,
+  createdBy = "op"
+): void {
   db.exec(
-    "INSERT INTO provider_keys (provider_id, label) VALUES ('cloudflare', 'k1')"
+    `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by)` +
+      ` VALUES (${keyId}, ${version}, '${envelope}', '${createdBy}')`
   );
-  const row = db
-    .prepare("SELECT id FROM provider_keys WHERE label = 'k1'")
-    .get() as { id: number };
-  return row.id;
 }
 
-describe("provider store constraints (R1a)", () => {
+/** A provider key to hang credential versions off, plus its id. */
+function newKey(db: Db, label = "k1"): number {
+  db.exec(
+    `INSERT INTO provider_keys (provider_id, label) VALUES ('cloudflare', '${label}')`
+  );
+  return (
+    db.prepare(`SELECT id FROM provider_keys WHERE label = ?`).get(label) as {
+      id: number;
+    }
+  ).id;
+}
+
+describe("credential rotation ledger (R1a)", () => {
   test("rotation is insert-new-active plus revoke-old (single-active)", () => {
     const db = freshDb();
-    const kid = keyId(db);
-    db.exec(
-      `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 1, 'env-v1', 'op')`
-    );
-    // Second active version rejected while v1 is un-revoked.
-    expect(() =>
-      db.exec(
-        `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 2, 'env-v2', 'op')`
-      )
-    ).toThrow();
+    const kid = newKey(db);
+    insertVersion(db, kid, 1, "env-v1");
+    // A second active version is rejected while v1 is un-revoked.
+    expect(() => insertVersion(db, kid, 2, "env-v2")).toThrow();
     // Revoke v1, then v2 inserts cleanly; exactly one active remains.
     db.exec(
-      `UPDATE credential_versions SET revoked_at = unixepoch() WHERE provider_key_id = ${kid} AND version = 1`
+      `UPDATE credential_versions SET revoked_at = unixepoch()
+       WHERE provider_key_id = ${kid} AND version = 1`
     );
-    db.exec(
-      `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 2, 'env-v2', 'op')`
-    );
+    insertVersion(db, kid, 2, "env-v2");
     const active = db
       .prepare(
-        `SELECT version FROM credential_versions WHERE provider_key_id = ${kid} AND revoked_at IS NULL`
+        `SELECT version FROM credential_versions
+         WHERE provider_key_id = ${kid} AND revoked_at IS NULL`
       )
       .all() as { version: number }[];
     expect(active).toEqual([{ version: 2 }]);
   });
 
-  test("duplicate version per key rejected (no overwrite)", () => {
+  test("duplicate version per key rejected (rotation never overwrites)", () => {
     const db = freshDb();
-    const kid = keyId(db);
+    const kid = newKey(db);
+    insertVersion(db, kid, 1, "env-v1");
     db.exec(
-      `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 1, 'env-v1', 'op')`
+      `UPDATE credential_versions SET revoked_at = unixepoch()
+       WHERE provider_key_id = ${kid}`
     );
-    db.exec(
-      `UPDATE credential_versions SET revoked_at = unixepoch() WHERE provider_key_id = ${kid}`
-    );
-    // Same version number reused after revoke: still rejected.
-    expect(() =>
-      db.exec(
-        `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 1, 'env-v1b', 'op')`
-      )
-    ).toThrow();
+    // Reusing the version number after revoke is still rejected.
+    expect(() => insertVersion(db, kid, 1, "env-v1b")).toThrow();
   });
 
+  test("a credential version requires an existing key (FK enforced)", () => {
+    const db = freshDb();
+    expect(() => insertVersion(db, 9999, 1, "env-orphan")).toThrow();
+  });
+});
+
+describe("exposure overrides (R1a)", () => {
   test("at most one default exposure override", () => {
     const db = freshDb();
     db.exec(
@@ -81,26 +96,21 @@ describe("provider store constraints (R1a)", () => {
     db.exec(
       "INSERT INTO exposure_overrides (model_id, alias, updated_by) VALUES ('m3', 'm3-alias', 'op')"
     );
+    // Aliases stay unique across overrides.
     expect(() =>
       db.exec(
         "INSERT INTO exposure_overrides (model_id, alias, updated_by) VALUES ('m4', 'm3-alias', 'op')"
       )
     ).toThrow();
   });
+});
 
-  test("bad shapes rejected: empty envelope, bad flags, bad version", () => {
+describe("bad shapes rejected (R1a)", () => {
+  test("empty envelope, bad version, bad flags, bad weight", () => {
     const db = freshDb();
-    const kid = keyId(db);
-    expect(() =>
-      db.exec(
-        `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 1, '', 'op')`
-      )
-    ).toThrow();
-    expect(() =>
-      db.exec(
-        `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (${kid}, 0, 'env', 'op')`
-      )
-    ).toThrow();
+    const kid = newKey(db);
+    expect(() => insertVersion(db, kid, 1, "")).toThrow();
+    expect(() => insertVersion(db, kid, 0, "env")).toThrow();
     expect(() =>
       db.exec(
         "INSERT INTO provider_keys (provider_id, label, enabled) VALUES ('cloudflare', 'bad', 2)"

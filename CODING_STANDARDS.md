@@ -81,7 +81,13 @@ inline `// Route:` / `// Validate required fields` markers.
 ## Mechanical rules vs judgement calls
 
 Mechanical: `.js` import extensions; `import type` for types;
-`npm run check` (strict TS, ES2022, WebWorker lib) as gate;
+`npm run check` (strict TS, ES2022, WebWorker lib) as gate — it runs two
+configs: the production `tsconfig.json` (src minus tests, WebWorker-only
+globals) then `tsconfig.test.json` (tests + `src/test-utils`, which adds
+Node types). Test-only files reach Node builtins (the D1 migration harness
+reads SQL from disk and opens a database); keeping them out of the
+production config is deliberate, so a Node API in shipped code still fails
+the gate.
 `models.json` source of truth mirrored in `models.ts`;
 release version single-sourced in `src/version.ts` (never hardcode a
 version string in runtime code; bump with `workers/package.json`);

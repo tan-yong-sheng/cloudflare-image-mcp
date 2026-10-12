@@ -216,6 +216,12 @@ jobs:
           if [ -n "$AI_ACCOUNTS_VALUE" ]; then
             echo "$AI_ACCOUNTS_VALUE" | npx wrangler secret put AI_ACCOUNTS --name ${{ env.WORKERS_NAME }}
           fi
+          # Optional: AES-GCM data key for provider credential envelopes
+          # (R1a). Env indirection keeps the value off the command line.
+          # R1b reads it; until then nothing consumes it.
+          if [ -n "$PROVIDER_DATA_KEY_VALUE" ]; then
+            echo "$PROVIDER_DATA_KEY_VALUE" | npx wrangler secret put PROVIDER_DATA_KEY --name ${{ env.WORKERS_NAME }}
+          fi
           if [ -n "${{ secrets.TZ }}" ]; then
             echo "${{ secrets.TZ }}" | npx wrangler secret put TZ --name ${{ env.WORKERS_NAME }}
           fi
@@ -223,6 +229,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AI_ACCOUNTS_VALUE: ${{ secrets.AI_ACCOUNTS }}
+          PROVIDER_DATA_KEY_VALUE: ${{ secrets.PROVIDER_DATA_KEY }}
 
       - name: Derive Workers URL
         run: |
@@ -293,6 +300,7 @@ jobs:
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured (role: endpoint auth — MCP + OpenAI + frontend)' || '❌ Missing (role: endpoint auth — endpoints are public)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (role: AI inference — multi-account)' || 'ℹ️ Not set (role: AI inference — falls back to deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- D1 provider store: ${{ env.D1_DATABASE_NAME }} (role: provider schema/migrations applied before deploy; no app reads yet — R1a)" >> $GITHUB_STEP_SUMMARY
+          echo "- PROVIDER_DATA_KEY: ${{ secrets.PROVIDER_DATA_KEY != '' && '✅ Configured (role: AES-GCM envelope data key — consumed from R1b)' || 'ℹ️ Not set (role: AES-GCM envelope data key — needed before R1b reads D1)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- TZ: ${{ secrets.TZ != '' && '✅ Configured (role: runtime logging timezone)' || 'ℹ️ Not set (role: runtime logging timezone — defaults to UTC)' }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup sensitive files

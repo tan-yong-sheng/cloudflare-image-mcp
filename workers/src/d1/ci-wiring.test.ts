@@ -63,8 +63,9 @@ describe("migrations run before deploy (R1a)", () => {
       l.includes('echo "D1_DATABASE_NAME=')
     );
     expect(definitions).toHaveLength(1);
+    // Content, not column offsets: re-indenting the step must not fail the suite.
     expect(definitions[0]).toMatch(
-      /^ {10}echo "D1_DATABASE_NAME=[a-z0-9-]+" >> \$GITHUB_ENV$/
+      /echo "D1_DATABASE_NAME=[a-z0-9-]+" >> \$GITHUB_ENV/
     );
     const applyStep = lines.find((l) =>
       l.includes("wrangler d1 migrations apply")

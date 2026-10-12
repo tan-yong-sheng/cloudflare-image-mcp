@@ -5,9 +5,9 @@
 // Proves the D1 foundation exists and is versioned before any Worker code
 // touches it (reads land in R1b, #72). Uses node:sqlite (same engine
 // family as D1); asserts only what D1 enforces — tables, UNIQUE / CHECK /
-// partial-unique constraints. Foreign-key cascade behavior is deliberately
-// untested (D1 may parse but not enforce FKs; the partial-unique indexes
-// are the real guards).
+// partial-unique constraints. D1 enforces foreign keys by default
+// (PRAGMA foreign_keys = 1 on a real instance); the harness mirrors that,
+// so FK behavior is covered too, not just the UNIQUE/CHECK guards.
 
 import { describe, expect, test } from "vitest";
 import type { DatabaseSync } from "node:sqlite";

@@ -40,11 +40,12 @@ Create a token with these **Account-scoped** permissions:
 
 ## Optional Secrets
 
-| Variable      | Description                                           | Example            |
-| ------------- | ----------------------------------------------------- | ------------------ |
-| `API_KEYS`    | Protect endpoints with API key auth (comma-separated) | `mykey1,mykey2`    |
-| `AI_ACCOUNTS` | Multi-account AI inference credentials (JSON array)   | See below          |
-| `TZ`          | Timezone for logging                                  | `America/New_York` |
+| Variable            | Description                                                                                                                              | Example                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                    | `mykey1,mykey2`           |
+| `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                      | See below                 |
+| `TZ`                | Timezone for logging                                                                                                                     | `America/New_York`        |
+| `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Nothing reads it until R1b; set it before R1b ships. | `openssl rand -base64 32` |
 
 ### `AI_ACCOUNTS` Format
 
