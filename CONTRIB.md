@@ -111,6 +111,16 @@ npm run test:e2e:production
 
 ## Troubleshooting
 
+### Sandbox credential injection vs live auth
+
+In-sandbox requests to `image.tanyongsheng.qzz.io` (production alias of
+`cloudflare-image-workers.<subdomain>.workers.dev`) carry an injected
+`Authorization` header via the nono profile — the direct `workers.dev`
+host has no injection. So: in-sandbox curl/browser to the alias is
+always _authenticated_; to test unauthenticated behavior, use
+`curl -v` (inspect request headers for injected auth) or run
+outside the sandbox. Never mistake an in-sandbox 200 for an open gate.
+
 ### TypeScript Errors
 
 Run type checking to identify issues:
