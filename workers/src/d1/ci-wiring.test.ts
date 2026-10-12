@@ -70,19 +70,27 @@ describe("migrations run before deploy (R1a)", () => {
     expect(WORKFLOW).toMatch(/wrangler d1 migrations apply[^\n]*--remote/);
   });
 
-  test("one database name feeds both the binding and the apply", () => {
-    // Single source for the name: the bound database and the migration
-    // target cannot drift apart, which would apply migrations to a
-    // database the Worker never talks to.
+  test("one database name per environment feeds binding and apply", () => {
+    // D1 database names are unique per account, so staging and production
+    // each need their own. Whichever is chosen, the bound database and the
+    // migration target cannot drift apart.
     const lines = WORKFLOW.split("\n");
     const definitions = lines.filter((l) =>
       l.includes('echo "D1_DATABASE_NAME=')
     );
-    expect(definitions).toHaveLength(1);
-    // Content, not column offsets: re-indenting the step must not fail the suite.
-    expect(definitions[0]).toMatch(
-      /echo "D1_DATABASE_NAME=[a-z0-9-]+" >> \$GITHUB_ENV/
+    // One per environment branch.
+    expect(definitions).toHaveLength(2);
+    // Content, not column offsets: re-indenting a step must not fail this suite.
+    for (const line of definitions) {
+      expect(line).toMatch(
+        /echo "D1_DATABASE_NAME=[a-z0-9-]+" >> \$GITHUB_ENV/
+      );
+    }
+    // Distinct names, otherwise the two environments collide on one database.
+    const names = definitions.map(
+      (l) => l.match(/D1_DATABASE_NAME=([a-z0-9-]+)/)![1]
     );
+    expect(new Set(names).size).toBe(2);
     const applyStep = lines.find((l) =>
       l.includes("wrangler d1 migrations apply")
     );

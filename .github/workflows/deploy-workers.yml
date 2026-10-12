@@ -121,15 +121,15 @@ jobs:
           # Determine worker name based on environment
           if [ "$ENVIRONMENT" == "staging" ]; then
             echo "WORKERS_NAME=cloudflare-image-workers-staging" >> $GITHUB_ENV
+            echo "D1_DATABASE_NAME=cloudflare-image-mcp-providers-staging" >> $GITHUB_ENV
           else
             echo "WORKERS_NAME=cloudflare-image-workers" >> $GITHUB_ENV
+            echo "D1_DATABASE_NAME=cloudflare-image-mcp-providers" >> $GITHUB_ENV
           fi
-
-          # Provider store (R1a). One name, used both as the wrangler
-          # binding target and as the migrate-apply target, so the two
-          # cannot drift apart. The database itself is per-environment;
-          # only its name is shared.
-          echo "D1_DATABASE_NAME=cloudflare-image-mcp-providers" >> $GITHUB_ENV
+          # D1 database names are unique within a Cloudflare account, so each
+          # environment needs its own name. The name is defined once here and
+          # feeds both the wrangler binding and the migrate-apply target, so
+          # the two cannot drift to different databases.
 
           echo "Deploying to $ENVIRONMENT as ${{ env.WORKERS_NAME }}"
 

@@ -60,23 +60,26 @@ key in a login modal and sends it as a Bearer header.
 ### Step 3b: Create the D1 provider database
 
 Deploy applies `workers/migrations/*.sql` to a D1 database **before** deploying
-the Worker, so that database must already exist. Create one per environment:
+the Worker, so that database must already exist. D1 database names are unique
+within a Cloudflare account, so each environment needs its own:
 
 ```bash
 cd workers
-npx wrangler d1 create cloudflare-image-mcp-providers
+npx wrangler d1 create cloudflare-image-mcp-providers            # production
+npx wrangler d1 create cloudflare-image-mcp-providers-staging    # staging
 ```
 
-The command prints a `database_id`. Add it as `D1_DATABASE_ID` to **both** GitHub
-environments (`staging` and `production`):
+Add each printed `database_id` as the `D1_DATABASE_ID` secret on the matching
+GitHub environment (`staging` → the staging id, `production` → the production
+id):
 
 ```
 Settings → Environments → <staging|production> → Environment secrets → New secret
 ```
 
 > ⚠️ **Set it per environment, not at repository level.** One repository secret
-> would point staging and production at the same database, so staging deploys
-> would migrate the production provider store.
+> would point both environments at the same database, so staging deploys would
+> migrate the production provider store.
 
 Deploy fails fast with a clear error when `D1_DATABASE_ID` is missing, rather than
 shipping a Worker bound to a database that does not exist.

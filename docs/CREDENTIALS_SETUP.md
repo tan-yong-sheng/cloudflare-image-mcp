@@ -8,11 +8,11 @@ For **step-by-step deployment instructions**, see [DEPLOY.md](DEPLOY.md).
 
 ## Required for Deployment
 
-| Variable                | Description                                                      | How to Get It                                                                            |
-| ----------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID                                       | [Dashboard](https://dash.cloudflare.com) → Account Overview → right sidebar              |
-| `CLOUDFLARE_API_TOKEN`  | API token for deploying Workers                                  | [Profile](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Custom token  |
-| `D1_DATABASE_ID`        | Id of the D1 provider database (deploy applies migrations to it) | `npx wrangler d1 create cloudflare-image-mcp-providers` — set **per GitHub environment** |
+| Variable                | Description                                                                                                           | How to Get It                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID                                                                                            | [Dashboard](https://dash.cloudflare.com) → Account Overview → right sidebar                        |
+| `CLOUDFLARE_API_TOKEN`  | API token for deploying Workers                                                                                       | [Profile](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Custom token            |
+| `D1_DATABASE_ID`        | Id of the D1 provider database (deploy applies migrations to it). One per environment — names are unique per account. | `npx wrangler d1 create cloudflare-image-mcp-providers[-staging]` — set **per GitHub environment** |
 
 ### Required API Token Permissions
 

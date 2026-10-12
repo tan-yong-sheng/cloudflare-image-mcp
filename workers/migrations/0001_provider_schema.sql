@@ -18,7 +18,7 @@
 --   UNIQUE/CHECK ones.
 
 CREATE TABLE providers (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY NOT NULL,
   display_name TEXT NOT NULL CHECK (length(display_name) > 0),
   transport TEXT NOT NULL CHECK (length(transport) > 0),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -59,7 +59,7 @@ CREATE UNIQUE INDEX uq_credential_single_active
 -- planner uses it (verified by EXPLAIN QUERY PLAN).
 
 CREATE TABLE exposure_overrides (
-  model_id TEXT PRIMARY KEY,
+  model_id TEXT PRIMARY KEY NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   alias TEXT UNIQUE,
   is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),

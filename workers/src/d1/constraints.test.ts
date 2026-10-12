@@ -75,6 +75,20 @@ describe("credential rotation ledger (R1a)", () => {
     expect(() => insertVersion(db, kid, 1, "env-v1b")).toThrow();
   });
 
+  test("identifier columns reject an omitted id", () => {
+    const db = freshDb();
+    // SQLite allows NULL in a TEXT PRIMARY KEY unless NOT NULL is declared,
+    // which would let a provider or override row exist with no identifier.
+    expect(() =>
+      db.exec(
+        "INSERT INTO providers (display_name, transport) VALUES ('X', 't')"
+      )
+    ).toThrow();
+    expect(() =>
+      db.exec("INSERT INTO exposure_overrides (updated_by) VALUES ('op')")
+    ).toThrow();
+  });
+
   test("a credential version requires an existing key (FK enforced)", () => {
     const db = freshDb();
     expect(() => insertVersion(db, 9999, 1, "env-orphan")).toThrow();
