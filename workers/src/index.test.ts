@@ -62,6 +62,17 @@ describe("router public paths", () => {
     expect(html).toContain("aiImage.onerror");
     // Generation failures surface inline, not via alert().
     expect(html).not.toContain("alert('Error: '");
+    // Slice A: submit disables while loading (double-submit guard).
+    expect(html).toContain("submitButton.disabled = true");
+    // OCR follow-ups: abort recovery + prior-source restore.
+    expect(html).toContain("AbortController");
+    expect(html).toContain("priorSrc");
+    expect(html).toContain("restoring");
+    // Slice D: labels associated, live regions announced, toggle exposes state.
+    expect(html).toContain('for="width"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain("aria-expanded");
     // Prompt-only UI excludes image-to-image-only models; num_steps
     // models get the declared key, not the steps alias.
     expect(html).toContain("includes('text-to-image')");
