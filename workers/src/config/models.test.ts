@@ -36,6 +36,19 @@ describe("model registry validity", () => {
     }
   });
 
+  test("leonardo dims minima match official docs (min 0)", () => {
+    for (const id of [
+      "@cf/leonardo/phoenix-1.0",
+      "@cf/leonardo/lucid-origin",
+    ]) {
+      const config = MODEL_CONFIGS[id];
+      expect(config.parameters.width.min).toBe(0);
+      expect(config.parameters.height.min).toBe(0);
+      expect(config.limits.minWidth).toBe(0);
+      expect(config.limits.minHeight).toBe(0);
+    }
+  });
+
   test("inpainting model requires a mask", () => {
     const config = getModelConfig(
       "@cf/runwayml/stable-diffusion-v1-5-inpainting"

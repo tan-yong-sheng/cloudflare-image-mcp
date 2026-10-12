@@ -61,6 +61,17 @@ const strengthParam: ParamEntry = {
   description: "Img2img transformation strength",
 };
 
+// Provenance notes (docs-verified Oct 2026):
+// - step: 64 appears on NO official Cloudflare page, but it feeds the MCP
+//   schema step hint and the UI falls back to 64 for w/h regardless, so it
+//   stays as an inert default rather than churning the API surface.
+// - flux-2 dims bounds are functional but unverified (Cloudflare publishes
+//   an opaque multipart schema); BFL's own 4MP ceiling suggests ours may
+//   be conservative. Live size probing deferred to post-0.2.0.
+// - schnell limits are inert: it declares no width/height params, so
+//   toCFPayload drops dims and the UI hides size; the shape stays because
+//   ModelConfig.limits requires all bounds plus supportedSizes.
+//
 // Q5: constants as values (no factories) — one constant per identical
 // block, referenced by value in each model.
 const dims1024Width: ParamEntry = {
@@ -103,11 +114,33 @@ const dims512Height: ParamEntry = {
   description: "Image height in pixels",
 };
 
+// Docs-verified minima (Cloudflare pages): Leonardo models accept min 0
+// (no schema lower bound); other models keep the 256 floor above.
+const dims1024WidthMin0: ParamEntry = {
+  cfParam: "width",
+  type: "integer",
+  default: 1024,
+  min: 0,
+  max: 2048,
+  step: 64,
+  description: "Image width in pixels",
+};
+
+const dims1024HeightMin0: ParamEntry = {
+  cfParam: "height",
+  type: "integer",
+  default: 1024,
+  min: 0,
+  max: 2048,
+  step: 64,
+  description: "Image height in pixels",
+};
+
 const dimsLucidWidth: ParamEntry = {
   cfParam: "width",
   type: "integer",
   default: 1120,
-  min: 256,
+  min: 0,
   max: 2500,
   step: 64,
   description: "Image width in pixels",
@@ -117,7 +150,7 @@ const dimsLucidHeight: ParamEntry = {
   cfParam: "height",
   type: "integer",
   default: 1120,
-  min: 256,
+  min: 0,
   max: 2500,
   step: 64,
   description: "Image height in pixels",
@@ -463,9 +496,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxPromptLength: 2048,
       defaultSteps: 4,
       maxSteps: 40,
-      minWidth: 256,
+      minWidth: 0,
       maxWidth: 2500,
-      minHeight: 256,
+      minHeight: 0,
       maxHeight: 2500,
       supportedSizes: [
         "512x512",
@@ -497,8 +530,8 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         description: "Prompt adherence strength",
       },
       seed: seedParam,
-      width: dims1024Width,
-      height: dims1024Height,
+      width: dims1024WidthMin0,
+      height: dims1024HeightMin0,
       num_steps: {
         cfParam: "num_steps",
         type: "integer",
@@ -513,9 +546,9 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxPromptLength: 2048,
       defaultSteps: 25,
       maxSteps: 50,
-      minWidth: 256,
+      minWidth: 0,
       maxWidth: 2048,
-      minHeight: 256,
+      minHeight: 0,
       maxHeight: 2048,
       supportedSizes: ["512x512", "768x768", "1024x1024", "1280x1280"],
     },
