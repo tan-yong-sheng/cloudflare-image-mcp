@@ -660,6 +660,20 @@ export function getFrontendHTML(): string {
 
             // Capture start time for duration calculation
             const startTime = Date.now();
+            // Stash the prior result: assigning src below replaces the
+            // displayed source, so on failure we restore these (OCR).
+            const priorSrc = aiImage.src;
+            const priorModel = document.getElementById('usedModel').textContent;
+            const priorTime = document.getElementById('generationTime').textContent;
+            // Abort recovery: a stalled fetch/image must not leave the
+            // button disabled forever (OCR). 120s covers slow inference.
+            const controller = new AbortController();
+            const abortTimer = setTimeout(() => controller.abort(), 120000);
+            const finish = () => {
+                clearTimeout(abortTimer);
+                loadingOverlay.classList.add('hidden');
+                submitButton.disabled = false;
+            };
 
             try {
                 const headers = { 'Content-Type': 'application/json' };
@@ -670,6 +684,7 @@ export function getFrontendHTML(): string {
                     method: 'POST',
                     headers: headers,
                     body: JSON.stringify(body),
+                    signal: controller.signal,
                 });
 
                 if (!response.ok) {
@@ -694,19 +709,24 @@ export function getFrontendHTML(): string {
                     imageUrl = imageData.url;
                 }
 
-                currentImageUrl = imageUrl;
-
                 // Calculate elapsed time
                 const elapsed = Date.now() - startTime;
                 const elapsedSeconds = (elapsed / 1000).toFixed(1);
 
-                // Display image
+                // Display image. Commit currentImageUrl only on load of
+                // the pending URL: restoring the prior source after a
+                // failed load also fires onload and must not commit.
+                let restoring = false;
                 aiImage.onload = () => {
-                    loadingOverlay.classList.add('hidden');
+                    if (restoring) {
+                        restoring = false;
+                        return;
+                    }
+                    currentImageUrl = imageUrl;
+                    finish();
                     initialPrompt.classList.add('hidden');
                     aiImage.classList.remove('hidden');
                     downloadButton.classList.remove('hidden');
-                    submitButton.disabled = false;
 
                     // Update info
                     document.getElementById('usedModel').textContent = model;
@@ -714,11 +734,21 @@ export function getFrontendHTML(): string {
                 };
                 // Expired/blocked R2 URLs never fire onload: without
                 // onerror the spinner would run forever (#50 B4).
-                // Keep the last good image when one exists (Slice A).
+                // Restore the prior source so the last good image
+                // survives a failed load (Slice A + OCR).
                 aiImage.onerror = () => {
-                    loadingOverlay.classList.add('hidden');
-                    submitButton.disabled = false;
-                    if (!hadResult) {
+                    finish();
+                    restoring = false;
+                    if (hadResult && aiImage.src !== priorSrc) {
+                        restoring = true;
+                        aiImage.src = priorSrc;
+                    } else if (!hadResult || aiImage.src === priorSrc) {
+                        initialPrompt.classList.remove('hidden');
+                        aiImage.classList.add('hidden');
+                        downloadButton.classList.add('hidden');
+                        document.getElementById('usedModel').textContent = priorModel;
+                        document.getElementById('generationTime').textContent = priorTime;
+                    } else {
                         initialPrompt.classList.remove('hidden');
                     }
                     showGenerateError('Could not load the generated image (expired or blocked URL)');
@@ -726,12 +756,15 @@ export function getFrontendHTML(): string {
                 aiImage.src = imageUrl;
 
             } catch (error) {
-                loadingOverlay.classList.add('hidden');
-                submitButton.disabled = false;
+                finish();
                 if (!hadResult) {
                     initialPrompt.classList.remove('hidden');
                 }
-                showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
+                if (error instanceof DOMException && error.name === 'AbortError') {
+                    showGenerateError('Error: generation timed out after 120s — please retry');
+                } else {
+                    showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
+                }
             }
         });
 

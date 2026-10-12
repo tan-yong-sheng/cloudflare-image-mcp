@@ -64,6 +64,10 @@ describe("router public paths", () => {
     expect(html).not.toContain("alert('Error: '");
     // Slice A: submit disables while loading (double-submit guard).
     expect(html).toContain("submitButton.disabled = true");
+    // OCR follow-ups: abort recovery + prior-source restore.
+    expect(html).toContain("AbortController");
+    expect(html).toContain("priorSrc");
+    expect(html).toContain("restoring");
     // Slice D: labels associated, live regions announced, toggle exposes state.
     expect(html).toContain('for="width"');
     expect(html).toContain('role="alert"');
