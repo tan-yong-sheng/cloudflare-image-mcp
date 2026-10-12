@@ -284,19 +284,12 @@ export function getFrontendHTML(): string {
 
                     <div id="advancedOptions" class="space-y-3 hidden">
                         <div id="sizeWrap">
-                            <div class="flex justify-between items-center">
-                                <label for="width" class="block text-sm font-medium">Width</label>
-                                <span id="widthValue" class="text-sm font-mono">1024px</span>
-                            </div>
-                            <input type="range" id="width" min="256" max="2048" step="64" value="1024" class="slider w-full">
-                        </div>
-
-                        <div id="sizeWrapHeight">
-                            <div class="flex justify-between items-center">
-                                <label for="height" class="block text-sm font-medium">Height</label>
-                                <span id="heightValue" class="text-sm font-mono">1024px</span>
-                            </div>
-                            <input type="range" id="height" min="256" max="2048" step="64" value="1024" class="slider w-full">
+                            <label for="size" class="block text-sm font-medium mb-1">
+                                <i class="fa-solid fa-expand mr-1"></i>Size
+                            </label>
+                            <select id="size" class="w-full">
+                                <option value="">Loading sizes…</option>
+                            </select>
                         </div>
 
                         <div id="stepsWrap">
@@ -326,8 +319,17 @@ export function getFrontendHTML(): string {
                         </div>
 
                         <div>
-                            <label for="n" class="block text-sm font-medium mb-1">Number of images (1-8)</label>
-                            <input type="number" id="n" min="1" max="8" value="1" class="w-full">
+                            <label for="n" class="block text-sm font-medium mb-1">Number of images</label>
+                            <select id="n" class="w-full">
+                                <option value="1" selected>1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -498,11 +500,11 @@ export function getFrontendHTML(): string {
         });
 
         // Slider value displays
-        ['width', 'height', 'steps', 'guidance'].forEach(id => {
+        ['steps', 'guidance'].forEach(id => {
             const slider = document.getElementById(id);
             const valueDisplay = document.getElementById(id + 'Value');
             slider.addEventListener('input', () => {
-                valueDisplay.textContent = slider.value + (id === 'guidance' ? '' : 'px');
+                valueDisplay.textContent = slider.value;
             });
         });
 
@@ -560,13 +562,22 @@ export function getFrontendHTML(): string {
             const showGuidance = has('guidance');
             const showNegative = has('negative_prompt');
             document.getElementById('sizeWrap').classList.toggle('hidden', !showSize);
-            document.getElementById('sizeWrapHeight').classList.toggle('hidden', !showSize);
             document.getElementById('stepsWrap').classList.toggle('hidden', !showSteps);
             document.getElementById('guidanceWrap').classList.toggle('hidden', !showGuidance);
             document.getElementById('negativePromptWrap').classList.toggle('hidden', !showNegative);
             if (showSize) {
-                setSlider('width', params.width, { min: limits.minWidth || 256, max: limits.maxWidth || 2048, step: 64, def: 1024 });
-                setSlider('height', params.height, { min: limits.minHeight || 256, max: limits.maxHeight || 2048, step: 64, def: 1024 });
+                // #65: presets from the registry's supported-size list;
+                // default 1024 square when listed, else first entry.
+                const sizes = limits.supportedSizes || [];
+                const sizeSelect = document.getElementById('size');
+                sizeSelect.innerHTML = '';
+                for (const s of sizes) {
+                    const option = document.createElement('option');
+                    option.value = s;
+                    option.textContent = s;
+                    sizeSelect.appendChild(option);
+                }
+                sizeSelect.value = sizes.includes('1024x1024') ? '1024x1024' : (sizes[0] || '');
             }
             if (showSteps) {
                 setSlider('steps', params.steps || params.num_steps, { min: 1, max: limits.maxSteps || 20, step: 1, def: limits.defaultSteps || 4 });
@@ -617,7 +628,7 @@ export function getFrontendHTML(): string {
             // on SDXL/Leonardo).
             const body = { model: model, prompt: prompt, n: parseInt(document.getElementById('n').value) };
             if (has('width') && has('height')) {
-                body.size = document.getElementById('width').value + 'x' + document.getElementById('height').value;
+                body.size = document.getElementById('size').value;
             }
             if (has('num_steps')) {
                 body.num_steps = parseInt(document.getElementById('steps').value);

@@ -68,8 +68,17 @@ describe("router public paths", () => {
     expect(html).toContain("AbortController");
     expect(html).toContain("priorSrc");
     expect(html).toContain("restoring");
+    // #65+#66: single Size select driven by per-model supportedSizes
+    // (no w/h sliders), fixed 1-8 count select (no free number input).
+    expect(html).toContain('id="size"');
+    expect(html).not.toContain('id="width"');
+    expect(html).not.toContain('id="height"');
+    expect(html).toContain('id="n"');
+    expect(html).toContain("<select");
     // Slice D: labels associated, live regions announced, toggle exposes state.
-    expect(html).toContain('for="width"');
+    // #65+#66: width/height sliders gone; size + steps labels remain.
+    expect(html).toContain('for="size"');
+    expect(html).toContain('for="steps"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('role="status"');
     expect(html).toContain("aria-expanded");
