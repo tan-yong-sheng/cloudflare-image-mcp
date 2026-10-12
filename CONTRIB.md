@@ -98,7 +98,7 @@ mints the tag automatically (never hand-tag). Full procedure:
 Unit tests are pure logic, run from the repo root with no backend needed:
 
 ```bash
-npm run test:unit # 227 vitest cases in workers/ (~2s)
+npm run test:unit # 228 vitest cases in workers/ (~2s)
 ```
 
 Derivation of that count: every `*.test.ts` under `workers/src` — registry +

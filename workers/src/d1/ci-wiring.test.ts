@@ -39,7 +39,23 @@ describe("D1 binding in the generated worker config (R1a)", () => {
 
   test("takes the database id from a secret, never a literal", () => {
     const toml = generatedWranglerToml();
-    expect(toml).toMatch(/database_id = "\$\{\{ secrets\.[A-Z0-9_]+ \}\}"/);
+    // Shell variable, not an inline ${{ secrets.* }} substitution.
+    expect(toml).toContain('database_id = "$D1_DATABASE_ID"');
+  });
+
+  test("the database id secret reaches scripts only through env", () => {
+    // An inline ${{ secrets.* }} inside a run: body is substituted before
+    // bash parses it, so a value carrying shell metacharacters could alter
+    // execution. Every reference must be an env mapping.
+    const refs = WORKFLOW.split("\n").filter((l) =>
+      l.includes("${{ secrets.D1_DATABASE_ID }}")
+    );
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      expect(ref.trim()).toMatch(
+        /^D1_DATABASE_ID: \$\{\{ secrets\.D1_DATABASE_ID \}\}$/
+      );
+    }
   });
 
   test("names a database and a stable binding", () => {
@@ -85,8 +101,6 @@ describe("migrations run before deploy (R1a)", () => {
     // Fail fast beats shipping a worker bound to a database that does not
     // exist: the binding and the migration target come from one secret.
     expect(WORKFLOW).toContain("D1_DATABASE_ID");
-    expect(WORKFLOW).toMatch(
-      /if \[ -z "\$\{\{ secrets\.D1_DATABASE_ID \}\}" \]/
-    );
+    expect(WORKFLOW).toContain('if [ -z "$D1_DATABASE_ID" ]');
   });
 });

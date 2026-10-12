@@ -3,9 +3,9 @@
 // ============================================================================
 // Seam: same as schema.test.ts — migrations applied to empty node:sqlite
 // with foreign_keys = ON, matching D1's default. Locks the rotation
-// contract (insert-new-active + revoke-old, never overwrite), the
-// single-default rule, and rejection of bad shapes. Asserts only
-// D1-enforced behavior (UNIQUE / CHECK / partial-unique / FK).
+// contract (never overwrite: revoke the old version, insert the new one,
+// in that order), the single-default rule, and rejection of bad shapes.
+// Asserts only D1-enforced behavior (UNIQUE / CHECK / partial-unique / FK).
 
 import { describe, expect, test } from "vitest";
 import { freshDb } from "../test-utils/migration-fixtures.js";
@@ -39,11 +39,14 @@ function newKey(db: Db, label = "k1"): number {
 }
 
 describe("credential rotation ledger (R1a)", () => {
-  test("rotation is insert-new-active plus revoke-old (single-active)", () => {
+  test("a second active version is refused; revoke-then-insert rotates", () => {
     const db = freshDb();
     const kid = newKey(db);
     insertVersion(db, kid, 1, "env-v1");
-    // A second active version is rejected while v1 is un-revoked.
+    // A second active version is rejected while v1 is un-revoked. This is
+    // what forces the rotation order: inserting the new active row before
+    // revoking the old one fails even inside a transaction, so the revoke
+    // must come first (R1b writes both statements in one transaction).
     expect(() => insertVersion(db, kid, 2, "env-v2")).toThrow();
     // Revoke v1, then v2 inserts cleanly; exactly one active remains.
     db.exec(

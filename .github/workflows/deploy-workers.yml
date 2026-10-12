@@ -64,6 +64,11 @@ jobs:
         run: npm run check
 
       - name: Verify secrets are configured
+        env:
+          # Env indirection, not inline interpolation: a secret is never
+          # substituted into the shell script text, so metacharacters in a
+          # value cannot alter execution.
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
         run: |
           if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
             echo "❌ ERROR: CLOUDFLARE_API_TOKEN secret is not set"
@@ -73,7 +78,7 @@ jobs:
             echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
             exit 1
           fi
-          if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then
+          if [ -z "$D1_DATABASE_ID" ]; then
             echo "❌ ERROR: D1_DATABASE_ID secret is not set (one per GitHub environment; see docs/DEPLOY.md)"
             exit 1
           fi
@@ -130,6 +135,10 @@ jobs:
 
       - name: Generate wrangler.toml
         working-directory: workers
+        env:
+          # Env indirection: the id reaches the heredoc as a shell variable,
+          # never as text substituted into the script body.
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
         run: |
           # Generate wrangler.toml dynamically from GitHub secrets
           # This ensures single source of truth (GitHub Secrets/Terraform)
@@ -150,7 +159,7 @@ jobs:
           [[d1_databases]]
           binding = "PROVIDER_DB"
           database_name = "$D1_DATABASE_NAME"
-          database_id = "${{ secrets.D1_DATABASE_ID }}"
+          database_id = "$D1_DATABASE_ID"
 
           # Environment variables
           [vars]

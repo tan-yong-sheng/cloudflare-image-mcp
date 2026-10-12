@@ -47,8 +47,11 @@ CREATE TABLE credential_versions (
   CHECK (revoked_at IS NULL OR revoked_at >= created_at),
   UNIQUE (provider_key_id, version)
 );
--- Rotation means insert-new-active plus revoke-old, never overwrite: at
--- most one un-revoked version exists per key.
+-- Rotation never overwrites: the old version is revoked and a new one
+-- inserted, inside one transaction. Order is forced by the partial-unique
+-- index below, which admits only one un-revoked version per key — inserting
+-- the new active row first fails even within a transaction, so the revoke
+-- must precede the insert.
 CREATE UNIQUE INDEX uq_credential_single_active
   ON credential_versions (provider_key_id) WHERE revoked_at IS NULL;
 CREATE INDEX idx_credential_versions_key ON credential_versions (provider_key_id);
