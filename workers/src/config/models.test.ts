@@ -49,6 +49,26 @@ describe("model registry validity", () => {
     }
   });
 
+  test("fixed-output models declare observed sizes (live probes)", () => {
+    // Probes 2026-10-12/13: schnell/flux-2/SDXL/lightning/phoenix always
+    // 1024; dreamshaper always 512; lucid always 1120 (its default).
+    // Lightning is single-point evidence (512 req -> 1024 out).
+    const fixed: Record<string, string[]> = {
+      "@cf/black-forest-labs/flux-1-schnell": ["1024x1024"],
+      "@cf/black-forest-labs/flux-2-klein-4b": ["1024x1024"],
+      "@cf/black-forest-labs/flux-2-dev": ["1024x1024"],
+      "@cf/black-forest-labs/flux-2-klein-9b": ["1024x1024"],
+      "@cf/stabilityai/stable-diffusion-xl-base-1.0": ["1024x1024"],
+      "@cf/bytedance/stable-diffusion-xl-lightning": ["1024x1024"],
+      "@cf/lykon/dreamshaper-8-lcm": ["512x512"],
+      "@cf/leonardo/lucid-origin": ["1120x1120"],
+      "@cf/leonardo/phoenix-1.0": ["1024x1024"],
+    };
+    for (const [id, sizes] of Object.entries(fixed)) {
+      expect(MODEL_CONFIGS[id].limits.supportedSizes).toEqual(sizes);
+    }
+  });
+
   test("flux-2 models declare fixed 1024 output (live probe)", () => {
     // Live probe 2026-10-12 (klein-4b, 512/768/1024 requests): provider
     // always returns 1024x1024 JPEG — size params accepted, ignored.
