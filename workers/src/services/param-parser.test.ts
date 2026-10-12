@@ -167,6 +167,34 @@ describe("ParamParser.toCFPayload", () => {
   });
 });
 
+describe("ParamParser.buildPayload (C1)", () => {
+  // Single seam: payload byte-identical to toCFPayload, dropped list
+  // reported for UI/logs instead of vanishing (Q8 preserve+report).
+  test("returns payload plus dropped keys", () => {
+    const params = ParamParser.parse("cat --steps=6 --seed=7", {}, fluxConfig);
+    const { payload, dropped } = ParamParser.buildPayload(params, fluxConfig);
+    expect(payload).toEqual({ prompt: "cat", steps: 6, seed: 7 });
+    expect(dropped).toEqual([]);
+  });
+
+  test("reports silently-dropped keys without changing payload", () => {
+    const params = {
+      prompt: "cat",
+      rawPrompt: "cat",
+      guidance: 9,
+      negative_prompt: "blur",
+      bogus: 1,
+    };
+    const { payload, dropped } = ParamParser.buildPayload(params, fluxConfig);
+    expect(payload).toEqual({ prompt: "cat" });
+    expect([...dropped].sort()).toEqual([
+      "bogus",
+      "guidance",
+      "negative_prompt",
+    ]);
+  });
+});
+
 describe("ParamParser.formatHelp", () => {
   test("help lists model name and parameter flags", () => {
     const help = ParamParser.formatHelp(fluxConfig);
