@@ -54,7 +54,9 @@ CREATE TABLE credential_versions (
 -- must precede the insert.
 CREATE UNIQUE INDEX uq_credential_single_active
   ON credential_versions (provider_key_id) WHERE revoked_at IS NULL;
-CREATE INDEX idx_credential_versions_key ON credential_versions (provider_key_id);
+-- No separate index on provider_key_id: the UNIQUE (provider_key_id,
+-- version) constraint already indexes that column first, and the query
+-- planner uses it (verified by EXPLAIN QUERY PLAN).
 
 CREATE TABLE exposure_overrides (
   model_id TEXT PRIMARY KEY,

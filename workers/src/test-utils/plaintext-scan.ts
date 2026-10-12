@@ -23,11 +23,13 @@ const CF_TOKEN = /v1\.0-[A-Za-z0-9_-]{20,}/g;
 const BEARER = /bearer\s+[A-Za-z0-9._~-]{20,}/gi;
 
 /**
- * Long opaque string literals (base64/hex-shaped). The floor is 24 chars:
- * short enough to catch a truncated or padded credential blob, long enough
- * to stay clear of ordinary enum values ('cloudflare', 'cloudflare-rest').
+ * Long opaque string literals (base64/hex/JWT-shaped). The floor is 24
+ * chars: short enough to catch a truncated or padded credential blob, long
+ * enough to stay clear of ordinary enum values ('cloudflare',
+ * 'cloudflare-rest'). Dots are in the charset so JWT-style
+ * `header.payload.signature` values are caught too.
  */
-const LONG_LITERAL = /(['"])[A-Za-z0-9+/=_-]{24,}\1/g;
+const LONG_LITERAL = /(['"])[A-Za-z0-9+/=_\-.]{24,}\1/g;
 
 function lineAt(text: string, index: number): number {
   let line = 1;
@@ -49,14 +51,23 @@ export function scanForSecrets(text: string): SecretFinding[] {
   ];
 
   const findings: SecretFinding[] = [];
+  const seen = new Set<string>();
   for (const [pattern, regex] of patterns) {
     regex.lastIndex = 0;
     for (const match of text.matchAll(regex)) {
-      const value = match[0];
+      const line = lineAt(text, match.index ?? 0);
+      // One literal can trip more than one pattern (a Cloudflare token is
+      // also a long quoted literal). Compare without the surrounding quotes,
+      // which is the only difference between those two matches, so a secret
+      // is reported once.
+      const bare = match[0].replace(/^['"]|['"]$/g, "");
+      const key = `${line}:${bare}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       findings.push({
         pattern,
-        line: lineAt(text, match.index ?? 0),
-        masked: `${value.slice(0, 3)}…(${value.length})`,
+        line,
+        masked: `${bare.slice(0, 3)}…(${bare.length})`,
       });
     }
   }

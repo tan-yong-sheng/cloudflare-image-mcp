@@ -51,6 +51,14 @@ describe("secret scanner (plaintext tripwire)", () => {
     expect(findings.map((f) => f.line)).toEqual([3]);
   });
 
+  test("flags a JWT-shaped literal (dotted, not base64)", () => {
+    const jwt =
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    expect(
+      scanForSecrets(`Authorization: '${jwt}'`).map((f) => f.pattern)
+    ).toContain("long-string-literal");
+  });
+
   test("ordinary SQL produces no findings", () => {
     const sql = "INSERT INTO providers (id) VALUES ('cloudflare');";
     expect(scanForSecrets(sql)).toEqual([]);
