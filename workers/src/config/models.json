@@ -564,7 +564,7 @@
           "cfParam": "width",
           "type": "integer",
           "default": 1120,
-          "min": 256,
+          "min": 0,
           "max": 2500,
           "step": 64,
           "description": "Image width in pixels"
@@ -573,7 +573,7 @@
           "cfParam": "height",
           "type": "integer",
           "default": 1120,
-          "min": 256,
+          "min": 0,
           "max": 2500,
           "step": 64,
           "description": "Image height in pixels"
@@ -591,9 +591,9 @@
         "maxPromptLength": 2048,
         "defaultSteps": 4,
         "maxSteps": 40,
-        "minWidth": 256,
+        "minWidth": 0,
         "maxWidth": 2500,
-        "minHeight": 256,
+        "minHeight": 0,
         "maxHeight": 2500,
         "supportedSizes": [
           "512x512",
@@ -638,7 +638,7 @@
           "cfParam": "width",
           "type": "integer",
           "default": 1024,
-          "min": 256,
+          "min": 0,
           "max": 2048,
           "step": 64,
           "description": "Image width in pixels"
@@ -647,7 +647,7 @@
           "cfParam": "height",
           "type": "integer",
           "default": 1024,
-          "min": 256,
+          "min": 0,
           "max": 2048,
           "step": 64,
           "description": "Image height in pixels"
@@ -671,9 +671,9 @@
         "maxPromptLength": 2048,
         "defaultSteps": 25,
         "maxSteps": 50,
-        "minWidth": 256,
+        "minWidth": 0,
         "maxWidth": 2048,
-        "minHeight": 256,
+        "minHeight": 0,
         "maxHeight": 2048,
         "supportedSizes": ["512x512", "768x768", "1024x1024", "1280x1280"]
       }
