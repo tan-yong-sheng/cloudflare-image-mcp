@@ -689,7 +689,10 @@ export function getFrontendHTML(): string {
                     aiImage.src = priorSrc;
                     document.getElementById('usedModel').textContent = priorModel;
                     document.getElementById('generationTime').textContent = priorTime;
-                } else {
+                } else if (!hadResult) {
+                    // No prior result: nothing to preserve. When hadResult
+                    // is true but src never changed (timeout before URL
+                    // assignment), the showing image stays untouched.
                     initialPrompt.classList.remove('hidden');
                     aiImage.classList.add('hidden');
                     downloadButton.classList.add('hidden');
@@ -771,7 +774,12 @@ export function getFrontendHTML(): string {
 
             } catch (error) {
                 finish();
-                if (!hadResult) {
+                if (hadResult) {
+                    // Prior result still showing: restore its meta instead
+                    // of leaving the loading placeholders (review).
+                    document.getElementById('usedModel').textContent = priorModel;
+                    document.getElementById('generationTime').textContent = priorTime;
+                } else {
                     initialPrompt.classList.remove('hidden');
                 }
                 if (error instanceof DOMException && error.name === 'AbortError') {
