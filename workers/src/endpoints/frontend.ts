@@ -214,7 +214,7 @@ export function getFrontendHTML(): string {
                     <label for="password" class="block text-sm font-medium mb-1">Password / API Key</label>
                     <input type="password" id="password" class="w-full" placeholder="Enter your API key">
                 </div>
-                <div id="loginError" class="text-sm text-red-500 hidden"></div>
+                <div id="loginError" class="text-sm text-red-500 hidden" role="alert"></div>
                 <button id="loginButton" class="btn btn-primary w-full py-3">
                     <i class="fa-solid fa-sign-in-alt mr-2"></i>Login
                 </button>
@@ -253,7 +253,7 @@ export function getFrontendHTML(): string {
                         <select id="model" class="w-full">
                             <option value="">Loading models…</option>
                         </select>
-                        <p id="modelError" class="text-sm text-red-500 hidden"></p>
+                        <p id="modelError" class="text-sm text-red-500 hidden" role="alert"></p>
                     </div>
 
                     <div>
@@ -277,7 +277,7 @@ export function getFrontendHTML(): string {
                         <h2 class="text-lg font-semibold flex items-center">
                             <i class="fa-solid fa-gear mr-2 text-primary"></i>Advanced Options
                         </h2>
-                        <button id="toggleAdvanced" class="text-xs btn btn-secondary py-1 px-3">
+                        <button id="toggleAdvanced" class="text-xs btn btn-secondary py-1 px-3" aria-expanded="false" aria-controls="advancedOptions">
                             <i class="fa-solid fa-chevron-down mr-1" id="advancedIcon"></i>Show/Hide
                         </button>
                     </div>
@@ -285,7 +285,7 @@ export function getFrontendHTML(): string {
                     <div id="advancedOptions" class="space-y-3 hidden">
                         <div id="sizeWrap">
                             <div class="flex justify-between items-center">
-                                <label class="block text-sm font-medium">Width</label>
+                                <label for="width" class="block text-sm font-medium">Width</label>
                                 <span id="widthValue" class="text-sm font-mono">1024px</span>
                             </div>
                             <input type="range" id="width" min="256" max="2048" step="64" value="1024" class="slider w-full">
@@ -293,7 +293,7 @@ export function getFrontendHTML(): string {
 
                         <div id="sizeWrapHeight">
                             <div class="flex justify-between items-center">
-                                <label class="block text-sm font-medium">Height</label>
+                                <label for="height" class="block text-sm font-medium">Height</label>
                                 <span id="heightValue" class="text-sm font-mono">1024px</span>
                             </div>
                             <input type="range" id="height" min="256" max="2048" step="64" value="1024" class="slider w-full">
@@ -301,7 +301,7 @@ export function getFrontendHTML(): string {
 
                         <div id="stepsWrap">
                             <div class="flex justify-between items-center">
-                                <label class="block text-sm font-medium">Steps</label>
+                                <label for="steps" class="block text-sm font-medium">Steps</label>
                                 <span id="stepsValue" class="text-sm font-mono">4</span>
                             </div>
                             <input type="range" id="steps" min="1" max="20" step="1" value="4" class="slider w-full">
@@ -309,24 +309,24 @@ export function getFrontendHTML(): string {
 
                         <div id="guidanceWrap">
                             <div class="flex justify-between items-center">
-                                <label class="block text-sm font-medium">Guidance</label>
+                                <label for="guidance" class="block text-sm font-medium">Guidance</label>
                                 <span id="guidanceValue" class="text-sm font-mono">7.5</span>
                             </div>
                             <input type="range" id="guidance" min="1" max="30" step="0.5" value="7.5" class="slider w-full">
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium mb-1">Seed (leave empty for random)</label>
+                            <label for="seed" class="block text-sm font-medium mb-1">Seed (leave empty for random)</label>
                             <div class="flex gap-2">
                                 <input type="number" id="seed" placeholder="Random seed" class="w-full">
-                                <button id="randomSeed" class="btn btn-secondary text-sm py-1 px-3">
+                                <button id="randomSeed" class="btn btn-secondary text-sm py-1 px-3" aria-label="Randomize seed">
                                     <i class="fa-solid fa-random"></i>
                                 </button>
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium mb-1">Number of images (1-8)</label>
+                            <label for="n" class="block text-sm font-medium mb-1">Number of images (1-8)</label>
                             <input type="number" id="n" min="1" max="8" value="1" class="w-full">
                         </div>
                     </div>
@@ -352,7 +352,7 @@ export function getFrontendHTML(): string {
                     </div>
 
                     <div class="image-container card">
-                        <div id="loadingOverlay" class="loading-mask hidden">
+                        <div id="loadingOverlay" class="loading-mask hidden" role="status" aria-label="Generating image">
                             <div class="text-center">
                                 <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
                                 <p class="text-white mt-3 font-medium">Generating...</p>
@@ -365,7 +365,7 @@ export function getFrontendHTML(): string {
                         <img id="aiImage" class="max-h-full max-w-full rounded hidden" alt="Generated image">
                     </div>
 
-                    <div id="generateError" class="text-sm text-red-500 hidden"></div>
+                    <div id="generateError" class="text-sm text-red-500 hidden" role="alert"></div>
 
                     <div id="imageInfo" class="space-y-3 mt-2">
                         <div class="grid grid-cols-2 gap-3 text-sm">
@@ -491,7 +491,8 @@ export function getFrontendHTML(): string {
 
         // Advanced options toggle
         toggleAdvanced.addEventListener('click', () => {
-            advancedOptions.classList.toggle('hidden');
+            const hidden = advancedOptions.classList.toggle('hidden');
+            toggleAdvanced.setAttribute('aria-expanded', String(!hidden));
             advancedIcon.classList.toggle('fa-chevron-down');
             advancedIcon.classList.toggle('fa-chevron-up');
         });
@@ -641,11 +642,20 @@ export function getFrontendHTML(): string {
                 return;
             }
 
-            // Show loading
+            // Show loading. Keep the last good image visible under the
+            // overlay (Slice A): only hide it when nothing was generated
+            // yet. Stale model/time are cleared so they can't mislead.
+            // hadResult is read by the terminal paths below.
             clearGenerateError();
-            initialPrompt.classList.add('hidden');
-            aiImage.classList.add('hidden');
-            downloadButton.classList.add('hidden');
+            const hadResult = !!currentImageUrl && !aiImage.classList.contains('hidden');
+            if (!hadResult) {
+                initialPrompt.classList.add('hidden');
+                aiImage.classList.add('hidden');
+                downloadButton.classList.add('hidden');
+            }
+            document.getElementById('usedModel').textContent = '…';
+            document.getElementById('generationTime').textContent = '…';
+            submitButton.disabled = true;
             loadingOverlay.classList.remove('hidden');
 
             // Capture start time for duration calculation
@@ -693,8 +703,10 @@ export function getFrontendHTML(): string {
                 // Display image
                 aiImage.onload = () => {
                     loadingOverlay.classList.add('hidden');
+                    initialPrompt.classList.add('hidden');
                     aiImage.classList.remove('hidden');
                     downloadButton.classList.remove('hidden');
+                    submitButton.disabled = false;
 
                     // Update info
                     document.getElementById('usedModel').textContent = model;
@@ -702,16 +714,23 @@ export function getFrontendHTML(): string {
                 };
                 // Expired/blocked R2 URLs never fire onload: without
                 // onerror the spinner would run forever (#50 B4).
+                // Keep the last good image when one exists (Slice A).
                 aiImage.onerror = () => {
                     loadingOverlay.classList.add('hidden');
-                    initialPrompt.classList.remove('hidden');
+                    submitButton.disabled = false;
+                    if (!hadResult) {
+                        initialPrompt.classList.remove('hidden');
+                    }
                     showGenerateError('Could not load the generated image (expired or blocked URL)');
                 };
                 aiImage.src = imageUrl;
 
             } catch (error) {
                 loadingOverlay.classList.add('hidden');
-                initialPrompt.classList.remove('hidden');
+                submitButton.disabled = false;
+                if (!hadResult) {
+                    initialPrompt.classList.remove('hidden');
+                }
                 showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
             }
         });
