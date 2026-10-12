@@ -1,0 +1,11 @@
+{
+  "//": "Typecheck gate for test-only files. The D1 migration harness (src/test-utils/migration-fixtures.ts) reads migration SQL from disk and opens a SQLite database, which needs Node types the shipped-code gate deliberately withholds. Split rather than widened: src/ keeps WebWorker-only globals, so a Node API cannot slip into production code unnoticed.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "node"],
+    "declaration": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*.test.ts", "src/test-utils/**/*"],
+  "exclude": []
+}

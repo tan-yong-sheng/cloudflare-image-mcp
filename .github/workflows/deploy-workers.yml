@@ -73,6 +73,10 @@ jobs:
             echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
             exit 1
           fi
+          if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then
+            echo "❌ ERROR: D1_DATABASE_ID secret is not set (one per GitHub environment; see docs/DEPLOY.md)"
+            exit 1
+          fi
           echo "✅ Required secrets are configured"
 
       - name: Verify deploy token
@@ -116,6 +120,12 @@ jobs:
             echo "WORKERS_NAME=cloudflare-image-workers" >> $GITHUB_ENV
           fi
 
+          # Provider store (R1a). One name, used both as the wrangler
+          # binding target and as the migrate-apply target, so the two
+          # cannot drift apart. The database itself is per-environment;
+          # only its name is shared.
+          echo "D1_DATABASE_NAME=cloudflare-image-mcp-providers" >> $GITHUB_ENV
+
           echo "Deploying to $ENVIRONMENT as ${{ env.WORKERS_NAME }}"
 
       - name: Generate wrangler.toml
@@ -133,6 +143,14 @@ jobs:
           [[r2_buckets]]
           binding = "IMAGE_BUCKET"
           bucket_name = "cloudflare-image-mcp-images"
+
+          # D1 provider store binding (R1a, #71). No Worker request path
+          # reads it yet — application reads land in R1b (#72). The binding
+          # exists so the schema is applied and versioned ahead of that.
+          [[d1_databases]]
+          binding = "PROVIDER_DB"
+          database_name = "$D1_DATABASE_NAME"
+          database_id = "${{ secrets.D1_DATABASE_ID }}"
 
           # Environment variables
           [vars]
@@ -159,6 +177,16 @@ jobs:
             echo "ℹ️ API_KEYS not set (endpoints are public)"
           fi
           echo "✅ Secrets check completed"
+
+      - name: Apply D1 migrations
+        # Forward-only migrations: undo is D1 Time Travel, never a runner.
+        # Runs before deploy so the provider store exists and is versioned
+        # before the Worker boots against it.
+        working-directory: workers
+        run: npx wrangler d1 migrations apply "$D1_DATABASE_NAME" --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy to Cloudflare Workers
         # Direct wrangler invocation (no third-party action on the deploy
@@ -264,6 +292,7 @@ jobs:
           echo "- CLOUDFLARE_ACCOUNT_ID: ✅ Configured (role: Cloudflare account for deploy + fallback AI inference)" >> $GITHUB_STEP_SUMMARY
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured (role: endpoint auth — MCP + OpenAI + frontend)' || '❌ Missing (role: endpoint auth — endpoints are public)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (role: AI inference — multi-account)' || 'ℹ️ Not set (role: AI inference — falls back to deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- D1 provider store: ${{ env.D1_DATABASE_NAME }} (role: provider schema/migrations applied before deploy; no app reads yet — R1a)" >> $GITHUB_STEP_SUMMARY
           echo "- TZ: ${{ secrets.TZ != '' && '✅ Configured (role: runtime logging timezone)' || 'ℹ️ Not set (role: runtime logging timezone — defaults to UTC)' }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup sensitive files

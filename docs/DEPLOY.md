@@ -48,9 +48,38 @@ Click **New repository secret** and add `CLOUDFLARE_ACCOUNT_ID` (required) and
 `CLOUDFLARE_API_TOKEN` (required). Optional secrets (`API_KEYS`, `AI_ACCOUNTS`, `TZ`)
 — see [Credentials Setup](CREDENTIALS_SETUP.md#optional-secrets).
 
+`D1_DATABASE_ID` is also required for deploy, but it is **environment-scoped**, not
+repository-scoped — see Step 3b.
+
 **Note on `API_KEYS`**: if set, all OpenAI API endpoints, MCP endpoints, and the
 web frontend require `Authorization: Bearer <key>`. The frontend prompts for the
 key in a login modal and sends it as a Bearer header.
+
+---
+
+### Step 3b: Create the D1 provider database
+
+Deploy applies `workers/migrations/*.sql` to a D1 database **before** deploying
+the Worker, so that database must already exist. Create one per environment:
+
+```bash
+cd workers
+npx wrangler d1 create cloudflare-image-mcp-providers
+```
+
+The command prints a `database_id`. Add it as `D1_DATABASE_ID` to **both** GitHub
+environments (`staging` and `production`):
+
+```
+Settings → Environments → <staging|production> → Environment secrets → New secret
+```
+
+> ⚠️ **Set it per environment, not at repository level.** One repository secret
+> would point staging and production at the same database, so staging deploys
+> would migrate the production provider store.
+
+Deploy fails fast with a clear error when `D1_DATABASE_ID` is missing, rather than
+shipping a Worker bound to a database that does not exist.
 
 ---
 
@@ -92,8 +121,10 @@ The file `.github/workflows/deploy-workers.yml` handles everything:
 
 1. **Generates** `wrangler.toml` dynamically from your GitHub secrets
 2. **Installs** dependencies
-3. **Deploys** to Cloudflare Workers
-4. **Cleans up** the generated `wrangler.toml`
+3. **Applies D1 migrations** — `wrangler d1 migrations apply` against the database
+   named by `D1_DATABASE_NAME`, using the `database_id` from `D1_DATABASE_ID`
+4. **Deploys** to Cloudflare Workers
+5. **Cleans up** the generated `wrangler.toml`
 
 > ⚠️ **Important**: The `wrangler.toml` in the repo is only for local development. CI/CD generates its own.
 
@@ -109,6 +140,7 @@ To cut a versioned release (bump `workers/package.json`, auto-tag + Release note
 | `R2 bucket not found`    | Create an R2 bucket named `image-generation` in your Cloudflare dashboard, or update `bucket_name` in the workflow |
 | `Workers AI not enabled` | Go to Cloudflare Dashboard → AI → Workers AI and accept the terms                                                  |
 | `Deployment failed`      | Check the Actions logs for specific error messages                                                                 |
+| `D1_DATABASE_ID not set` | Create the database and add the secret per environment (Step 3b)                                                   |
 
 ---
 

@@ -16,5 +16,6 @@
     "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "//": "Test-only files (tests + test-utils) are typechecked separately by tsconfig.test.json, which adds Node types for the D1 migration harness. Excluding them here keeps the shipped-code gate on WebWorker globals only.",
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/test-utils/**"]
 }
