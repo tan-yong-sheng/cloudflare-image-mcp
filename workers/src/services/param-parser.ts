@@ -3,7 +3,7 @@
 // Supports both prompt-embedded parameters and standard JSON fields
 // ============================================================================
 
-import type { ParsedParams, ModelConfig } from '../types.js';
+import type { ParsedParams, ModelConfig } from "../types.js";
 
 export class ParamParser {
   /**
@@ -21,12 +21,12 @@ export class ParamParser {
     modelConfig?: ModelConfig
   ): ParsedParams {
     // Handle object input (OpenAI JSON format)
-    if (typeof input === 'object' && input !== null) {
+    if (typeof input === "object" && input !== null) {
       return this.parseObject(input, modelConfig);
     }
 
     // Handle string input with --key=value syntax
-    if (typeof input === 'string') {
+    if (typeof input === "string") {
       return this.parseString(input, explicitParams, modelConfig);
     }
 
@@ -53,7 +53,7 @@ export class ParamParser {
     // Parse embedded parameters
     while ((match = paramRegex.exec(raw)) !== null) {
       const key = match[1];
-      const value = match[2]?.trim() || 'true';
+      const value = match[2]?.trim() || "true";
       params[key.toLowerCase()] = value;
     }
 
@@ -68,36 +68,66 @@ export class ParamParser {
 
     // Standard parameters
     if (mergedParams.n !== undefined) {
-      result.n = this.parseInteger(mergedParams.n, 1, 10, 'n');
+      result.n = this.parseInteger(mergedParams.n, 1, 10, "n");
     }
     if (mergedParams.size !== undefined) {
       result.size = this.parseSize(mergedParams.size);
     }
     if (mergedParams.width !== undefined) {
-      result.width = this.parseInteger(mergedParams.width, 256, 2048, 'width');
+      result.width = this.parseInteger(mergedParams.width, 256, 2048, "width");
     }
     if (mergedParams.height !== undefined) {
-      result.height = this.parseInteger(mergedParams.height, 256, 2048, 'height');
+      result.height = this.parseInteger(
+        mergedParams.height,
+        256,
+        2048,
+        "height"
+      );
     }
 
     // Cloudflare-specific parameters
     if (mergedParams.steps !== undefined) {
-      result.steps = this.parseInteger(mergedParams.steps, 1, modelConfig?.limits?.maxSteps || 50, 'steps');
+      result.steps = this.parseInteger(
+        mergedParams.steps,
+        1,
+        modelConfig?.limits?.maxSteps || 50,
+        "steps"
+      );
     }
     if (mergedParams.num_steps !== undefined) {
-      result.steps = this.parseInteger(mergedParams.num_steps, 1, modelConfig?.limits?.maxSteps || 20, 'num_steps');
+      result.steps = this.parseInteger(
+        mergedParams.num_steps,
+        1,
+        modelConfig?.limits?.maxSteps || 20,
+        "num_steps"
+      );
     }
     if (mergedParams.seed !== undefined) {
-      result.seed = this.parseInteger(mergedParams.seed, 0, Number.MAX_SAFE_INTEGER, 'seed');
+      result.seed = this.parseInteger(
+        mergedParams.seed,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        "seed"
+      );
     }
     if (mergedParams.guidance !== undefined) {
-      result.guidance = this.parseNumber(mergedParams.guidance, 1, 30, 'guidance');
+      result.guidance = this.parseNumber(
+        mergedParams.guidance,
+        1,
+        30,
+        "guidance"
+      );
     }
     if (mergedParams.negative_prompt !== undefined) {
       result.negative_prompt = String(mergedParams.negative_prompt);
     }
     if (mergedParams.strength !== undefined) {
-      result.strength = this.parseNumber(mergedParams.strength, 0, 1, 'strength');
+      result.strength = this.parseNumber(
+        mergedParams.strength,
+        0,
+        1,
+        "strength"
+      );
     }
 
     // Image inputs
@@ -135,39 +165,54 @@ export class ParamParser {
     modelConfig?: ModelConfig
   ): ParsedParams {
     const result: ParsedParams = {
-      prompt: obj.prompt || '',
-      rawPrompt: obj.prompt || '',
+      prompt: obj.prompt || "",
+      rawPrompt: obj.prompt || "",
     };
 
     // Standard OpenAI parameters
     if (obj.n !== undefined) {
-      result.n = this.parseInteger(obj.n, 1, 10, 'n');
+      result.n = this.parseInteger(obj.n, 1, 10, "n");
     }
     if (obj.size !== undefined) {
       result.size = this.parseSize(obj.size);
-      const [width, height] = result.size.split('x').map(Number);
+      const [width, height] = result.size.split("x").map(Number);
       result.width = width;
       result.height = height;
     }
 
     // Cloudflare-specific parameters
     if (obj.steps !== undefined) {
-      result.steps = this.parseInteger(obj.steps, 1, modelConfig?.limits?.maxSteps || 50, 'steps');
+      result.steps = this.parseInteger(
+        obj.steps,
+        1,
+        modelConfig?.limits?.maxSteps || 50,
+        "steps"
+      );
     }
     if (obj.num_steps !== undefined) {
-      result.steps = this.parseInteger(obj.num_steps, 1, modelConfig?.limits?.maxSteps || 20, 'num_steps');
+      result.steps = this.parseInteger(
+        obj.num_steps,
+        1,
+        modelConfig?.limits?.maxSteps || 20,
+        "num_steps"
+      );
     }
     if (obj.seed !== undefined) {
-      result.seed = this.parseInteger(obj.seed, 0, Number.MAX_SAFE_INTEGER, 'seed');
+      result.seed = this.parseInteger(
+        obj.seed,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        "seed"
+      );
     }
     if (obj.guidance !== undefined) {
-      result.guidance = this.parseNumber(obj.guidance, 1, 30, 'guidance');
+      result.guidance = this.parseNumber(obj.guidance, 1, 30, "guidance");
     }
     if (obj.negative_prompt !== undefined) {
       result.negative_prompt = String(obj.negative_prompt);
     }
     if (obj.strength !== undefined) {
-      result.strength = this.parseNumber(obj.strength, 0, 1, 'strength');
+      result.strength = this.parseNumber(obj.strength, 0, 1, "strength");
     }
 
     // Image inputs
@@ -198,14 +243,23 @@ export class ParamParser {
   /**
    * Apply model-specific limits in place
    */
-  private static applyModelLimitsInPlace(params: ParsedParams, model: ModelConfig): void {
+  private static applyModelLimitsInPlace(
+    params: ParsedParams,
+    model: ModelConfig
+  ): void {
     const limits = model.limits;
 
     if (params.width !== undefined) {
-      params.width = Math.max(limits.minWidth, Math.min(limits.maxWidth, params.width));
+      params.width = Math.max(
+        limits.minWidth,
+        Math.min(limits.maxWidth, params.width)
+      );
     }
     if (params.height !== undefined) {
-      params.height = Math.max(limits.minHeight, Math.min(limits.maxHeight, params.height));
+      params.height = Math.max(
+        limits.minHeight,
+        Math.min(limits.maxHeight, params.height)
+      );
     }
     if (params.steps !== undefined) {
       params.steps = Math.max(1, Math.min(limits.maxSteps, params.steps));
@@ -218,7 +272,9 @@ export class ParamParser {
   private static parseSize(size: string): string {
     const match = size.match(/^(\d+)x(\d+)$/);
     if (!match) {
-      throw new Error(`Invalid size format: ${size}. Use WxH format (e.g., 1024x1024)`);
+      throw new Error(
+        `Invalid size format: ${size}. Use WxH format (e.g., 1024x1024)`
+      );
     }
     const width = parseInt(match[1], 10);
     const height = parseInt(match[2], 10);
@@ -228,7 +284,12 @@ export class ParamParser {
   /**
    * Parse integer with validation
    */
-  private static parseInteger(value: any, min: number, max: number, name: string): number {
+  private static parseInteger(
+    value: any,
+    min: number,
+    max: number,
+    name: string
+  ): number {
     const parsed = parseInt(value, 10);
     if (isNaN(parsed)) {
       throw new Error(`Invalid ${name}: must be an integer`);
@@ -242,7 +303,12 @@ export class ParamParser {
   /**
    * Parse number with validation
    */
-  private static parseNumber(value: any, min: number, max: number, name: string): number {
+  private static parseNumber(
+    value: any,
+    min: number,
+    max: number,
+    name: string
+  ): number {
     const parsed = parseFloat(value);
     if (isNaN(parsed)) {
       throw new Error(`Invalid ${name}: must be a number`);
@@ -257,11 +323,11 @@ export class ParamParser {
    * Extract base64 from data URI or raw base64 string
    */
   private static extractBase64(input: string): string {
-    if (input.startsWith('data:')) {
+    if (input.startsWith("data:")) {
       // Extract from data:image/png;base64,XXXXX
       const match = input.match(/base64,(.+)$/);
       if (!match) {
-        throw new Error('Invalid data URI format');
+        throw new Error("Invalid data URI format");
       }
       return match[1];
     }
@@ -271,10 +337,27 @@ export class ParamParser {
   /**
    * Convert parsed params to Cloudflare AI payload
    */
-  static toCFPayload(params: ParsedParams, model: ModelConfig): Record<string, any> {
+  static toCFPayload(
+    params: ParsedParams,
+    model: ModelConfig
+  ): Record<string, any> {
+    return ParamParser.buildPayload(params, model).payload;
+  }
+
+  /**
+   * Single payload seam (C1): payload byte-identical to the legacy
+   * mapping, plus the list of caller-supplied keys the model drops.
+   * `prompt`/`rawPrompt` are plumbing, never reported as dropped.
+   */
+  static buildPayload(
+    params: ParsedParams,
+    model: ModelConfig
+  ): { payload: Record<string, any>; dropped: string[] } {
     const payload: Record<string, any> = {
       prompt: params.prompt,
     };
+    const dropped: string[] = [];
+    const declared = new Set(Object.keys(model.parameters));
 
     // Map each supported parameter to its Cloudflare equivalent
     for (const [key, config] of Object.entries(model.parameters)) {
@@ -284,22 +367,60 @@ export class ParamParser {
       }
     }
 
-    return payload;
+    // Report caller-supplied keys no model parameter consumes. The
+    // parser derives aliases callers never sent (size -> width+height,
+    // image<->image_b64, mask<->mask_b64): attribute those to the
+    // supplied key instead of reporting the derived ones.
+    const supplied = new Set(Object.keys(params));
+    const derivedPairs: Array<[string, string[]]> = [
+      ["size", ["width", "height"]],
+      ["image", ["image_b64"]],
+      ["image_b64", ["image"]],
+      ["mask", ["mask_b64"]],
+      ["mask_b64", ["mask"]],
+    ];
+    const aliasOf = new Map<string, string>();
+    for (const [from, tos] of derivedPairs) {
+      if (supplied.has(from)) {
+        for (const to of tos) aliasOf.set(to, from);
+      }
+    }
+    for (const key of Object.keys(params)) {
+      if (key === "prompt" || key === "rawPrompt") continue;
+      if (key === "size") continue; // handled below (derived dims)
+      if (aliasOf.has(key)) continue;
+      if (!declared.has(key)) {
+        const value = (params as any)[key];
+        if (value !== undefined && value !== null) dropped.push(key);
+      }
+    }
+    // `size` counts as consumed when both derived dims were consumed.
+    if (supplied.has("size") && !declared.has("size")) {
+      const widthConsumed = declared.has("width");
+      const heightConsumed = declared.has("height");
+      if (!(widthConsumed && heightConsumed)) {
+        const value = (params as any)["size"];
+        if (value !== undefined && value !== null) dropped.push("size");
+      }
+    }
+
+    return { payload, dropped };
   }
 
   /**
    * Format help text for a model
    */
   static formatHelp(model: ModelConfig): string {
-    const lines = [`## ${model.name} Parameters`, ''];
+    const lines = [`## ${model.name} Parameters`, ""];
 
     for (const [key, config] of Object.entries(model.parameters)) {
-      const required = config.required ? ' (required)' : '';
-      const defaultStr = config.default !== undefined ? ` [default: ${config.default}]` : '';
+      const required = config.required ? " (required)" : "";
+      const defaultStr =
+        config.default !== undefined ? ` [default: ${config.default}]` : "";
       const rangeStr =
         config.min !== undefined && config.max !== undefined
           ? ` [${config.min}-${config.max}]`
-          : '';
+          : "";
 
       lines.push(`--${key}${required}${defaultStr}${rangeStr}`);
       if (config.description) {
@@ -307,6 +428,6 @@ export class ParamParser {
       }
     }
 
-    return lines.join('\n');
+    return lines.join("\n");
   }
 }
