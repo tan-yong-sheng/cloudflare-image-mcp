@@ -677,7 +677,11 @@ export function getFrontendHTML(): string {
             // onerror fires, so detach both and fail explicitly (review).
             const controller = new AbortController();
             let restoring = false;
+            // Terminal state (OCR final): once set by timeout, late
+            // continuations must not mutate the UI.
+            let settled = false;
             const finish = () => {
+                settled = true;
                 clearTimeout(abortTimer);
                 loadingOverlay.classList.add('hidden');
                 submitButton.disabled = false;
@@ -718,6 +722,7 @@ export function getFrontendHTML(): string {
                     signal: controller.signal,
                 });
 
+                if (settled) return;
                 if (!response.ok) {
                     if (response.status === 401) {
                         authToken = '';
@@ -730,6 +735,7 @@ export function getFrontendHTML(): string {
                 }
 
                 const data = await response.json();
+                if (settled) return;
                 const imageData = data.data[0];
 
                 // Handle b64_json or url
@@ -770,6 +776,7 @@ export function getFrontendHTML(): string {
                     restoring = false;
                     imageFailed();
                 };
+                if (settled) return;
                 aiImage.src = imageUrl;
 
             } catch (error) {
