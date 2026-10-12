@@ -60,6 +60,20 @@ export function getFrontendHTML(): string {
 
         .btn:focus { outline: none; }
 
+        .btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        .text-primary { color: var(--primary); }
+
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fade-in { animation: fade-in 0.3s ease; }
+
         .btn-primary {
             background-color: var(--primary);
             color: white;
