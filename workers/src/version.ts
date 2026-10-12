@@ -6,4 +6,4 @@
 // the wrangler bundle. Bump procedure: update this file in the same PR as
 // workers/package.json; the version-consistency CI job fails the PR if
 // they disagree. Root/e2e manifest versions are intentionally independent.
-export const WORKER_VERSION = "0.1.0";
+export const WORKER_VERSION = "0.2.0-rc.1";
