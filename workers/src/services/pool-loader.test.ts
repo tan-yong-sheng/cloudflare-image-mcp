@@ -79,3 +79,82 @@ describe("pool loader (F1)", () => {
     }
   });
 });
+
+// Spec-review fixes (#72): the pool must report which source ACTUALLY
+// serves it — index.ts always passes a pool, so a hardcoded "d1" tag would
+// make the runbook's verification log positive even when the loader fell
+// back to env credentials (false staging evidence).
+describe("loader source truth", () => {
+  const row = (label: string, over: Partial<PoolRow> = {}): PoolRow => ({
+    label,
+    accountId: `a-${label}`,
+    envelope: `env-${label}`,
+    weight: 1,
+    enabled: true,
+    ...over,
+  });
+  const envWithBlob = {
+    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
+    CLOUDFLARE_API_TOKEN: "deploy-token",
+    PROVIDER_DATA_KEY: "data-key",
+    AI_ACCOUNTS: JSON.stringify([
+      { account_id: "blob-account", api_token: "blob-token" },
+    ]),
+  } as any;
+  const bareEnv = {
+    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
+    CLOUDFLARE_API_TOKEN: "deploy-token",
+  } as any;
+  const deps = {
+    openEnvelope: async (e: string) => `open(${e})`,
+  };
+
+  test("the pool records which source actually serves it", async () => {
+    const fromD1 = await loadProviderPool(ENV, {
+      ...deps,
+      readRows: async () => [row("k1")],
+    });
+    expect(fromD1.source).toBe("d1");
+
+    const fromBlob = await loadProviderPool(envWithBlob, {
+      ...deps,
+      readRows: async () => [],
+    });
+    expect(fromBlob.source).toBe("AI_ACCOUNTS");
+
+    const fromBare = await loadProviderPool(bareEnv, {
+      ...deps,
+      readRows: async () => [],
+    });
+    expect(fromBare.source).toBe("fallback");
+  });
+
+  test("a missing data key keeps the working AI_ACCOUNTS blob", async () => {
+    const noKey = { ...envWithBlob, PROVIDER_DATA_KEY: undefined };
+    const pool = await loadProviderPool(noKey, {
+      ...deps,
+      readRows: async () => [row("k1")],
+    });
+    expect(pool.source).toBe("AI_ACCOUNTS");
+    expect(pool.pick()?.accountId).toBe("blob-account");
+  });
+
+  test("all D1 rows unservable falls back to env loudly, labels only", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const pool = await loadProviderPool(envWithBlob, {
+        ...deps,
+        readRows: async () => [
+          row("k1", { enabled: false }),
+          row("k2", { weight: 0 }),
+        ],
+      });
+      expect(pool.source).toBe("AI_ACCOUNTS");
+      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toMatch(/none servable/i);
+      expect(said).not.toContain("blob-token");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

@@ -59,9 +59,10 @@ export function rotateKey(db: LedgerDb, rotation: Rotation): number {
   db.exec("BEGIN");
   try {
     if (current.v !== null) {
-      db.exec(
-        `UPDATE credential_versions SET revoked_at = unixepoch() WHERE provider_key_id = ${keyId} AND revoked_at IS NULL`
-      );
+      db.prepare(
+        "UPDATE credential_versions SET revoked_at = unixepoch() " +
+          "WHERE provider_key_id = ? AND revoked_at IS NULL"
+      ).run(keyId);
     }
     db.prepare(
       "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES (?, ?, ?, ?)"

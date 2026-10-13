@@ -601,6 +601,40 @@ describe("dual-read credential wiring (S4)", () => {
     const said = constructWith(undefined);
     expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
   });
+
+  // Spec-review fix (#72): index.ts always passes a pool, and the loader
+  // falls back to env credentials when D1 is empty — so the log must carry
+  // the pool's REAL source, or the runbook's verification signal would say
+  // "d1" even while serving AI_ACCOUNTS (false staging evidence).
+  test("a pool whose source is AI_ACCOUNTS logs AI_ACCOUNTS, not d1", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      new ImageGeneratorService(envWithAIAccounts, {
+        transport: new MemoryTransport(),
+        store: new MemoryStore(),
+        pool: new ProviderPool(
+          [
+            {
+              label: "AI_ACCOUNTS[0]",
+              accountId: "env-account",
+              apiToken: "env-token",
+              weight: 1,
+              enabled: true,
+            },
+          ],
+          { source: "AI_ACCOUNTS" }
+        ),
+      });
+      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toContain(
+        "AI inference path: AI_ACCOUNTS with 1 account(s)"
+      );
+      expect(said).not.toContain("d1");
+      expect(said).not.toContain("env-token");
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("exposure overlay wiring (S6)", () => {

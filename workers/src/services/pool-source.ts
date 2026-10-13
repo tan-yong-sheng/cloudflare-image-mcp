@@ -36,6 +36,10 @@ export interface PoolSource {
   keys: ResolvedKey[];
 }
 
+/**
+ * Resolve where provider credentials come from: D1 rows when present,
+ * else AI_ACCOUNTS (deprecation-warned), else deploy-credential fallback.
+ */
 export function resolvePoolSource(
   env: Env,
   readD1?: () => PoolRow[]

@@ -22,6 +22,7 @@ import type { GeneratedImage } from "../utils/image-request.js";
 import {
   MODEL_CONFIGS,
   isModelExposed,
+  listModels as listRegistryModels,
   resolveModelId,
 } from "../config/models.js";
 import { arrayBufferToBase64, cleanBase64 } from "../utils/encoding.js";
@@ -158,19 +159,24 @@ export class ImageGeneratorService {
       )
     );
 
-    // Dual-read (R1b, #72): a servable D1 pool wins; the env paths below
+    // Dual-read (R1b, #72): a servable pool wins; the env paths below
     // remain the fallback, so a half-migrated store never takes inference
-    // down. Observability: labels and counts only, never secret values.
-    const poolEntries = deps?.pool?.entries() ?? [];
-    if (poolEntries.length > 0) {
-      const d1Accounts = poolEntries.map((e) => ({
+    // down. The log and transport tag carry the pool's REAL source — the
+    // loader falls back to env credentials, so a hardcoded "d1" would make
+    // the runbook's verification signal lie. Labels and counts only, never
+    // secret values.
+    const pool = deps?.pool;
+    const poolEntries = pool?.entries() ?? [];
+    if (pool && poolEntries.length > 0) {
+      const poolAccounts = poolEntries.map((e) => ({
         account_id: e.accountId,
         api_token: e.apiToken,
       }));
       console.warn(
-        `AI inference path: d1 with ${d1Accounts.length} account(s)`
+        `AI inference path: ${pool.source} with ${poolAccounts.length} account(s)`
       );
-      this.transport = deps?.transport ?? new RestAITransport(d1Accounts, "d1");
+      this.transport =
+        deps?.transport ?? new RestAITransport(poolAccounts, pool.source, pool);
       this.store = deps?.store ?? new R2StorageService(env);
       return;
     }
@@ -596,7 +602,8 @@ export class ImageGeneratorService {
    * Get list of all available models
    */
   // Projection of the config registry (C3): the registry owns model
-  // knowledge; this keeps the OpenAI/MCP caller shape byte-identical.
+  // knowledge (its listModels applies the exposure filter); this map
+  // keeps the OpenAI/MCP caller shape byte-identical.
   listModels(): Array<{
     id: string;
     name: string;
@@ -606,15 +613,17 @@ export class ImageGeneratorService {
     taskTypes: string[];
     editCapabilities?: ModelConfig["editCapabilities"];
   }> {
-    return [...this.models.values()].filter(isModelExposed).map((config) => ({
-      id: config.id,
-      name: config.name,
-      description: config.description,
-      provider: config.provider,
-      supportedSizes: config.limits.supportedSizes,
-      taskTypes: config.supportedTasks,
-      editCapabilities: config.editCapabilities,
-    }));
+    return listRegistryModels(Object.fromEntries(this.models)).map(
+      (config) => ({
+        id: config.id,
+        name: config.name,
+        description: config.description,
+        provider: config.provider,
+        supportedSizes: config.supportedSizes,
+        taskTypes: config.taskTypes,
+        editCapabilities: config.editCapabilities,
+      })
+    );
   }
 
   /**

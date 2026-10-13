@@ -11,7 +11,7 @@
 // envelopes with PROVIDER_DATA_KEY via loadProviderPool.
 
 import type { Env } from "../types.js";
-import { ProviderPool } from "./provider-pool.js";
+import type { ProviderPool } from "./provider-pool.js";
 import { loadProviderPool } from "./pool-loader.js";
 import { openEnvelope } from "./provider-crypto.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";

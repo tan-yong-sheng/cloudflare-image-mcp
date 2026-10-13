@@ -22,6 +22,10 @@ export interface ExposureOverride {
 
 export type ExposureOverlay = ReadonlyMap<string, ExposureOverride>;
 
+/**
+ * Apply the D1-wins exposure overlay to the base model registry, returning
+ * the effective registry.
+ */
 export function overlayRegistry(
   base: Record<string, ModelConfig>,
   overlay: ExposureOverlay | null

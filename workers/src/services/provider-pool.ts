@@ -17,6 +17,13 @@ export interface PoolKey {
   enabled: boolean;
 }
 
+/**
+ * Where the pool's keys came from — observability metadata only, never a
+ * secret value. Carried on the pool because index.ts always passes one: a
+ * hardcoded source tag would report "d1" even when the loader fell back.
+ */
+export type CredentialSource = "d1" | "AI_ACCOUNTS" | "fallback";
+
 /** The credential handed to the transport for one attempt. */
 export interface PoolPick {
   label: string;
@@ -25,13 +32,19 @@ export interface PoolPick {
 }
 
 export class ProviderPool {
+  /** Which source actually serves these keys (see CredentialSource). */
+  readonly source: CredentialSource;
   private keys: PoolKey[];
   private cooledUntil = new Map<string, number>();
   private random: () => number;
 
-  constructor(keys: PoolKey[], deps?: { random?: () => number }) {
+  constructor(
+    keys: PoolKey[],
+    deps?: { random?: () => number; source?: CredentialSource }
+  ) {
     this.keys = keys;
     this.random = deps?.random ?? Math.random;
+    this.source = deps?.source ?? "d1";
   }
 
   /** Labels of all known keys, in order. Labels only — never values. */
