@@ -124,4 +124,13 @@ describe("migrations run before deploy (R1a)", () => {
     expect(WORKFLOW).toContain("D1_DATABASE_ID");
     expect(WORKFLOW).toContain('if [ -z "$D1_DATABASE_ID" ]');
   });
+
+  test("rejects a malformed database id before generating config", () => {
+    // Env indirection stops shell injection, but the value lands in TOML:
+    // a quote or newline could alter the generated config. D1 ids are
+    // UUIDs, so the workflow enforces the shape before use.
+    expect(WORKFLOW).toContain(
+      "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    );
+  });
 });

@@ -82,6 +82,13 @@ jobs:
             echo "❌ ERROR: D1_DATABASE_ID secret is not set (one per GitHub environment; see docs/DEPLOY.md)"
             exit 1
           fi
+          # Env indirection stops shell injection, but the value is also
+          # written into TOML: a quote or newline could alter the generated
+          # config. D1 ids are UUIDs, so enforce the shape before use.
+          if [[ ! "$D1_DATABASE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "❌ ERROR: D1_DATABASE_ID is not a valid database UUID"
+            exit 1
+          fi
           echo "✅ Required secrets are configured"
 
       - name: Verify deploy token
