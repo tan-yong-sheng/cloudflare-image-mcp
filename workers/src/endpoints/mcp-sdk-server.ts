@@ -11,6 +11,7 @@ import { WORKER_VERSION } from "../version.js";
 import type { Env } from "../types.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
 import type { ProviderPool } from "../services/provider-pool.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RunModelMultiSchema,
   RunModelSingleSchema,
@@ -38,19 +39,33 @@ export interface McpHandlerDeps {
   defaultModel?: string | null;
   /** R1b dual-read: resolved provider pool; env credentials stay the fallback. */
   pool?: ProviderPool;
+  /** R1b exposure overlay: D1-wins exposure rows over the R0 registry. */
+  exposureOverlay?: ExposureOverlay;
 }
 
 /**
  * Build an SDK McpServer for one request.
  */
 export function buildMcpServer(deps: McpHandlerDeps): McpServer {
-  const generator = new ImageGeneratorService(deps.env, { pool: deps.pool });
+  const generator = new ImageGeneratorService(deps.env, {
+    pool: deps.pool,
+    exposureOverlay: deps.exposureOverlay,
+  });
   const ctx: ToolsContext = { generator, baseUrl: deps.baseUrl };
 
-  const server = new McpServer({
-    name: "cloudflare-image-mcp",
-    version: WORKER_VERSION,
-  });
+  // R1b (#72), story 19: advertise tools listChanged so clients know
+  // listings can change; every session's tools/list reflects the
+  // version-poll-cached overlay (at most one TTL stale). Pushing
+  // list_changed notifications over persistent connections is deferred —
+  // that needs connection-scoped state (Durable Objects, out of scope
+  // per #68).
+  const server = new McpServer(
+    {
+      name: "cloudflare-image-mcp",
+      version: WORKER_VERSION,
+    },
+    { capabilities: { tools: { listChanged: true } } }
+  );
 
   if (deps.mode === "single-model") {
     const defaultModel = deps.defaultModel ?? null;

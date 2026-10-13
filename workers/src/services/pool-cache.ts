@@ -1,74 +1,104 @@
 // ============================================================================
-// Provider pool cache - isolate-scoped boot-load + version-poll (R1b, #72)
+// Config snapshot cache - isolate-scoped boot-load + version-poll (R1b, #72)
 // ============================================================================
-// The hot path must stay off D1: the pool loads once per isolate, then a
-// single-row config_versions poll (cheap) decides whether to reload. A TTL
-// window collapses bursts; a failed version query serves the stale pool —
-// a D1 blip must never take inference down. Without a version source the
-// pool reloads after each TTL window. Clock, version source, and loader
-// are injected for deterministic tests; production deps read PROVIDER_DB
-// and open envelopes with PROVIDER_DATA_KEY via loadProviderPool.
+// The hot path must stay off D1: the provider pool and the exposure overlay
+// load once per isolate, then a single-row config_versions poll (cheap)
+// decides whether to reload both payloads together. A TTL window collapses
+// bursts; a failed version query serves the stale snapshot — a D1 blip must
+// never take inference down. Without a version source the snapshot reloads
+// after each TTL window. Clock, version source, and loaders are injected
+// for deterministic tests; production deps read PROVIDER_DB and open
+// envelopes with PROVIDER_DATA_KEY via loadProviderPool.
 
 import type { Env } from "../types.js";
 import { ProviderPool } from "./provider-pool.js";
 import { loadProviderPool } from "./pool-loader.js";
 import { openEnvelope } from "./provider-crypto.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
 
 export interface PoolCacheDeps {
   loadPool: () => Promise<ProviderPool>;
+  loadOverlay?: () => Promise<ExposureOverlay>;
   readVersion: () => Promise<number | null>;
   now?: () => number;
   ttlMs?: number;
 }
 
-interface CacheEntry {
+interface Snapshot {
   pool: ProviderPool;
+  overlay: ExposureOverlay;
   version: number | null;
   checkedAt: number;
 }
 
 const DEFAULT_TTL_MS = 5_000;
 
-let cache: CacheEntry | null = null;
+let snapshot: Snapshot | null = null;
 
 /** Test hook: drop the isolate cache so each test boot-loads. */
 export function resetPoolCache(): void {
-  cache = null;
+  snapshot = null;
 }
 
 export async function getProviderPool(
   env: Env,
   deps?: PoolCacheDeps
 ): Promise<ProviderPool> {
+  return (await getSnapshot(env, deps)).pool;
+}
+
+export async function getExposureOverlay(
+  env: Env,
+  deps?: PoolCacheDeps
+): Promise<ExposureOverlay> {
+  return (await getSnapshot(env, deps)).overlay;
+}
+
+async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
   const d = deps ?? productionDeps(env);
   const now = (d.now ?? Date.now)();
   const ttl = d.ttlMs ?? DEFAULT_TTL_MS;
 
-  if (!cache) {
-    const pool = await d.loadPool();
-    cache = { pool, version: await readVersionOrNull(d), checkedAt: now };
-    return pool;
+  if (!snapshot) {
+    const { pool, overlay } = await loadBoth(d);
+    snapshot = {
+      pool,
+      overlay,
+      version: await readVersionOrNull(d),
+      checkedAt: now,
+    };
+    return snapshot;
   }
 
-  if (now - cache.checkedAt < ttl) return cache.pool;
+  if (now - snapshot.checkedAt < ttl) return snapshot;
 
   let version: number | null;
   try {
     version = await d.readVersion();
   } catch {
-    cache.checkedAt = now;
-    console.warn("provider pool cache: version poll failed, serving stale");
-    return cache.pool;
+    snapshot.checkedAt = now;
+    console.warn("config snapshot cache: version poll failed, serving stale");
+    return snapshot;
   }
 
-  if (version !== null && version === cache.version) {
-    cache.checkedAt = now;
-    return cache.pool;
+  if (version !== null && version === snapshot.version) {
+    snapshot.checkedAt = now;
+    return snapshot;
   }
 
-  const pool = await d.loadPool();
-  cache = { pool, version, checkedAt: now };
-  return pool;
+  const { pool, overlay } = await loadBoth(d);
+  snapshot = { pool, overlay, version, checkedAt: now };
+  return snapshot;
+}
+
+async function loadBoth(
+  d: PoolCacheDeps
+): Promise<{ pool: ProviderPool; overlay: ExposureOverlay }> {
+  const [pool, overlay] = await Promise.all([
+    d.loadPool(),
+    d.loadOverlay ? d.loadOverlay() : Promise.resolve(new Map()),
+  ]);
+  return { pool, overlay };
 }
 
 async function readVersionOrNull(d: PoolCacheDeps): Promise<number | null> {
@@ -121,5 +151,48 @@ function productionDeps(env: Env): PoolCacheDeps {
         },
         openEnvelope,
       }),
+    loadOverlay: async () => {
+      if (!db) return new Map();
+      const res = await db
+        .prepare(
+          `SELECT e.model_id AS modelId,
+                  e.enabled AS enabled,
+                  e.alias AS alias,
+                  e.is_default AS isDefault,
+                  s.scope AS scope
+             FROM exposure_overrides e
+             LEFT JOIN excluded_scopes s ON s.model_id = e.model_id`
+        )
+        .all<{
+          modelId: string;
+          enabled: number;
+          alias: string | null;
+          isDefault: number;
+          scope: string | null;
+        }>();
+      const grouped = new Map<
+        string,
+        {
+          enabled: boolean;
+          alias: string | null;
+          isDefault: boolean;
+          excludedScopes: string[];
+        }
+      >();
+      for (const r of res.results ?? []) {
+        let row = grouped.get(r.modelId);
+        if (!row) {
+          row = {
+            enabled: r.enabled === 1,
+            alias: r.alias,
+            isDefault: r.isDefault === 1,
+            excludedScopes: [],
+          };
+          grouped.set(r.modelId, row);
+        }
+        if (r.scope !== null) row.excludedScopes.push(r.scope);
+      }
+      return grouped as ExposureOverlay;
+    },
   };
 }

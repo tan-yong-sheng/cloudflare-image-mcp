@@ -611,7 +611,9 @@ export function getModelConfig(modelId: string): ModelConfig | null {
   return config;
 }
 
-export function listModels(): Array<{
+export function listModels(
+  registry: Record<string, ModelConfig> = MODEL_CONFIGS
+): Array<{
   id: string;
   name: string;
   description: string;
@@ -628,7 +630,7 @@ export function listModels(): Array<{
   supportedSizes: string[];
 }> {
   // R0: disabled models are absent from every listing surface.
-  return Object.values(MODEL_CONFIGS)
+  return Object.values(registry)
     .filter(isModelExposed)
     .map((config) => ({
       id: config.id,

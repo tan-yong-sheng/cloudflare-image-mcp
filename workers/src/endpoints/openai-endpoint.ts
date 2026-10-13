@@ -17,6 +17,10 @@ import {
   type CollectConfig,
 } from "../utils/image-request.js";
 import { DEFAULT_MODEL } from "../config/models.js";
+import {
+  resolveDefaultModel,
+  type ExposureOverlay,
+} from "../config/exposure-overlay.js";
 
 // Per-route input configs: which CF params to extract and which defaults
 // apply. Handlers keep routing only; gathering lives in the shared module.
@@ -48,9 +52,21 @@ const VARIATIONS_CONFIG: CollectConfig = {
 export class OpenAIEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
+  /** R1b overlay: the D1 is_default row rewrites the model-less default. */
+  private defaultModel: string;
 
-  constructor(env: Env, deps?: { pool?: ProviderPool }) {
-    this.generator = new ImageGeneratorService(env, { pool: deps?.pool });
+  constructor(
+    env: Env,
+    deps?: { pool?: ProviderPool; exposureOverlay?: ExposureOverlay }
+  ) {
+    this.generator = new ImageGeneratorService(env, {
+      pool: deps?.pool,
+      exposureOverlay: deps?.exposureOverlay,
+    });
+    this.defaultModel = resolveDefaultModel(
+      DEFAULT_MODEL,
+      deps?.exposureOverlay ?? null
+    );
     this.corsHeaders = corsHeaders;
   }
 
@@ -153,7 +169,10 @@ export class OpenAIEndpoint {
    */
   private async handleGenerations(request: Request): Promise<Response> {
     const { prompt, modelId, n, returnBase64, explicitParams } =
-      await collectInputImages(request, GENERATIONS_CONFIG);
+      await collectInputImages(request, {
+        ...GENERATIONS_CONFIG,
+        defaultModel: this.defaultModel,
+      });
 
     // Validate required fields
     if (!prompt) {

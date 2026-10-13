@@ -12,6 +12,7 @@ import {
   type GenerationRequest,
 } from "./image-generator.js";
 import { ProviderPool, type PoolKey } from "./provider-pool.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import type { AITransport, ImageStore } from "./generation-adapters.js";
 import type { Env, ModelConfig } from "../types.js";
 
@@ -599,5 +600,57 @@ describe("dual-read credential wiring (S4)", () => {
   test("no pool keeps the env path exactly as before", () => {
     const said = constructWith(undefined);
     expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
+  });
+});
+
+describe("exposure overlay wiring (S6)", () => {
+  const env = {
+    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
+    CLOUDFLARE_API_TOKEN: "deploy-token",
+    IMAGE_EXPIRY_HOURS: "24",
+    IMAGE_BUCKET: {},
+  } as unknown as Env;
+
+  function generatorWith(
+    exposureOverlay: ExposureOverlay | undefined
+  ): ImageGeneratorService {
+    return new ImageGeneratorService(env, {
+      transport: new MemoryTransport(),
+      store: new MemoryStore(),
+      exposureOverlay,
+    });
+  }
+
+  test("a D1-enabled=false row hides the model from the service", () => {
+    const generator = generatorWith(
+      new Map([
+        [
+          IMG2IMG_MODEL,
+          { enabled: false, alias: null, isDefault: false, excludedScopes: [] },
+        ],
+      ])
+    );
+    expect(generator.getModelConfig(IMG2IMG_MODEL)).toBeNull();
+    expect(generator.listModels().map((m) => m.id)).not.toContain(
+      IMG2IMG_MODEL
+    );
+    expect(generator.getModelConfig(TEXT_MODEL)?.id).toBe(TEXT_MODEL);
+  });
+
+  test("a D1 alias resolves through the service", () => {
+    const generator = generatorWith(
+      new Map([
+        [
+          TEXT_MODEL,
+          {
+            enabled: true,
+            alias: "d1-alias",
+            isDefault: false,
+            excludedScopes: [],
+          },
+        ],
+      ])
+    );
+    expect(generator.getModelConfig("d1-alias")?.id).toBe(TEXT_MODEL);
   });
 });

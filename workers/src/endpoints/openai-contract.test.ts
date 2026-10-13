@@ -384,3 +384,45 @@ describe("GET /v1/models contract", () => {
     expect(body.error.message).toMatch(/unknown model/i);
   });
 });
+
+describe("D1 default-model overlay (S6)", () => {
+  test("a hidden default model breaks model-less requests instead of serving it", async () => {
+    stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), {
+      exposureOverlay: new Map([
+        [
+          SCHNELL,
+          { enabled: false, alias: null, isDefault: false, excludedScopes: [] },
+        ],
+      ]),
+    });
+
+    const res = await endpoint.handle(
+      post("/v1/images/generations", { prompt: "a beach" })
+    );
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  test("is_default rewrites the model-less default", async () => {
+    stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), {
+      exposureOverlay: new Map([
+        [
+          SCHNELL,
+          { enabled: false, alias: null, isDefault: false, excludedScopes: [] },
+        ],
+        [
+          KLEIN,
+          { enabled: true, alias: null, isDefault: true, excludedScopes: [] },
+        ],
+      ]),
+    });
+
+    const res = await endpoint.handle(
+      post("/v1/images/generations", { prompt: "a beach" })
+    );
+
+    expect(res.status).toBe(200);
+  });
+});

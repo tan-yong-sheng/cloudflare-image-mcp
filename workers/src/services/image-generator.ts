@@ -11,6 +11,8 @@ import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
 import type { ProviderPool } from "./provider-pool.js";
+import { overlayRegistry } from "../config/exposure-overlay.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RestAITransport,
   type AITransport,
@@ -20,7 +22,6 @@ import type { GeneratedImage } from "../utils/image-request.js";
 import {
   MODEL_CONFIGS,
   isModelExposed,
-  listModels as listRegistryModels,
   resolveModelId,
 } from "../config/models.js";
 import { arrayBufferToBase64, cleanBase64 } from "../utils/encoding.js";
@@ -148,9 +149,14 @@ export class ImageGeneratorService {
       transport?: AITransport;
       store?: ImageStore;
       pool?: ProviderPool;
+      exposureOverlay?: ExposureOverlay;
     }
   ) {
-    this.models = new Map(Object.entries(MODEL_CONFIGS));
+    this.models = new Map(
+      Object.entries(
+        overlayRegistry(MODEL_CONFIGS, deps?.exposureOverlay ?? null)
+      )
+    );
 
     // Dual-read (R1b, #72): a servable D1 pool wins; the env paths below
     // remain the fallback, so a half-migrated store never takes inference
@@ -239,7 +245,10 @@ export class ImageGeneratorService {
    * models resolve to null so every generation path rejects them (R0).
    */
   getModelConfig(modelId: string): ModelConfig | null {
-    const config = this.models.get(resolveModelId(modelId)) || null;
+    const config =
+      this.models.get(
+        resolveModelId(modelId, Object.fromEntries(this.models))
+      ) || null;
     if (config && !isModelExposed(config)) return null;
     return config;
   }
@@ -597,13 +606,13 @@ export class ImageGeneratorService {
     taskTypes: string[];
     editCapabilities?: ModelConfig["editCapabilities"];
   }> {
-    return listRegistryModels().map((config) => ({
+    return [...this.models.values()].filter(isModelExposed).map((config) => ({
       id: config.id,
       name: config.name,
       description: config.description,
       provider: config.provider,
-      supportedSizes: config.supportedSizes,
-      taskTypes: config.taskTypes,
+      supportedSizes: config.limits.supportedSizes,
+      taskTypes: config.supportedTasks,
       editCapabilities: config.editCapabilities,
     }));
   }

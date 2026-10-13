@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import {
   getProviderPool,
+  getExposureOverlay,
   resetPoolCache,
   type PoolCacheDeps,
 } from "./pool-cache.js";
@@ -24,27 +25,28 @@ function makeFakes(ttlMs = 1_000) {
   let loads = 0;
   let reads = 0;
   let nowMs = 0;
+  const deps: PoolCacheDeps = {
+    loadPool: async () => {
+      loads++;
+      const label = `v${version}`;
+      return new ProviderPool([
+        { label, accountId: "a", apiToken: "t", weight: 1, enabled: true },
+      ]);
+    },
+    readVersion: async () => {
+      reads++;
+      return version;
+    },
+    now: () => nowMs,
+    ttlMs,
+  };
   return {
     bump: () => ++version,
     advance: (ms: number) => {
       nowMs += ms;
     },
     counts: () => ({ loads, reads }),
-    deps: {
-      loadPool: async () => {
-        loads++;
-        const label = `v${version}`;
-        return new ProviderPool([
-          { label, accountId: "a", apiToken: "t", weight: 1, enabled: true },
-        ]);
-      },
-      readVersion: async (): Promise<number | null> => {
-        reads++;
-        return version;
-      },
-      now: () => nowMs,
-      ttlMs,
-    } satisfies PoolCacheDeps,
+    deps,
   };
 }
 
@@ -99,5 +101,41 @@ describe("pool cache (F2)", () => {
     const second = await getProviderPool(ENV, f.deps);
     expect(f.counts().loads).toBe(2);
     expect(second).not.toBe(first);
+  });
+
+  test("the exposure overlay rides the same cache and version poll", async () => {
+    let overlayLoads = 0;
+    let row = "first";
+    const f = makeFakes();
+    f.deps.loadOverlay = async () => {
+      overlayLoads++;
+      return new Map([
+        [
+          "@cf/model-a",
+          { enabled: true, alias: row, isDefault: false, excludedScopes: [] },
+        ],
+      ]);
+    };
+    const first = await getExposureOverlay(ENV, f.deps);
+    expect(first.get("@cf/model-a")?.alias).toBe("first");
+    // Within the TTL: served from cache, no reload, no version query.
+    row = "second";
+    expect(
+      (await getExposureOverlay(ENV, f.deps)).get("@cf/model-a")?.alias
+    ).toBe("first");
+    expect(overlayLoads).toBe(1);
+    // Version bump: both payloads reload on the shared poll.
+    f.bump();
+    f.advance(1_001);
+    const reloaded = await getExposureOverlay(ENV, f.deps);
+    expect(reloaded.get("@cf/model-a")?.alias).toBe("second");
+    expect(overlayLoads).toBe(2);
+    expect(f.counts().loads).toBe(2);
+  });
+
+  test("without an overlay loader the overlay is an empty map", async () => {
+    const f = makeFakes();
+    const overlay = await getExposureOverlay(ENV, f.deps);
+    expect(overlay.size).toBe(0);
   });
 });
