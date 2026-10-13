@@ -109,7 +109,12 @@ async function readVersionOrNull(d: PoolCacheDeps): Promise<number | null> {
   }
 }
 
-function productionDeps(env: Env): PoolCacheDeps {
+/**
+ * The production D1-backed deps. Exported for the S5 harness test, which
+ * executes these exact queries against the real migration — the injected
+ * cache tests alone would never catch a query/schema drift.
+ */
+export function productionDeps(env: Env): PoolCacheDeps {
   const db = env.PROVIDER_DB;
   return {
     readVersion: async () => {
