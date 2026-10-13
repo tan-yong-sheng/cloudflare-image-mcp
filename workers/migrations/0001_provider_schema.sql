@@ -31,8 +31,7 @@ CREATE TABLE provider_keys (
   external_account_id TEXT,
   weight INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0),
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX idx_provider_keys_provider ON provider_keys (provider_id);
 
@@ -63,8 +62,7 @@ CREATE TABLE exposure_overrides (
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   alias TEXT UNIQUE,
   is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
-  updated_by TEXT NOT NULL CHECK (length(updated_by) > 0),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  updated_by TEXT NOT NULL CHECK (length(updated_by) > 0)
 );
 -- Field names mirror the R0 registry exposure flags (enabled / alias /
 -- excluded scopes) so later D1 overrides reuse them unchanged. At most one
