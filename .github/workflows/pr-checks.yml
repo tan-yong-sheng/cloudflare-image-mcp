@@ -50,8 +50,10 @@ jobs:
       - name: Format check
         working-directory: workers
         # Scoped to files this pipeline owns: pre-existing sources predate
-        # the repo formatter config and would fail a blanket check.
-        run: npx prettier --check "src/**/*.test.ts" "package.json" "../.github/workflows/pr-checks.yml"
+        # the repo formatter config and would fail a blanket check. The
+        # test-support directory and tsconfigs are included because the
+        # D1 migration harness and its config landed formatter-clean.
+        run: npx prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" "../.github/workflows/pr-checks.yml"
 
       - name: Unit tests
         working-directory: workers

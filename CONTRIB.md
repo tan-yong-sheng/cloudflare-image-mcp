@@ -98,8 +98,14 @@ mints the tag automatically (never hand-tag). Full procedure:
 Unit tests are pure logic, run from the repo root with no backend needed:
 
 ```bash
-npm run test:unit # 62 vitest cases in workers/ (~1s)
+npm run test:unit # 235 vitest cases in workers/ (~2s)
 ```
+
+Derivation of that count: every `*.test.ts` under `workers/src` — registry +
+JSON mirror, MCP handler/tool/SDK suites, generator service, auth gate, param
+parser, R2 storage, utilities, and the D1 provider-schema suites. It moves
+whenever a suite or case is added or removed; `npm run test:unit` prints the
+authoritative number, so treat the comment as a rough scale indicator only.
 
 E2E tests run against Workers environments.
 

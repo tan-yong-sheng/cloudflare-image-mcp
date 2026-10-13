@@ -21,6 +21,9 @@ Required GitHub Secrets (CI deploy):
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `D1_DATABASE_ID` — one per GitHub environment (`staging`, `production`);
+  the id of the pre-created D1 provider database. Deploy applies
+  `workers/migrations/*.sql` to it before deploying the Worker.
 
 Optional Worker secrets:
 
