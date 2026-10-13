@@ -84,6 +84,12 @@ Settings → Environments → <staging|production> → Environment secrets → N
 Deploy fails fast with a clear error when `D1_DATABASE_ID` is missing, rather than
 shipping a Worker bound to a database that does not exist.
 
+After the first deploy, migrate existing `AI_ACCOUNTS` credentials into D1
+with the one-shot import — see
+[CREDENTIALS_SETUP.md → Migrating AI_ACCOUNTS to D1](CREDENTIALS_SETUP.md#migrating-ai_accounts-to-d1-one-shot-import).
+Until then the Worker keeps serving from `AI_ACCOUNTS` / deploy credentials
+with a deprecation warning, so the import can happen any time.
+
 ---
 
 ### Step 4: Deploy!
