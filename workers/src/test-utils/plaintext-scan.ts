@@ -71,7 +71,7 @@ const ASSIGNMENT_VALUE =
  *   values (`cloudflare-image-workers`, `src/test-utils/**`) are letters,
  *   slashes and dots only. Two digits, not one: a single digit is what a
  *   key name contributes inside a quoted echo such as
- *   `D1_DATABASE_NAME=cloudflare-image-mcp-providers-staging`, which is
+ *   `WORKERS_NAME=cloudflare-image-workers-staging`, which is
  *   configuration, not a secret;
  * - in a `key: value` context a slash means a file path, not a secret.
  *

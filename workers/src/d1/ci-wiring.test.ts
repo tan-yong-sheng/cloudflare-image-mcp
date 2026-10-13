@@ -3,10 +3,10 @@
 // ============================================================================
 // Seam: .github/workflows/deploy-workers.yml as text. Proves the generated
 // worker config carries the D1 binding from secrets and that migrations
-// are applied before the deploy, against the same database the binding
-// names. Asserts step order and name agreement - the drift these catch is
-// "migrations applied to a different database than the one bound".
-// Misses real D1 behavior (a red migration surfaces in CI, not here).
+// are applied through that same binding before the deploy - one stable
+// handle, so "migrations applied to a different database than the one
+// bound" cannot happen. Misses real D1 behavior (a red migration surfaces
+// in CI, not here).
 
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
@@ -58,10 +58,15 @@ describe("D1 binding in the generated worker config (R1a)", () => {
     }
   });
 
-  test("names a database and a stable binding", () => {
+  test("binds a stable name resolved per environment", () => {
+    // No database_name in the generated config: the binding (stable across
+    // environments) resolves to each environment's database via its
+    // database_id. Names stay an internal detail, so environments cannot
+    // collide on one account and nothing can drift between binding and
+    // migrate target.
     const toml = generatedWranglerToml();
     expect(toml).toContain('binding = "PROVIDER_DB"');
-    expect(toml).toContain('database_name = "$D1_DATABASE_NAME"');
+    expect(toml).not.toContain("database_name");
   });
 });
 
@@ -70,31 +75,39 @@ describe("migrations run before deploy (R1a)", () => {
     expect(WORKFLOW).toMatch(/wrangler d1 migrations apply[^\n]*--remote/);
   });
 
-  test("one database name per environment feeds binding and apply", () => {
-    // D1 database names are unique per account, so staging and production
-    // each need their own. Whichever is chosen, the bound database and the
-    // migration target cannot drift apart.
-    const lines = WORKFLOW.split("\n");
-    const definitions = lines.filter((l) =>
-      l.includes('echo "D1_DATABASE_NAME=')
-    );
-    // One per environment branch.
-    expect(definitions).toHaveLength(2);
-    // Content, not column offsets: re-indenting a step must not fail this suite.
-    for (const line of definitions) {
-      expect(line).toMatch(
-        /echo "D1_DATABASE_NAME=[a-z0-9-]+" >> \$GITHUB_ENV/
-      );
+  test("worker secrets upload in one bulk call", () => {
+    // One atomic upload instead of a put-per-secret: the next secret is
+    // one env line, not a new if-block. Values arrive via env indirection
+    // so none appear on the command line; unset optionals are omitted.
+    const step = WORKFLOW.split("\n")
+      .filter((l) => l.includes("npx wrangler secret"))
+      .map((l) => l.trim());
+    expect(step).toEqual([
+      "' | npx wrangler secret bulk --name ${{ env.WORKERS_NAME }}",
+    ]);
+    for (const key of [
+      "DEPLOYED_AT",
+      "COMMIT_SHA",
+      "CLOUDFLARE_ACCOUNT_ID",
+      "CLOUDFLARE_API_TOKEN",
+      "API_KEYS_VALUE",
+      "AI_ACCOUNTS_VALUE",
+      "PROVIDER_DATA_KEY_VALUE",
+      "TZ_VALUE",
+    ]) {
+      expect(WORKFLOW).toContain(key);
     }
-    // Distinct names, otherwise the two environments collide on one database.
-    const names = definitions.map(
-      (l) => l.match(/D1_DATABASE_NAME=([a-z0-9-]+)/)![1]
-    );
-    expect(new Set(names).size).toBe(2);
-    const applyStep = lines.find((l) =>
+  });
+
+  test("migrations apply through the same binding the config declares", () => {
+    // The binding is the single handle for both: binding name here must
+    // match the one generated into wrangler.toml, so config and migrate
+    // target resolve to the same database by construction.
+    const applyStep = WORKFLOW.split("\n").find((l) =>
       l.includes("wrangler d1 migrations apply")
     );
-    expect(applyStep).toContain("$D1_DATABASE_NAME");
+    expect(applyStep).toContain("PROVIDER_DB");
+    expect(generatedWranglerToml()).toContain('binding = "PROVIDER_DB"');
   });
 
   test("the migrate step precedes the deploy step", () => {

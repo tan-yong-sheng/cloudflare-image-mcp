@@ -124,8 +124,8 @@ The file `.github/workflows/deploy-workers.yml` handles everything:
 
 1. **Generates** `wrangler.toml` dynamically from your GitHub secrets
 2. **Installs** dependencies
-3. **Applies D1 migrations** — `wrangler d1 migrations apply` against the database
-   named by `D1_DATABASE_NAME`, using the `database_id` from `D1_DATABASE_ID`
+3. **Applies D1 migrations** — `wrangler d1 migrations apply PROVIDER_DB` against
+   the bound database, resolved per environment via the `database_id` from `D1_DATABASE_ID`
 4. **Deploys** to Cloudflare Workers
 5. **Cleans up** the generated `wrangler.toml`
 
