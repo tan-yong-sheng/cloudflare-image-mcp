@@ -98,6 +98,7 @@ export interface AIAccount {
 // Environment interface
 export interface Env {
   IMAGE_BUCKET: R2Bucket;
+  PROVIDER_DB?: D1Database; // D1 provider store binding (R1a); read by the R1b pool cache
   CLOUDFLARE_API_TOKEN: string;
   CLOUDFLARE_ACCOUNT_ID: string;
   IMAGE_EXPIRY_HOURS: string;

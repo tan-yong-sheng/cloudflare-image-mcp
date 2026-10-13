@@ -6,11 +6,12 @@
 // records uploads; assertions cover observable image output and error
 // envelopes for text-to-image, image-to-image, and masked edits.
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   ImageGeneratorService,
   type GenerationRequest,
 } from "./image-generator.js";
+import { ProviderPool, type PoolKey } from "./provider-pool.js";
 import type { AITransport, ImageStore } from "./generation-adapters.js";
 import type { Env, ModelConfig } from "../types.js";
 
@@ -536,5 +537,67 @@ describe("runMany", () => {
 
     expect(result.success).toBe(true);
     expect(result.images).toHaveLength(2);
+  });
+});
+
+describe("dual-read credential wiring (S4)", () => {
+  const envWithAIAccounts = {
+    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
+    CLOUDFLARE_API_TOKEN: "deploy-token",
+    AI_ACCOUNTS: JSON.stringify([
+      { account_id: "env-account", api_token: "env-token" },
+    ]),
+    IMAGE_EXPIRY_HOURS: "24",
+    IMAGE_BUCKET: {},
+  } as unknown as Env;
+
+  function constructWith(pool: ProviderPool | undefined): string {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      new ImageGeneratorService(envWithAIAccounts, {
+        transport: new MemoryTransport(),
+        store: new MemoryStore(),
+        pool,
+      });
+      return warn.mock.calls.map((c) => String(c[0])).join("\n");
+    } finally {
+      warn.mockRestore();
+    }
+  }
+
+  const d1Keys: PoolKey[] = [
+    {
+      label: "k1",
+      accountId: "d1-a1",
+      apiToken: "d1-t1",
+      weight: 1,
+      enabled: true,
+    },
+    {
+      label: "k2",
+      accountId: "d1-a2",
+      apiToken: "d1-t2",
+      weight: 1,
+      enabled: true,
+    },
+  ];
+
+  test("a servable D1 pool wins over env AI_ACCOUNTS, labels only in logs", () => {
+    const said = constructWith(new ProviderPool(d1Keys));
+    expect(said).toContain("AI inference path: d1 with 2 account(s)");
+    expect(said).not.toContain("d1-t1");
+    expect(said).not.toContain("d1-a1");
+    expect(said).not.toContain("env-token");
+  });
+
+  test("a pool with no servable keys falls through to env dual-read", () => {
+    const disabled = d1Keys.map((k) => ({ ...k, enabled: false }));
+    const said = constructWith(new ProviderPool(disabled));
+    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
+  });
+
+  test("no pool keeps the env path exactly as before", () => {
+    const said = constructWith(undefined);
+    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
   });
 });

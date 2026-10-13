@@ -4,6 +4,7 @@
 // ============================================================================
 
 import type { Env, OpenAIImageResponse } from "../types.js";
+import type { ProviderPool } from "../services/provider-pool.js";
 import {
   ImageGeneratorService,
   type BatchResult,
@@ -48,8 +49,8 @@ export class OpenAIEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
 
-  constructor(env: Env) {
-    this.generator = new ImageGeneratorService(env);
+  constructor(env: Env, deps?: { pool?: ProviderPool }) {
+    this.generator = new ImageGeneratorService(env, { pool: deps?.pool });
     this.corsHeaders = corsHeaders;
   }
 

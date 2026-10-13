@@ -9,6 +9,7 @@ import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { serveFrontend } from "./endpoints/frontend.js";
+import { getProviderPool } from "./services/pool-cache.js";
 import { listModels } from "./config/models.js";
 import {
   authenticateRequest,
@@ -116,7 +117,9 @@ export default {
 
       // Route: OpenAI-compatible API
       if (path.startsWith("/v1/")) {
-        const openai = new OpenAIEndpoint(env);
+        const openai = new OpenAIEndpoint(env, {
+          pool: await getProviderPool(env),
+        });
         return openai.handle(request);
       }
 
@@ -139,6 +142,7 @@ export default {
             baseUrl: url.protocol + "//" + url.host,
             mode,
             defaultModel,
+            pool: await getProviderPool(env),
           })
         );
       }

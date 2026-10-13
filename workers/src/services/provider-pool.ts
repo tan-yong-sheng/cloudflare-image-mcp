@@ -40,6 +40,17 @@ export class ProviderPool {
   }
 
   /**
+   * The enabled, positively-weighted keys in order — the servable set for
+   * transport wiring (cooldowns are runtime state the transport's own
+   * per-request failover handles). Copies; callers cannot mutate the pool.
+   */
+  entries(): PoolKey[] {
+    return this.keys
+      .filter((k) => k.enabled && k.weight > 0)
+      .map((k) => ({ ...k }));
+  }
+
+  /**
    * Pick the next credential: among enabled, positively-weighted, cooled-
    * down keys, proportionally to weight. Null when nothing is servable.
    */

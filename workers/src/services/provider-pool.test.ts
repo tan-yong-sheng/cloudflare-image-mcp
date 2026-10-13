@@ -70,4 +70,40 @@ describe("provider pool selection (S3)", () => {
       warn.mockRestore();
     }
   });
+
+  test("entries() returns the enabled servable list for transport wiring", () => {
+    const pool = new ProviderPool([
+      ...KEYS,
+      {
+        label: "off",
+        accountId: "a3",
+        apiToken: "t3",
+        weight: 1,
+        enabled: false,
+      },
+      {
+        label: "zero",
+        accountId: "a4",
+        apiToken: "t4",
+        weight: 0,
+        enabled: true,
+      },
+    ]);
+    expect(pool.entries()).toEqual([
+      {
+        label: "heavy",
+        accountId: "a1",
+        apiToken: "t1",
+        weight: 3,
+        enabled: true,
+      },
+      {
+        label: "light",
+        accountId: "a2",
+        apiToken: "t2",
+        weight: 1,
+        enabled: true,
+      },
+    ]);
+  });
 });

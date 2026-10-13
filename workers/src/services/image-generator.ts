@@ -10,6 +10,7 @@
 import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
+import type { ProviderPool } from "./provider-pool.js";
 import {
   RestAITransport,
   type AITransport,
@@ -143,9 +144,30 @@ export class ImageGeneratorService {
 
   constructor(
     env: Env,
-    deps?: { transport?: AITransport; store?: ImageStore }
+    deps?: {
+      transport?: AITransport;
+      store?: ImageStore;
+      pool?: ProviderPool;
+    }
   ) {
     this.models = new Map(Object.entries(MODEL_CONFIGS));
+
+    // Dual-read (R1b, #72): a servable D1 pool wins; the env paths below
+    // remain the fallback, so a half-migrated store never takes inference
+    // down. Observability: labels and counts only, never secret values.
+    const poolEntries = deps?.pool?.entries() ?? [];
+    if (poolEntries.length > 0) {
+      const d1Accounts = poolEntries.map((e) => ({
+        account_id: e.accountId,
+        api_token: e.apiToken,
+      }));
+      console.warn(
+        `AI inference path: d1 with ${d1Accounts.length} account(s)`
+      );
+      this.transport = deps?.transport ?? new RestAITransport(d1Accounts, "d1");
+      this.store = deps?.store ?? new R2StorageService(env);
+      return;
+    }
 
     // Build AI accounts list:
     // 1. AI_ACCOUNTS (JSON array) if set and valid

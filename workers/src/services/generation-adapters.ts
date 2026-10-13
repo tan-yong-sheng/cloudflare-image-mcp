@@ -45,11 +45,11 @@ export interface ImageStore {
  */
 export class RestAITransport implements AITransport {
   private aiAccounts: AIAccount[];
-  private credentialSource: "AI_ACCOUNTS" | "fallback";
+  private credentialSource: "AI_ACCOUNTS" | "fallback" | "d1";
 
   constructor(
     accounts: AIAccount[],
-    credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback"
+    credentialSource: "AI_ACCOUNTS" | "fallback" | "d1" = "fallback"
   ) {
     this.aiAccounts = accounts;
     this.credentialSource = credentialSource;
@@ -73,7 +73,9 @@ export class RestAITransport implements AITransport {
       const credentialTag =
         this.credentialSource === "AI_ACCOUNTS"
           ? `AI_ACCOUNTS[${index}]`
-          : "fallback deploy credential";
+          : this.credentialSource === "d1"
+            ? `D1[${index}]`
+            : "fallback deploy credential";
       const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
 
       try {

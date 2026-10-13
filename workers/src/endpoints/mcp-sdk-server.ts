@@ -10,6 +10,7 @@ import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { WORKER_VERSION } from "../version.js";
 import type { Env } from "../types.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
+import type { ProviderPool } from "../services/provider-pool.js";
 import {
   RunModelMultiSchema,
   RunModelSingleSchema,
@@ -35,13 +36,15 @@ export interface McpHandlerDeps {
   mode: McpMode;
   /** Required when mode is single-model: the pinned model (?model=). */
   defaultModel?: string | null;
+  /** R1b dual-read: resolved provider pool; env credentials stay the fallback. */
+  pool?: ProviderPool;
 }
 
 /**
  * Build an SDK McpServer for one request.
  */
 export function buildMcpServer(deps: McpHandlerDeps): McpServer {
-  const generator = new ImageGeneratorService(deps.env);
+  const generator = new ImageGeneratorService(deps.env, { pool: deps.pool });
   const ctx: ToolsContext = { generator, baseUrl: deps.baseUrl };
 
   const server = new McpServer({
