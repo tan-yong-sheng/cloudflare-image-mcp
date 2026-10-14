@@ -4,9 +4,9 @@
 // Seam: getProviderPool(env, deps) — the isolate-scoped cache so the hot
 // path stays off D1. Proves boot-load once, version-poll inside a TTL
 // window, reload only on config_versions change, stale-serving when the
-// version query fails (a D1 blip never takes inference down), and reload
-// when no version source exists. Clock, version source, and loader are
-// injected — no D1, no timers, no real crypto.
+// version query or the reload fails (a D1 blip never takes inference
+// down), and reload when no version source exists. Clock, version source,
+// and loader are injected — no D1, no timers, no real crypto.
 
 import { beforeEach, describe, expect, test } from "vitest";
 import {
@@ -131,6 +131,29 @@ describe("pool cache (F2)", () => {
     expect(reloaded.get("@cf/model-a")?.alias).toBe("second");
     expect(overlayLoads).toBe(2);
     expect(f.counts().loads).toBe(2);
+  });
+
+  test("an overlay load failure at boot serves the pool without it", async () => {
+    const f = makeFakes();
+    f.deps.loadOverlay = async () => {
+      throw new Error("D1 unavailable");
+    };
+    const pool = await getProviderPool(ENV, f.deps);
+    expect(pool.labels()).toEqual(["v1"]);
+    expect((await getExposureOverlay(ENV, f.deps)).size).toBe(0);
+  });
+
+  test("a failed reload keeps serving the previous snapshot", async () => {
+    const f = makeFakes();
+    const first = await getProviderPool(ENV, f.deps);
+    f.advance(1_001);
+    f.bump();
+    f.deps.loadPool = async () => {
+      throw new Error("D1 unavailable");
+    };
+    const stale = await getProviderPool(ENV, f.deps);
+    expect(stale).toBe(first);
+    expect(f.counts().loads).toBe(1);
   });
 
   test("without an overlay loader the overlay is an empty map", async () => {

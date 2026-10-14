@@ -4,8 +4,9 @@
 // The hot path must stay off D1: the provider pool and the exposure overlay
 // load once per isolate, then a single-row config_versions poll (cheap)
 // decides whether to reload both payloads together. A TTL window collapses
-// bursts; a failed version query serves the stale snapshot — a D1 blip must
-// never take inference down. Without a version source the snapshot reloads
+// bursts; a failed version query or a failed reload serves the stale
+// snapshot; a failed overlay load drops the overlay — a D1 blip must never
+// take inference down. Without a version source the snapshot reloads
 // after each TTL window. Clock, version source, and loaders are injected
 // for deterministic tests; production deps read PROVIDER_DB and open
 // envelopes with PROVIDER_DATA_KEY via loadProviderPool.
@@ -86,8 +87,18 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
     return snapshot;
   }
 
-  const { pool, overlay } = await loadBoth(d);
-  snapshot = { pool, overlay, version, checkedAt: now };
+  const previous = snapshot;
+  let reloaded: { pool: ProviderPool; overlay: ExposureOverlay };
+  try {
+    reloaded = await loadBoth(d);
+  } catch {
+    // Never replace a good snapshot with an error: inference keeps
+    // serving the previous pool until a later reload succeeds.
+    previous.checkedAt = now;
+    console.warn("config snapshot cache: reload failed, serving stale");
+    return previous;
+  }
+  snapshot = { ...reloaded, version, checkedAt: now };
   return snapshot;
 }
 
@@ -96,7 +107,14 @@ async function loadBoth(
 ): Promise<{ pool: ProviderPool; overlay: ExposureOverlay }> {
   const [pool, overlay] = await Promise.all([
     d.loadPool(),
-    d.loadOverlay ? d.loadOverlay() : Promise.resolve(new Map()),
+    (d.loadOverlay ? d.loadOverlay() : Promise.resolve(new Map())).catch(() => {
+      // The overlay only refines the base registry; losing it must
+      // never fail the pool load beside it.
+      console.warn(
+        "config snapshot cache: exposure overlay load failed, serving without it"
+      );
+      return new Map();
+    }),
   ]);
   return { pool, overlay };
 }

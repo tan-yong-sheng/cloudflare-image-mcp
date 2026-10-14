@@ -28,7 +28,17 @@ export async function loadProviderPool(
   env: Env,
   deps: PoolLoaderDeps
 ): Promise<ProviderPool> {
-  const rows = await deps.readRows();
+  let rows: PoolRow[];
+  try {
+    rows = await deps.readRows();
+  } catch {
+    // An unreadable store (D1 outage, missing table) must degrade to env
+    // credentials like every other gap here, never fail the request.
+    console.warn(
+      "provider pool: D1 read failed, falling back to env credentials"
+    );
+    return envPool(env);
+  }
   if (rows.length === 0) {
     return envPool(env);
   }

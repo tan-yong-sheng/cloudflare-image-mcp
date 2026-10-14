@@ -5,7 +5,8 @@
 // opener, no D1 wire, no crypto internals. Proves D1 envelopes open with
 // the data key into a servable pool; empty D1 falls through to env paths;
 // a missing data key warns and falls back instead of throwing (no flag
-// day); nothing secret reaches the logs.
+// day); an unreadable store degrades the same way; nothing secret
+// reaches the logs.
 
 import { describe, expect, test, vi } from "vitest";
 import { loadProviderPool } from "./pool-loader.js";
@@ -60,6 +61,25 @@ describe("pool loader (F1)", () => {
       const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
       expect(said).toMatch(/PROVIDER_DATA_KEY/i);
       expect(said).not.toContain("env-1");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("an unreadable D1 degrades to env credentials, never throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const opener = vi.fn();
+      const pool = await loadProviderPool(ENV, {
+        readRows: async () => {
+          throw new Error("D1 unavailable");
+        },
+        openEnvelope: opener,
+      });
+      expect(opener).not.toHaveBeenCalled();
+      expect(pool.pick()?.accountId).toBe("deploy-account");
+      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toMatch(/D1 read failed/i);
     } finally {
       warn.mockRestore();
     }
