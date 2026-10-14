@@ -55,8 +55,11 @@ recreated.
 
 ## CI gates
 
-On every change under `terraform/`, CI runs per root — without any
-Cloudflare or HCP credentials (the static gate, analogous to typecheck):
+`.github/workflows/terraform.yml` owns both gates (its own file; the deploy
+pipeline in `deploy-workers.yml` is untouched).
+
+**Static gate** — on every PR, per root, without any Cloudflare or HCP
+credentials (analogous to typecheck):
 
 ```sh
 terraform -chdir=terraform/<env> fmt -check
@@ -64,12 +67,16 @@ terraform -chdir=terraform/<env> init -backend=false
 terraform -chdir=terraform/<env> validate
 ```
 
-The no-apply plan gate (`terraform plan -input=false` asserting **zero
-destroys of D1 databases**) additionally needs an initialized remote
-backend — `TF_TOKEN` (HCP Terraform) plus `CLOUDFLARE_API_TOKEN` and the
-root's `terraform.tfvars` — because a declared remote backend makes
-offline/local plans impossible. With those available, the gate plans
-against real remote state; without them it is a credential-gated step.
+**No-apply plan gate** — one job per environment (`plan-gate-staging`,
+`plan-gate-production`), on push to `main` or manual dispatch. It plans
+with `-input=false` against real HCP remote state and fails on any destroy
+of a D1 database; it never applies. It is credential-gated by construction
+(a declared remote backend cannot be planned offline) and skips loudly with
+a `::notice::` when the prerequisites are absent. Human prerequisites:
+
+- GitHub secrets (per environment, as the deploy pipeline uses): `CLOUDFLARE_API_TOKEN` (existing) and `TF_TOKEN` (new, HCP Terraform)
+- GitHub variables: `HCP_ORGANIZATION` (repo-level), `STAGING_PROVIDER_DB_NAME` (environment `staging`), `PRODUCTION_PROVIDER_DB_NAME` (environment `production`)
+- the one-time cutover from the previous section (`init` + `import` + zero-destroy `plan` + `apply`)
 
 ## Local development
 

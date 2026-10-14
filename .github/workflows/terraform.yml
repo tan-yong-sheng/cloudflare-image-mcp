@@ -1,0 +1,176 @@
+name: Terraform Gates
+
+# TF1 (#84): per-environment Terraform gates for the two live D1 databases.
+#
+# static-gate — fmt + init -backend=false + validate for each root. Runs on
+# every PR without any Cloudflare or HCP credentials; the static analogue of
+# typecheck. No paths filter by design (same rationale as pr-checks.yml):
+# a required status check that skips stays pending forever.
+#
+# plan-gate-<env> — no-apply plan asserting zero destroys of the D1
+# databases, against real HCP remote state. Inherently credential-gated
+# (a declared remote backend cannot be planned offline), so it only runs on
+# push-to-main / dispatch, and skips loudly when the credentials or
+# variables below are absent. Nothing in this workflow ever applies.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned like the provider: an unpinned "latest" would make the gate
+  # non-reproducible.
+  TERRAFORM_VERSION: "1.9.5"
+
+jobs:
+  static-gate:
+    name: Static gate (fmt + validate, no credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      # Per-environment isolation lives in the config: one root, one remote
+      # state workspace, and this loop touches only that root. No shared
+      # state, no single value addresses both stores.
+      - name: Static gate per environment root
+        run: |
+          set -eu
+          for root in terraform/staging terraform/production; do
+            terraform -chdir="$root" fmt -check
+            terraform -chdir="$root" init -backend=false -no-color
+            terraform -chdir="$root" validate -no-color
+          done
+
+  plan-gate-staging:
+    name: No-apply plan gate (staging, zero-destroy)
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      ENV_ROOT: terraform/staging
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_TOKEN: ${{ secrets.TF_TOKEN }}
+      HCP_ORGANIZATION: ${{ vars.HCP_ORGANIZATION }}
+      PROVIDER_DB_NAME: ${{ vars.STAGING_PROVIDER_DB_NAME }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      # Credential-gated by construction: without TF_TOKEN +
+      # CLOUDFLARE_API_TOKEN + the two variables there is nothing to plan
+      # against, and a declared remote backend cannot be planned offline.
+      # Skip loudly — a silent green would fake the zero-destroy evidence.
+      - name: Zero-destroy plan
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$TF_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$HCP_ORGANIZATION" ] || [ -z "$PROVIDER_DB_NAME" ]; then
+            echo "::notice::plan gate (staging) skipped: credential-gated. Needs secrets CLOUDFLARE_API_TOKEN + TF_TOKEN and vars HCP_ORGANIZATION + STAGING_PROVIDER_DB_NAME (docs/TERRAFORM.md)."
+            exit 0
+          fi
+          cat > "$ENV_ROOT/terraform.tfvars" <<EOF
+          cloudflare_account_id = "$CLOUDFLARE_ACCOUNT_ID"
+          provider_db_name      = "$PROVIDER_DB_NAME"
+          hcp_organization      = "$HCP_ORGANIZATION"
+          EOF
+          terraform -chdir="$ENV_ROOT" init -no-color
+          terraform -chdir="$ENV_ROOT" plan -input=false -no-color -out=tfplan
+          terraform -chdir="$ENV_ROOT" show -json tfplan > plan.json
+          python3 - <<'PY'
+          import json
+          plan = json.load(open("plan.json"))
+          changes = plan.get("resource_changes", [])
+          destroys = [
+              c["address"]
+              for c in changes
+              if "delete" in c.get("changes", {}).get("actions", [])
+          ]
+          if destroys:
+              raise SystemExit(
+                  "zero-destroy gate FAILED — plan would destroy: " + ", ".join(destroys)
+              )
+          print(f"zero-destroy gate passed: {len(changes)} planned change(s), 0 destroys")
+          PY
+          rm -f plan.json "$ENV_ROOT/tfplan" "$ENV_ROOT/terraform.tfvars"
+
+  plan-gate-production:
+    name: No-apply plan gate (production, zero-destroy)
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      ENV_ROOT: terraform/production
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_TOKEN: ${{ secrets.TF_TOKEN }}
+      HCP_ORGANIZATION: ${{ vars.HCP_ORGANIZATION }}
+      PROVIDER_DB_NAME: ${{ vars.PRODUCTION_PROVIDER_DB_NAME }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Zero-destroy plan
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$TF_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$HCP_ORGANIZATION" ] || [ -z "$PROVIDER_DB_NAME" ]; then
+            echo "::notice::plan gate (production) skipped: credential-gated. Needs secrets CLOUDFLARE_API_TOKEN + TF_TOKEN and vars HCP_ORGANIZATION + PRODUCTION_PROVIDER_DB_NAME (docs/TERRAFORM.md)."
+            exit 0
+          fi
+          cat > "$ENV_ROOT/terraform.tfvars" <<EOF
+          cloudflare_account_id = "$CLOUDFLARE_ACCOUNT_ID"
+          provider_db_name      = "$PROVIDER_DB_NAME"
+          hcp_organization      = "$HCP_ORGANIZATION"
+          EOF
+          terraform -chdir="$ENV_ROOT" init -no-color
+          terraform -chdir="$ENV_ROOT" plan -input=false -no-color -out=tfplan
+          terraform -chdir="$ENV_ROOT" show -json tfplan > plan.json
+          python3 - <<'PY'
+          import json
+          plan = json.load(open("plan.json"))
+          changes = plan.get("resource_changes", [])
+          destroys = [
+              c["address"]
+              for c in changes
+              if "delete" in c.get("changes", {}).get("actions", [])
+          ]
+          if destroys:
+              raise SystemExit(
+                  "zero-destroy gate FAILED — plan would destroy: " + ", ".join(destroys)
+              )
+          print(f"zero-destroy gate passed: {len(changes)} planned change(s), 0 destroys")
+          PY
+          rm -f plan.json "$ENV_ROOT/tfplan" "$ENV_ROOT/terraform.tfvars"
