@@ -2,10 +2,13 @@
 // ============================================================================
 // One-shot AI_ACCOUNTS import - legacy blob into D1 (R1b, #72, option A)
 // ============================================================================
-// Operator-run, once per environment. Reads the legacy JSON blob from stdin,
+// One-shot, once per environment. Reads the legacy JSON blob from stdin,
 // seals each token with PROVIDER_DATA_KEY, and writes envelope-encrypted SQL
-// to stdout. Never touches D1 or the network; the operator verifies the SQL
-// and pipes it to wrangler themselves:
+// to stdout. Never touches D1 or the network. Normally run by CI: the deploy
+// workflow's opt-in import_credentials input feeds it the AI_ACCOUNTS secret
+// and pushes the same key to the Worker in the same job, so the blob never
+// lands on a local disk. The manual path still serves local environments —
+// the operator verifies the SQL and pipes it to wrangler themselves:
 //
 //   echo "$AI_ACCOUNTS" | PROVIDER_DATA_KEY=<key> \
 //     node scripts/import-ai-accounts.mjs > /tmp/import.sql

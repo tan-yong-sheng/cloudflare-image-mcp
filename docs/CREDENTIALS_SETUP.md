@@ -70,7 +70,27 @@ over `AI_ACCOUNTS` whenever rows exist. `AI_ACCOUNTS` keeps working as a
 fallback with a deprecation warning, so there is **no flag day** — import at
 your own pace, then unset the blob in a later deploy.
 
-One-time steps, per environment (staging first):
+**Preferred path — import from CI.** `AI_ACCOUNTS` is a write-only GitHub
+secret: no shell can read it back, so the local steps below cannot even
+fetch it unaided. The deploy workflow carries an opt-in `import_credentials`
+input that runs the import inside CI, where the blob and the sealing key
+already live (staging first):
+
+```bash
+gh workflow run deploy-workers.yml \
+  --ref <branch being deployed> \
+  -f environment=staging -f import_credentials=true
+```
+
+(Or from the Actions tab: **Deploy to Cloudflare Workers → Run workflow →
+environment: staging → import_credentials: ✅**.) The job applies the schema
+first, seals each token with the same `PROVIDER_DATA_KEY` it pushes to the
+Worker in the same run — so the sealing and opening keys cannot drift — and
+prints the imported rows (`SELECT label, enabled`) as run-log evidence. The
+blob never touches a local disk.
+
+**Manual fallback — import from a local shell.** For environments CI cannot
+reach. One-time steps, per environment (staging first):
 
 1. **Set the data key** (once, before the Worker ever needs to open D1
    envelopes):
