@@ -18,6 +18,11 @@ on:
         options:
           - staging
           - production
+      import_credentials:
+        description: "One-shot AI_ACCOUNTS → D1 import (leave off for normal deploys; a completed import cannot be re-applied)"
+        required: false
+        default: false
+        type: boolean
 
   workflow_call:
     inputs:
@@ -200,6 +205,77 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Import AI_ACCOUNTS into D1 (opt-in)
+        # Opt-in, once per environment (R1b, #72). Envelopes are sealed with
+        # the same PROVIDER_DATA_KEY the secret-bulk step below pushes to the
+        # worker, so the sealing key and the opening key cannot drift apart.
+        # A second import fails on the UNIQUE label/version guards — import
+        # twice is an error, not a merge, so the re-run protection is the
+        # database's, not this step's.
+        if: inputs.import_credentials == true
+        working-directory: workers
+        env:
+          # Env indirection, not inline interpolation: no token value ever
+          # enters the script text, so none can reach the job log.
+          AI_ACCOUNTS_VALUE: ${{ secrets.AI_ACCOUNTS }}
+          PROVIDER_DATA_KEY_VALUE: ${{ secrets.PROVIDER_DATA_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # -e: a failed import must fail the step, never fall through to
+          # the evidence query and report success. pipefail: the blob is
+          # piped through the script, so its exit status must count.
+          set -euo pipefail
+          if [ -z "$AI_ACCOUNTS_VALUE" ]; then
+            echo "❌ ERROR: AI_ACCOUNTS secret is not set (nothing to import)"
+            exit 1
+          fi
+          if [ -z "$PROVIDER_DATA_KEY_VALUE" ]; then
+            echo "❌ ERROR: PROVIDER_DATA_KEY secret is not set (cannot seal envelopes)"
+            exit 1
+          fi
+
+          # Blob in, envelope SQL out — the script never touches the network.
+          printf '%s' "$AI_ACCOUNTS_VALUE" \
+            | PROVIDER_DATA_KEY="$PROVIDER_DATA_KEY_VALUE" \
+              node ../scripts/import-ai-accounts.mjs > /tmp/import.sql
+
+          # The script exits 0 with only comments when no entry has both
+          # account_id and api_token; an import that writes nothing must not
+          # pass as a completed one.
+          if ! grep -q "INSERT INTO provider_keys" /tmp/import.sql; then
+            echo "❌ ERROR: import produced no credential rows (AI_ACCOUNTS has no usable entries)"
+            exit 1
+          fi
+
+          # Last gate before the SQL reaches D1: the file must carry
+          # envelopes only, so no blob token value may appear in it.
+          printf '%s' "$AI_ACCOUNTS_VALUE" | node -e '
+            const fs = require("node:fs");
+            let s = "";
+            process.stdin.on("data", (d) => (s += d));
+            process.stdin.on("end", () => {
+              const tokens = JSON.parse(s)
+                .map((a) => a && a.api_token)
+                .filter(Boolean);
+              const sql = fs.readFileSync("/tmp/import.sql", "utf8");
+              const leaked = tokens.filter((t) => sql.includes(t));
+              if (leaked.length > 0) {
+                console.error("❌ ERROR: import SQL contains plaintext token material — aborting before the D1 write");
+                process.exit(1);
+              }
+              console.log("✅ Import SQL is envelope-only (no plaintext tokens)");
+            });
+          '
+
+          # Schema was applied above; now apply the envelopes.
+          npx wrangler d1 execute PROVIDER_DB --remote --file /tmp/import.sql
+          rm -f /tmp/import.sql
+
+          # Import evidence for the run log: labels and enabled flags only.
+          npx wrangler d1 execute PROVIDER_DB --remote \
+            --command "SELECT label, enabled FROM provider_keys"
+
       - name: Deploy to Cloudflare Workers
         # Direct wrangler invocation (no third-party action on the deploy
         # path): same credentials the secret-put steps below already use.
@@ -312,6 +388,7 @@ jobs:
           echo "- CLOUDFLARE_ACCOUNT_ID: ✅ Configured (role: Cloudflare account for deploy + fallback AI inference)" >> $GITHUB_STEP_SUMMARY
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured (role: endpoint auth — MCP + OpenAI + frontend)' || '❌ Missing (role: endpoint auth — endpoints are public)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (role: AI inference — multi-account)' || 'ℹ️ Not set (role: AI inference — falls back to deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- AI_ACCOUNTS → D1 import: ${{ inputs.import_credentials == true && '✅ Ran this deploy (envelopes applied; row evidence above)' || 'ℹ️ Not run (opt-in via the import_credentials workflow_dispatch input)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- D1 provider store: binding PROVIDER_DB (role: provider schema/migrations applied before deploy; no app reads yet — R1a)" >> $GITHUB_STEP_SUMMARY
           echo "- PROVIDER_DATA_KEY: ${{ secrets.PROVIDER_DATA_KEY != '' && '✅ Configured (role: AES-GCM envelope data key — consumed from R1b)' || 'ℹ️ Not set (role: AES-GCM envelope data key — needed before R1b reads D1)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- TZ: ${{ secrets.TZ != '' && '✅ Configured (role: runtime logging timezone)' || 'ℹ️ Not set (role: runtime logging timezone — defaults to UTC)' }}" >> $GITHUB_STEP_SUMMARY

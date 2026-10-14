@@ -77,6 +77,15 @@ describe("one-shot import script (E)", () => {
     expect(sql).toMatch(/-- no AI_ACCOUNTS entries/i);
   });
 
+  test("emitted SQL carries no explicit transaction wrapper", async () => {
+    // The wrapper would break every documented apply command: wrangler's
+    // local path forbids explicit transactions (workerd SQL API) and the
+    // remote D1 import endpoint rejects them, while a failed import
+    // already leaves the database at its original state.
+    const sql = await importBlob([{ account_id: "acc-1", api_token: "tok-1" }]);
+    expect(sql).not.toMatch(/^\s*(BEGIN|COMMIT)\b/im);
+  });
+
   test("malformed blob fails loudly without emitting SQL", async () => {
     await expect(
       runScript("not-json{", { ...process.env, PROVIDER_DATA_KEY: DATA_KEY })

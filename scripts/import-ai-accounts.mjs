@@ -15,6 +15,12 @@
 // Rollback is "empty the tables / Time Travel" per #72. Re-running against
 // an already-imported database fails on the UNIQUE label/version guards
 // rather than duplicating rows — import twice is an error, not a merge.
+//
+// The emitted SQL carries no BEGIN/COMMIT wrapper on purpose: the local
+// wrangler execute path forbids explicit transactions (workerd SQL API) and
+// the remote D1 import endpoint rejects them, while a failed import already
+// leaves the database at its original state — the wrapper buys nothing on
+// either path.
 
 // NOTE: the AES-GCM codec below is intentionally self-contained rather than
 // imported from workers/src/services/provider-crypto.ts: plain node cannot
@@ -91,7 +97,6 @@ async function main() {
     "-- One-shot AI_ACCOUNTS import (R1b). Verify, then apply with:",
     "--   wrangler d1 execute <db> --remote --file <this file>",
     "-- Envelopes sealed with PROVIDER_DATA_KEY; tokens never appear below.",
-    "BEGIN;",
   ];
   for (let i = 0; i < entries.length; i++) {
     const { account_id, api_token } = entries[i];
@@ -104,7 +109,6 @@ async function main() {
       `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES ((SELECT id FROM provider_keys WHERE label = ${quote(label)}), 1, ${quote(envelope)}, 'one-shot-import');`
     );
   }
-  out.push("COMMIT;");
   console.log(out.join("\n"));
 }
 
