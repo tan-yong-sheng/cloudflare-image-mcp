@@ -77,6 +77,15 @@ describe("one-shot import script (E)", () => {
     expect(sql).toMatch(/-- no AI_ACCOUNTS entries/i);
   });
 
+  test("emitted SQL bumps config_versions so warm isolates reload", async () => {
+    // pool-cache.ts reloads its snapshot only when the version changes;
+    // without the bump an isolate that booted before the import keeps its
+    // stale snapshot for the isolate's life.
+    const sql = await importBlob([{ account_id: "acc-1", api_token: "tok-1" }]);
+    expect(sql).toContain("UPDATE config_versions");
+    expect(sql).toContain("version = version + 1");
+  });
+
   test("emitted SQL carries no explicit transaction wrapper", async () => {
     // The wrapper would break every documented apply command: wrangler's
     // local path forbids explicit transactions (workerd SQL API) and the

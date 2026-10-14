@@ -102,11 +102,13 @@ reach. One-time steps, per environment (staging first):
 
 2. **Generate the import SQL.** Take the JSON array from your `AI_ACCOUNTS`
    secret and pipe it through the import script. The output is envelope SQL
-   only — plaintext tokens never appear in it:
+   only — plaintext tokens never appear in it. The script never prompts for
+   the key — pass it in the environment, and it must match the Worker
+   secret:
 
    ```bash
-   node scripts/import-ai-accounts.mjs < ai-accounts.json > import.sql
-   # PROVIDER_DATA_KEY must match the Worker secret (prompt or env var)
+   PROVIDER_DATA_KEY=<same value as the Worker secret> \
+     node scripts/import-ai-accounts.mjs < ai-accounts.json > import.sql
    ```
 
 3. **Review, then apply** through the D1 CLI (nothing in the Worker changes;
@@ -132,11 +134,13 @@ reach. One-time steps, per environment (staging first):
 **Rollback** — two independent options, both immediate:
 
 - **Empty the tables** (Worker falls back to `AI_ACCOUNTS` / deploy
-  credentials on the next version-poll, ≤ 5 s):
+  credentials on the next version-poll, ≤ 5 s — keep the version bump, or a
+  warm isolate keeps serving the deleted rows until its next deploy):
 
   ```sql
   DELETE FROM credential_versions;
   DELETE FROM provider_keys;
+  UPDATE config_versions SET version = version + 1, updated_at = unixepoch() WHERE id = 1;
   ```
 
 - **D1 Time Travel** restores the whole database to any point in the last 30

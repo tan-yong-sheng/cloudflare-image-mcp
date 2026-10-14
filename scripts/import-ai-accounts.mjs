@@ -100,6 +100,7 @@ async function main() {
     "-- One-shot AI_ACCOUNTS import (R1b). Verify, then apply with:",
     "--   wrangler d1 execute <db> --remote --file <this file>",
     "-- Envelopes sealed with PROVIDER_DATA_KEY; tokens never appear below.",
+    "-- Bumps config_versions so warm isolates reload the pool within one poll.",
   ];
   for (let i = 0; i < entries.length; i++) {
     const { account_id, api_token } = entries[i];
@@ -112,6 +113,15 @@ async function main() {
       `INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) VALUES ((SELECT id FROM provider_keys WHERE label = ${quote(label)}), 1, ${quote(envelope)}, 'one-shot-import');`
     );
   }
+  // The runtime reloads its cache only when this singleton row changes
+  // (pool-cache.ts: a version poll that returns the same version keeps the
+  // snapshot). Without the bump, an isolate that booted before the import
+  // keeps serving its old snapshot for the life of the isolate — the CI
+  // path hides this (the deploy restarts isolates), the manual path and the
+  // rollback story do not.
+  out.push(
+    "UPDATE config_versions SET version = version + 1, updated_at = unixepoch() WHERE id = 1;"
+  );
   console.log(out.join("\n"));
 }
 
