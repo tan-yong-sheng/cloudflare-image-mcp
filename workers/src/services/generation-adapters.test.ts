@@ -205,3 +205,33 @@ describe("pool-driven weighted selection + cooldown", () => {
     }
   });
 });
+
+// AC5-response fix (#72): operational errors travel verbatim into the
+// service envelope (pinned byte-identical by contract tests), so a token
+// echoed by an upstream body must die inside the transport — the only
+// module holding the secrets. Shape is unchanged when no secret embeds.
+describe("transport error scrubbing", () => {
+  test("an upstream body echoing the token is redacted, shape intact", async () => {
+    const transport = new RestAITransport(
+      [{ account_id: "heavy-acc", api_token: "t-heavy" }],
+      "AI_ACCOUNTS"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(textResponse("upstream says t-heavy for heavy-acc"))
+    );
+
+    const failure = await transport
+      .run(JSON_MODEL.id, { prompt: "a cat" }, JSON_MODEL)
+      .catch((e) => e);
+    expect(failure).toBeInstanceOf(Error);
+    const message = (failure as Error).message;
+    expect(message).toContain("Cloudflare AI API error (500)");
+    expect(message).toContain("AI_ACCOUNTS[0]");
+    expect(message).not.toContain("t-heavy");
+    expect(message).not.toContain("heavy-acc");
+    expect(message).toContain("[redacted]");
+  });
+});

@@ -153,6 +153,28 @@ export class RestAITransport implements AITransport {
     throw lastError ?? new Error("provider pool: no servable credential");
   }
 
+  /**
+   * Strip credential values this transport was constructed with from
+   * upstream text before it enters an Error: operational failures travel
+   * verbatim into the service envelope (and from there into endpoint
+   * responses and logs), so a token echoed by an upstream body must die
+   * here. Shape is unchanged when no secret is embedded (pinned by
+   * contract tests). Empty values are skipped — splitting on "" would
+   * shred the string.
+   */
+  private scrubSecrets(text: string): string {
+    let out = text;
+    for (const account of this.aiAccounts) {
+      if (account.api_token) {
+        out = out.split(account.api_token).join("[redacted]");
+      }
+      if (account.account_id) {
+        out = out.split(account.account_id).join("[redacted]");
+      }
+    }
+    return out;
+  }
+
   private async runWithAccount(
     url: string,
     account: AIAccount,
@@ -218,7 +240,7 @@ export class RestAITransport implements AITransport {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${errorText}`
+        `Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${this.scrubSecrets(errorText)}`
       );
     }
 
@@ -236,7 +258,7 @@ export class RestAITransport implements AITransport {
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `Cloudflare AI API returned unparseable JSON [credential: ${credentialTag}]: ${detail}`
+          `Cloudflare AI API returned unparseable JSON [credential: ${credentialTag}]: ${this.scrubSecrets(detail)}`
         );
       }
       // Cloudflare REST API wraps result in { result: ... }
