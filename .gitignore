@@ -33,4 +33,13 @@ workers/.wrangler
 # Docker
 *.log
 
+# Terraform (TF1): local plugin cache, state files, local tfvars, plan output.
+# Remote state lives in HCP Terraform workspaces, never in the repo.
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/*.tfplan
+terraform/**/tfplan
+terraform/**/terraform.tfvars
+
 

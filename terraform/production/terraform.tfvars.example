@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and fill real values:
+#
+#   cloudflare_account_id — Cloudflare dashboard → right sidebar on any domain
+#   provider_db_name      — live production D1 database name (dashboard / wrangler d1 list)
+#   hcp_organization      — HCP Terraform organization hosting state
+#
+# The one-time import command also needs the database UUID
+# (dashboard D1 page or `wrangler d1 list`); it is not a tfvars entry.
+# See docs/TERRAFORM.md.
+
+cloudflare_account_id = ""
+provider_db_name      = ""
+hcp_organization      = ""
