@@ -387,6 +387,57 @@ describe("admin store against the real migrations (S2)", () => {
       updateProviderKey(d1, seal, { keyId: added.id })
     ).rejects.toMatchObject({ status: 400 });
   });
+
+  test("update rejects an oversized token before sealing", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "oversize",
+      apiToken: "token-v1",
+      externalAccountId: "acct-1",
+    });
+    const before = versionOf(db);
+    await expect(
+      updateProviderKey(d1, seal, {
+        keyId: added.id,
+        apiToken: "x".repeat(4097),
+      })
+    ).rejects.toMatchObject({ status: 400, message: "apiToken is too long" });
+    expect(versionOf(db)).toBe(before);
+  });
+
+  test("update writes only supplied fields, leaving omitted columns untouched", async () => {
+    const db = freshDb();
+    const base = asD1(db);
+    const statements: string[] = [];
+    const recording: AdminD1 = {
+      ...base,
+      commit: (writes) => {
+        for (const w of writes) statements.push(w.sql);
+        return base.commit(writes);
+      },
+    };
+    const added = await addProviderKey(base, seal, {
+      providerId: "cloudflare",
+      label: "partial",
+      apiToken: "token-v1",
+      externalAccountId: "acct-1",
+    });
+    await updateProviderKey(recording, seal, {
+      keyId: added.id,
+      enabled: false,
+    });
+    expect(
+      statements.filter((s) => s.startsWith("UPDATE provider_keys"))
+    ).toEqual(["UPDATE provider_keys SET enabled = ? WHERE id = ?"]);
+    const row = db
+      .prepare(
+        "SELECT external_account_id, weight FROM provider_keys WHERE id = ?"
+      )
+      .get(added.id) as { external_account_id: string; weight: number };
+    expect(row).toEqual({ external_account_id: "acct-1", weight: 1 });
+  });
 });
 
 describe("admin health exposure rows (S2)", () => {

@@ -539,6 +539,7 @@ export async function updateProviderKey(
       ? input.enabled === true
       : num(key.enabled) === 1;
   const token = typeof input.apiToken === "string" ? input.apiToken : "";
+  if (token.length > 0) assertTokenLength(token);
   if (
     input.weight === undefined &&
     input.enabled === undefined &&
@@ -548,15 +549,34 @@ export async function updateProviderKey(
     throw new AdminStoreError(400, "no fields to update");
   }
 
-  const writes: AdminWrite[] = [
-    write(
-      "UPDATE provider_keys SET external_account_id = ?, weight = ?, enabled = ? WHERE id = ?",
-      storedAccountId,
-      weight,
-      enabled ? 1 : 0,
-      input.keyId
-    ),
-  ];
+  const writes: AdminWrite[] = [];
+  if (input.externalAccountId !== undefined) {
+    writes.push(
+      write(
+        "UPDATE provider_keys SET external_account_id = ? WHERE id = ?",
+        storedAccountId,
+        input.keyId
+      )
+    );
+  }
+  if (input.weight !== undefined) {
+    writes.push(
+      write(
+        "UPDATE provider_keys SET weight = ? WHERE id = ?",
+        weight,
+        input.keyId
+      )
+    );
+  }
+  if (input.enabled !== undefined) {
+    writes.push(
+      write(
+        "UPDATE provider_keys SET enabled = ? WHERE id = ?",
+        enabled ? 1 : 0,
+        input.keyId
+      )
+    );
+  }
 
   let activeVersion: number | null;
   const current = await db
