@@ -182,6 +182,17 @@ export function getFrontendHTML(): string {
 
         .hidden { display: none !important; }
 
+        /* Provider credentials workbench (variant A, #91) */
+        .chip { font-size: .72rem; padding: .15rem .55rem; border-radius: 9999px; border: 1px solid var(--border); }
+        .chip-ok { background: rgba(16,185,129,.15); border-color: var(--success); color: var(--success); }
+        .tswitch { position: relative; display: inline-block; width: 34px; height: 19px; flex: none; cursor: pointer; }
+        .tswitch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+        .tswitch .track { position: absolute; inset: 0; border-radius: 9999px; background: var(--secondary); border: 1px solid var(--border); transition: background .2s, border-color .2s; }
+        .tswitch .thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 9999px; background: var(--text-light); transition: left .2s, background .2s; }
+        .tswitch input:checked + .track { background: rgba(16,185,129,.35); border-color: var(--success); }
+        .tswitch input:checked + .track .thumb { left: 17px; background: var(--success); }
+        .tswitch input:focus-visible + .track { outline: 2px solid var(--primary); outline-offset: 2px; }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: .5; }
@@ -222,12 +233,105 @@ export function getFrontendHTML(): string {
         </div>
     </div>
 
+    <!-- Provider Credentials Workbench (variant A, #91) -->
+    <div id="adminWorkbench" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="adminWorkbenchTitle">
+        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-gray-700 pb-3 mb-4">
+                <h2 id="adminWorkbenchTitle" class="text-xl font-bold flex items-center">
+                    <i class="fa-solid fa-server mr-2 text-primary"></i>AI Providers
+                </h2>
+                <button id="adminWorkbenchClose" class="btn btn-secondary p-1 h-8 w-8 flex items-center justify-center rounded" aria-label="Close provider credentials">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="mb-4 space-y-2">
+                <label for="adminKey" class="block text-sm font-medium mb-1">Management key</label>
+                <div class="flex gap-2">
+                    <input type="password" id="adminKey" class="w-full" placeholder="Management key (never stored)" autocomplete="off">
+                    <button id="adminUnlock" class="btn btn-secondary text-sm py-1 px-3 whitespace-nowrap">Unlock</button>
+                    <button id="adminLock" class="btn btn-secondary text-sm py-1 px-3 whitespace-nowrap hidden">Lock</button>
+                </div>
+                <p id="adminError" class="text-sm text-red-500 hidden" role="alert"></p>
+                <p id="adminNotice" class="text-sm hidden" role="status"></p>
+            </div>
+
+            <div id="adminPanel" class="hidden space-y-4">
+                <div class="flex gap-2">
+                    <span id="adminChipsActive" class="chip chip-ok"></span>
+                    <span id="adminChipsFamilies" class="chip"></span>
+                </div>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <aside id="adminRail" class="card p-2 md:w-56 space-y-1" aria-label="Provider families"></aside>
+                    <section class="card p-4 flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 id="adminFamilyName" class="font-semibold flex items-center"></h3>
+                            <button id="adminAddKey" class="btn btn-primary text-sm py-1 px-3">
+                                <i class="fa-solid fa-plus mr-1"></i>New key
+                            </button>
+                        </div>
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left opacity-60">
+                                    <th class="p-2 font-medium">Key</th>
+                                    <th class="p-2 font-medium">Account ID</th>
+                                    <th class="p-2 font-medium"><span class="sr-only">Actions</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminKeys"></tbody>
+                        </table>
+                        <p id="adminEmpty" class="text-sm opacity-60 text-center py-6 hidden">No keys yet.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workbench add/edit sheet (right-docked, #91) -->
+    <div id="adminSheet" class="fixed inset-0 flex items-stretch justify-end z-50 hidden" style="background:rgba(0,0,0,.55)" role="dialog" aria-modal="true" aria-labelledby="adminSheetTitle">
+        <div class="card p-6 w-full flex flex-col" style="max-width:30rem;height:100%;overflow-y:auto;border-radius:0;border-top:0;border-right:0;border-bottom:0">
+            <p id="adminSheetEyebrow" class="text-xs opacity-60 font-mono mb-1"></p>
+            <h3 id="adminSheetTitle" class="text-lg font-bold mb-1"></h3>
+            <p id="adminSheetNote" class="text-xs opacity-60 mb-3"></p>
+            <div class="space-y-3 flex-1">
+                <div>
+                    <label for="adminSheetAcct" class="block text-xs opacity-60 mb-1">Cloudflare account ID</label>
+                    <input id="adminSheetAcct" class="w-full" placeholder="e.g. abc123def456" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    <p class="text-xs opacity-60 mt-1">Required — inference calls <code>/accounts/{account_id}/ai/run/…</code>. Stored alongside the key (not sealed).</p>
+                </div>
+                <div>
+                    <label for="adminSheetToken" class="block text-xs opacity-60 mb-1">API token <span id="adminSheetTokenHint" class="opacity-60"></span></label>
+                    <div class="flex gap-2">
+                        <input type="password" id="adminSheetToken" class="w-full" autocomplete="new-password" data-1p-ignore="true" placeholder="">
+                        <button id="adminSheetTokenEye" class="btn btn-secondary p-2" aria-label="Show token" title="Show token"><i class="fa-solid fa-eye"></i></button>
+                    </div>
+                </div>
+                <div class="flex gap-3 items-end">
+                    <div class="flex-1">
+                        <label for="adminSheetWeight" class="block text-xs opacity-60 mb-1">Scheduling weight</label>
+                        <input type="number" id="adminSheetWeight" class="w-full" min="0" max="1000000" step="1" placeholder="1">
+                    </div>
+                    <label class="flex gap-2 items-center text-xs pb-2"><input type="checkbox" id="adminSheetEnabled" style="width:auto"> Enabled <span class="opacity-60">— uncheck to park the key</span></label>
+                </div>
+                <p class="text-xs opacity-60">Default 1 · ≤ 0 is excluded · maximum 1,000,000.</p>
+                <p id="adminSheetError" class="text-sm text-red-500 hidden" role="alert"></p>
+            </div>
+            <div class="flex gap-2 mt-4 justify-end">
+                <button id="adminSheetCancel" class="btn btn-secondary text-sm py-1 px-3">Cancel</button>
+                <button id="adminSheetSave" class="btn btn-primary text-sm py-1 px-3">Add key</button>
+            </div>
+        </div>
+    </div>
+
     <div class="container mx-auto px-4 py-4 max-w-6xl">
         <div class="flex items-center justify-between mb-6">
             <h1 class="text-2xl md:text-3xl font-bold flex items-center">
                 <i class="fa-solid fa-image mr-2"></i>AI Image Generator
             </h1>
             <div class="flex items-center space-x-2">
+                <button id="adminWorkbenchButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Manage provider credentials">
+                    <i class="fa-solid fa-key mr-2"></i>Admin
+                </button>
                 <button id="logoutButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Logout">
                     <i class="fa-solid fa-sign-out-alt mr-2"></i>Logout
                 </button>
@@ -404,6 +508,7 @@ export function getFrontendHTML(): string {
                 loginModal.classList.remove('hidden');
                 logoutButton.classList.add('hidden');
             }
+            window.dispatchEvent(new CustomEvent('awb-authchange', { detail: { authed: !!authToken } }));
         }
 
         // Login handler
@@ -827,6 +932,414 @@ export function getFrontendHTML(): string {
                 showGenerateError('Download failed: ' + (error instanceof Error ? error.message : String(error)));
             }
         });
+        // Provider credentials workbench (variant A, #91)
+        (function () {
+            const button = document.getElementById('adminWorkbenchButton');
+            const modal = document.getElementById('adminWorkbench');
+            const closeBtn = document.getElementById('adminWorkbenchClose');
+            const keyInput = document.getElementById('adminKey');
+            const unlockBtn = document.getElementById('adminUnlock');
+            const lockBtn = document.getElementById('adminLock');
+            const errorLine = document.getElementById('adminError');
+            const noticeLine = document.getElementById('adminNotice');
+            const panel = document.getElementById('adminPanel');
+            const rail = document.getElementById('adminRail');
+            const familyName = document.getElementById('adminFamilyName');
+            const keysBody = document.getElementById('adminKeys');
+            const emptyLine = document.getElementById('adminEmpty');
+            const addKeyBtn = document.getElementById('adminAddKey');
+            const chipsActive = document.getElementById('adminChipsActive');
+            const chipsFamilies = document.getElementById('adminChipsFamilies');
+            const sheet = document.getElementById('adminSheet');
+            const sheetEyebrow = document.getElementById('adminSheetEyebrow');
+            const sheetTitle = document.getElementById('adminSheetTitle');
+            const sheetNote = document.getElementById('adminSheetNote');
+            const sheetAcct = document.getElementById('adminSheetAcct');
+            const sheetToken = document.getElementById('adminSheetToken');
+            const sheetTokenHint = document.getElementById('adminSheetTokenHint');
+            const sheetTokenEye = document.getElementById('adminSheetTokenEye');
+            const sheetWeight = document.getElementById('adminSheetWeight');
+            const sheetEnabled = document.getElementById('adminSheetEnabled');
+            const sheetError = document.getElementById('adminSheetError');
+            const sheetCancel = document.getElementById('adminSheetCancel');
+            const sheetSave = document.getElementById('adminSheetSave');
+
+            // The management key lives in memory only: never persisted,
+            // never logged. Cleared on lock, modal close, and logout.
+            let adminKey = '';
+            let selected = '';
+            let sheetKeyId = null;
+            let lastHealth = null;
+
+            function showError(el, message) { el.textContent = message; el.classList.remove('hidden'); }
+            function hideError(el) { el.textContent = ''; el.classList.add('hidden'); }
+            function showNotice(message) {
+                noticeLine.textContent = message;
+                noticeLine.classList.remove('hidden');
+                setTimeout(() => { noticeLine.textContent = ''; noticeLine.classList.add('hidden'); }, 4000);
+            }
+
+            function headers() {
+                const h = { 'Content-Type': 'application/json' };
+                if (authToken) h['Authorization'] = 'Bearer ' + authToken;
+                if (adminKey) h['X-Admin-Key'] = adminKey;
+                return h;
+            }
+
+            async function api(method, path, body) {
+                const response = await fetch(path, {
+                    method: method,
+                    headers: headers(),
+                    body: body === undefined ? undefined : JSON.stringify(body)
+                });
+                const text = await response.text();
+                let data = null;
+                try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
+                return { ok: response.ok, status: response.status, data: data };
+            }
+
+            function errorMessage(res) {
+                const message = res.data && res.data.error && typeof res.data.error.message === 'string' ? res.data.error.message : '';
+                return message || ('Request failed (' + res.status + ')');
+            }
+
+            function lock() {
+                adminKey = '';
+                keyInput.value = '';
+                unlockBtn.classList.remove('hidden');
+                lockBtn.classList.add('hidden');
+                panel.classList.add('hidden');
+                closeSheet();
+                hideError(errorLine);
+            }
+
+            function openModal() {
+                modal.classList.remove('hidden');
+                hideError(errorLine);
+                if (adminKey) loadHealth();
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+                lock();
+            }
+
+            async function loadHealth() {
+                const res = await api('GET', '/api/admin/health');
+                if (!res.ok) {
+                    if (res.status === 403) {
+                        lock();
+                        showError(errorLine, 'Management key rejected.');
+                        return;
+                    }
+                    showError(errorLine, errorMessage(res));
+                    return;
+                }
+                if (!res.data || !Array.isArray(res.data.keys) || !Array.isArray(res.data.providers)) {
+                    showError(errorLine, 'Unexpected health response.');
+                    return;
+                }
+                hideError(errorLine);
+                render(res.data);
+            }
+
+            function render(health) {
+                lastHealth = health;
+                const providers = health.providers;
+                const keys = health.keys;
+                if (!selected || !providers.some((p) => p.id === selected)) {
+                    selected = providers.length ? providers[0].id : '';
+                }
+                chipsActive.textContent = keys.filter((k) => k.enabled).length + '/' + keys.length + ' active keys';
+                chipsFamilies.textContent = providers.length + (providers.length === 1 ? ' provider family' : ' provider families');
+                renderRail(providers, keys);
+                renderTable(providers, keys);
+            }
+
+            function renderRail(providers, keys) {
+                rail.textContent = '';
+                providers.forEach((p) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'w-full text-left p-2 rounded border';
+                    const active = p.id === selected;
+                    item.style.borderColor = active ? 'var(--primary)' : 'transparent';
+                    item.style.backgroundColor = active ? 'rgba(80,70,229,.08)' : '';
+                    item.setAttribute('aria-pressed', String(active));
+                    item.addEventListener('click', () => {
+                        selected = p.id;
+                        renderRail(lastHealth.providers, lastHealth.keys);
+                        renderTable(lastHealth.providers, lastHealth.keys);
+                    });
+                    const title = document.createElement('div');
+                    title.className = 'flex items-center text-sm font-medium';
+                    if (p.id === 'cloudflare') {
+                        const icon = document.createElement('i');
+                        icon.className = 'fa-brands fa-cloudflare mr-2';
+                        icon.setAttribute('aria-hidden', 'true');
+                        title.appendChild(icon);
+                    }
+                    title.appendChild(document.createTextNode(p.displayName || p.id));
+                    const familyKeys = keys.filter((k) => k.providerId === p.id);
+                    const meta = document.createElement('div');
+                    meta.className = 'text-xs opacity-60 mt-1';
+                    meta.textContent = familyKeys.filter((k) => k.enabled).length + '/' + familyKeys.length + ' active';
+                    item.appendChild(title);
+                    item.appendChild(meta);
+                    rail.appendChild(item);
+                });
+            }
+
+            function keyToggle(k) {
+                const toggle = document.createElement('label');
+                toggle.className = 'tswitch';
+                toggle.title = (k.enabled ? 'Disable ' : 'Enable ') + k.label;
+                const box = document.createElement('input');
+                box.type = 'checkbox';
+                box.setAttribute('role', 'switch');
+                box.setAttribute('aria-checked', String(k.enabled));
+                box.setAttribute('aria-label', (k.enabled ? 'Disable ' : 'Enable ') + k.label);
+                box.checked = k.enabled;
+                box.addEventListener('change', async () => {
+                    const res = await api('PATCH', '/api/admin/keys/' + k.id, { enabled: box.checked });
+                    if (!res.ok) {
+                        showError(errorLine, errorMessage(res));
+                        box.checked = k.enabled;
+                        return;
+                    }
+                    showNotice(k.label + (box.checked ? ' enabled' : ' parked'));
+                    loadHealth();
+                });
+                const track = document.createElement('span');
+                track.className = 'track';
+                const thumb = document.createElement('span');
+                thumb.className = 'thumb';
+                track.appendChild(thumb);
+                toggle.appendChild(box);
+                toggle.appendChild(track);
+                return toggle;
+            }
+
+            function editButton(k) {
+                const edit = document.createElement('button');
+                edit.type = 'button';
+                edit.className = 'btn btn-secondary text-xs py-1 px-2';
+                edit.setAttribute('aria-label', 'Edit ' + k.label);
+                edit.title = 'Edit ' + k.label;
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-pen';
+                edit.appendChild(icon);
+                edit.addEventListener('click', () => openSheet('edit', k));
+                return edit;
+            }
+
+            function renderTable(providers, keys) {
+                const family = providers.find((p) => p.id === selected);
+                familyName.textContent = '';
+                if (family) {
+                    if (family.id === 'cloudflare') {
+                        const icon = document.createElement('i');
+                        icon.className = 'fa-brands fa-cloudflare mr-2';
+                        icon.setAttribute('aria-hidden', 'true');
+                        familyName.appendChild(icon);
+                    }
+                    familyName.appendChild(document.createTextNode(family.displayName || family.id));
+                }
+                const rows = keys.filter((k) => k.providerId === selected);
+                keysBody.textContent = '';
+                rows.forEach((k) => {
+                    const tr = document.createElement('tr');
+                    if (!k.enabled) tr.style.opacity = '.55';
+
+                    const keyCell = document.createElement('td');
+                    keyCell.className = 'p-2';
+                    const label = document.createElement('span');
+                    label.className = 'font-medium';
+                    label.textContent = k.label;
+                    keyCell.appendChild(label);
+                    if (k.activeVersion !== null && k.activeVersion !== undefined) {
+                        const ver = document.createElement('span');
+                        ver.className = 'opacity-60 text-xs ml-1';
+                        ver.textContent = 'v' + k.activeVersion;
+                        keyCell.appendChild(ver);
+                    }
+
+                    const acctCell = document.createElement('td');
+                    acctCell.className = 'p-2 text-xs opacity-70';
+                    acctCell.textContent = k.externalAccountId || '—';
+
+                    const actions = document.createElement('td');
+                    actions.className = 'p-2 whitespace-nowrap';
+                    const wrap = document.createElement('span');
+                    wrap.className = 'inline-flex gap-2 items-center';
+                    wrap.appendChild(keyToggle(k));
+                    wrap.appendChild(editButton(k));
+                    actions.appendChild(wrap);
+
+                    tr.appendChild(keyCell);
+                    tr.appendChild(acctCell);
+                    tr.appendChild(actions);
+                    keysBody.appendChild(tr);
+                });
+                emptyLine.classList.toggle('hidden', rows.length > 0);
+                addKeyBtn.classList.toggle('hidden', !family);
+            }
+
+            function openSheet(mode, key) {
+                const isEdit = mode === 'edit' && !!key;
+                sheetKeyId = isEdit ? key.id : null;
+                sheetEyebrow.textContent = isEdit ? 'EDIT' : 'NEW';
+                sheetTitle.textContent = isEdit
+                    ? 'Edit key — ' + key.label + ' (' + key.providerId + (key.activeVersion !== null && key.activeVersion !== undefined ? ' · currently v' + key.activeVersion : '') + ')'
+                    : 'New key (' + selected + ')';
+                sheetNote.textContent = isEdit
+                    ? 'Leave the token blank to keep the current version. Filling it rotates as part of save.'
+                    : 'Label is auto-assigned. Keys are sealed server-side on save.';
+                sheetAcct.value = isEdit ? (key.externalAccountId || '') : '';
+                sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined ? '(blank = keep v' + key.activeVersion + ')' : '';
+                sheetToken.value = '';
+                sheetToken.type = 'password';
+                sheetTokenEye.innerHTML = '<i class="fa-solid fa-eye"></i>';
+                sheetTokenEye.setAttribute('aria-label', 'Show token');
+                sheetWeight.value = isEdit ? String(key.weight) : '1';
+                sheetEnabled.checked = isEdit ? !!key.enabled : true;
+                sheetSave.textContent = isEdit ? 'Save' : 'Add key';
+                hideError(sheetError);
+                sheet.classList.remove('hidden');
+                sheetAcct.focus();
+            }
+
+            function closeSheet() {
+                sheet.classList.add('hidden');
+                sheetKeyId = null;
+                sheetToken.value = '';
+                hideError(sheetError);
+            }
+
+            function nextLabel() {
+                const keys = lastHealth ? lastHealth.keys.filter((k) => k.providerId === selected) : [];
+                const max = keys.reduce((n, k) => {
+                    const m = /^imported-(\d+)$/.exec(k.label);
+                    return m ? Math.max(n, parseInt(m[1], 10)) : n;
+                }, 0);
+                return 'imported-' + (max + 1);
+            }
+
+            sheetSave.addEventListener('click', async () => {
+                const isEdit = sheetKeyId !== null;
+                const accountId = sheetAcct.value.trim();
+                const token = sheetToken.value.trim();
+                const weightRaw = sheetWeight.value.trim();
+                const weight = weightRaw === '' ? 1 : parseInt(weightRaw, 10);
+                if (selected === 'cloudflare' && !accountId) {
+                    showError(sheetError, 'Cloudflare account ID is required.');
+                    sheetAcct.focus();
+                    return;
+                }
+                if (!isEdit && !token) {
+                    showError(sheetError, 'API token is required.');
+                    sheetToken.focus();
+                    return;
+                }
+                if (token && token.length < 8) {
+                    showError(sheetError, isEdit
+                        ? 'Token looks too short — paste the full value, or leave blank to keep.'
+                        : 'Token looks too short — paste the full value.');
+                    sheetToken.focus();
+                    return;
+                }
+                if (!Number.isInteger(weight) || weight < 0) {
+                    showError(sheetError, 'Weight must be 0 or more.');
+                    sheetWeight.focus();
+                    return;
+                }
+                sheetSave.disabled = true;
+                try {
+                    if (isEdit) {
+                        const body = {
+                            accountId: accountId,
+                            weight: weight,
+                            enabled: sheetEnabled.checked
+                        };
+                        if (token) body.apiToken = token;
+                        const res = await api('PATCH', '/api/admin/keys/' + sheetKeyId, body);
+                        if (!res.ok) {
+                            showError(sheetError, errorMessage(res));
+                            return;
+                        }
+                        const label = res.data && res.data.label ? res.data.label : 'key';
+                        const version = res.data && res.data.activeVersion ? ' — v' + res.data.activeVersion + ' active' : '';
+                        showNotice('Saved ' + label + version);
+                        closeSheet();
+                        loadHealth();
+                    } else {
+                        const label = nextLabel();
+                        const res = await api('POST', '/api/admin/keys', {
+                            providerId: selected,
+                            label: label,
+                            apiToken: token,
+                            accountId: accountId,
+                            weight: weight,
+                            enabled: sheetEnabled.checked
+                        });
+                        if (!res.ok) {
+                            showError(sheetError, errorMessage(res));
+                            return;
+                        }
+                        showNotice(label + ' added — token sealed server-side; re-test recommended.');
+                        closeSheet();
+                        loadHealth();
+                    }
+                } catch (error) {
+                    showError(sheetError, error instanceof Error ? error.message : String(error));
+                } finally {
+                    sheetSave.disabled = false;
+                }
+            });
+
+            button.addEventListener('click', openModal);
+            closeBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+            unlockBtn.addEventListener('click', async () => {
+                const value = keyInput.value.trim();
+                if (!value) {
+                    showError(errorLine, 'Enter the management key.');
+                    return;
+                }
+                adminKey = value;
+                keyInput.value = '';
+                hideError(errorLine);
+                unlockBtn.classList.add('hidden');
+                lockBtn.classList.remove('hidden');
+                panel.classList.remove('hidden');
+                await loadHealth();
+            });
+            lockBtn.addEventListener('click', lock);
+            keyInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') unlockBtn.click(); });
+            addKeyBtn.addEventListener('click', () => openSheet('add'));
+            sheetCancel.addEventListener('click', closeSheet);
+            sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+            sheetTokenEye.addEventListener('click', () => {
+                const show = sheetToken.type === 'password';
+                sheetToken.type = show ? 'text' : 'password';
+                sheetTokenEye.innerHTML = show ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
+                const label = show ? 'Hide token' : 'Show token';
+                sheetTokenEye.setAttribute('aria-label', label);
+                sheetTokenEye.title = label;
+                sheetToken.focus();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape') return;
+                if (!sheet.classList.contains('hidden')) closeSheet();
+                else if (!modal.classList.contains('hidden')) closeModal();
+            });
+            window.addEventListener('awb-authchange', (e) => {
+                const authed = !!(e.detail && e.detail.authed);
+                button.classList.toggle('hidden', !authed);
+                if (!authed) lock();
+            });
+            button.classList.toggle('hidden', logoutButton.classList.contains('hidden'));
+        })();
     </script>
 </body>
 </html>`;

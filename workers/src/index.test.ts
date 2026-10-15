@@ -112,3 +112,43 @@ describe("router public paths", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 });
+
+describe("provider credentials workbench (R2 follow-up, #91)", () => {
+  test("the workbench markup, gates, and endpoints exist on /", async () => {
+    const response = await worker.fetch(get("/"), env());
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    // Every element id the workbench script addresses must exist.
+    for (const id of [
+      "adminWorkbenchButton",
+      "adminWorkbench",
+      "adminWorkbenchClose",
+      "adminKey",
+      "adminUnlock",
+      "adminLock",
+      "adminError",
+      "adminPanel",
+      "adminKeys",
+      "adminRail",
+      "adminAddKey",
+      "adminNotice",
+      "adminSheet",
+      "adminSheetAcct",
+      "adminSheetToken",
+      "adminSheetWeight",
+      "adminSheetEnabled",
+      "adminSheetError",
+      "adminSheetSave",
+      "adminSheetCancel",
+    ]) {
+      expect(html).toContain('id="' + id + '"');
+    }
+    // The workbench talks to the admin API with the management-key header.
+    expect(html).toContain("/api/admin/health");
+    expect(html).toContain("/api/admin/keys");
+    expect(html).toContain("X-Admin-Key");
+    // The management key must remain memory-only: never persisted.
+    expect(html).not.toMatch(/sessionStorage\.(set|get)Item\('admin/);
+    expect(html).not.toMatch(/localStorage.*admin/i);
+  });
+});
