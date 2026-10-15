@@ -35,6 +35,29 @@ byte-counting the reader stream so an absent or understated header cannot
 smuggle a large body past JSON parsing and sealing (413 on overflow). The
 store bounds `apiToken` at `MAX_API_TOKEN_LENGTH` (4096) before sealing.
 
+## Phase 3 — architecture pass
+
+Explored per the `improve-codebase-architecture` skill: hot spots from
+`git log --oneline` (the admin API is the branch's centre of gravity),
+the `GLOSSARY.md` vocabulary, the deletion test, and shallow-module
+friction. Candidate list rendered to
+`/tmp/architecture-candidates-r2.html`.
+
+| #   | Candidate                                                                 | Strength        | Outcome                                                                                                                                                                                      |
+| --- | ------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A   | Collapse the pass-through D1 adapter (`d1AdminStore`'s `wrap`)            | Strong          | **Implemented**                                                                                                                                                                              |
+| B   | Single error-envelope constructor in `admin.ts`                           | Strong          | **Implemented**                                                                                                                                                                              |
+| C   | Centralize the bump + audit mutation invariant                            | Worth exploring | Rejected — audit SQL differs (add uses a UNIQUE-label subselect); a combinator would widen the `AdminWrite` seam the objective says to keep intact. Revisit only if a fourth mutation lands. |
+| D   | Tighten `AdminCommitResult.keyId` to non-null, drop the post-commit retry | Speculative     | Rejected — iteration 1 kept the read as a belt-and-braces guard; tightening the field changes the `AdminCommitResult` seam contract, so it is not behaviour-identical.                       |
+| E   | Extract `getAdminHealth` row mappers                                      | Speculative     | Rejected — relocates complexity without removing it and tests past the real seam.                                                                                                            |
+| F   | Move HTTP statuses out of `AdminStoreError`                               | Speculative     | Rejected — a domain-error hierarchy grows the interface; the one-line `storeError` map already has the right locality.                                                                       |
+
+Both Strong candidates are behaviour-preserving. A deletes a shallow
+adapter (the deletion test says complexity vanishes) and adds the served
+path's first direct test over a D1-shaped engine; B names the OpenAI
+error envelope once. Two commits, `npm run check` + `npm test` green
+(337 tests).
+
 ## Pass 2
 
 Recorded in the Iteration Log; findings delta and rejections below.
