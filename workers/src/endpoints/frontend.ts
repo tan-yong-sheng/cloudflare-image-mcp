@@ -1217,7 +1217,7 @@ export function getFrontendHTML(): string {
             }
 
             function nextLabel() {
-                const keys = lastHealth ? lastHealth.keys.filter((k) => k.providerId === selected) : [];
+                const keys = lastHealth ? lastHealth.keys : [];
                 const max = keys.reduce((n, k) => {
                     const m = /^imported-(\d+)$/.exec(k.label);
                     return m ? Math.max(n, parseInt(m[1], 10)) : n;
