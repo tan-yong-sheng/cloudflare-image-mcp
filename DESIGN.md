@@ -30,13 +30,18 @@ typography:
   h1:
     fontFamily: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif
     fontSize: 24px
-    lineHeight: 1.25
+    lineHeight: 2rem
     fontWeight: 700
   h2:
     fontFamily: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif
-    fontSize: 20px
-    lineHeight: 1.3
+    fontSize: 18px
+    lineHeight: 1.75rem
     fontWeight: 600
+  label:
+    fontFamily: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif
+    fontSize: 14px
+    lineHeight: 1.25rem
+    fontWeight: 500
 rounded:
   base: 0.375rem
   card: 0.5rem
@@ -50,12 +55,12 @@ The Cloudflare AI Image Generator interface provides a single-page web generator
 
 The interface uses an indigo primary palette for brand actions, state transitions, and interactive highlights, paired with neutral surfaces for text and card containment.
 
-- **Primary (`#5046e5`):** Applied to primary submit buttons, active tab indicators, slider thumbs, and section icon accents.
-- **Secondary (`#f0f4f8`):** Low-contrast utilitarian neutral used for secondary buttons and muted backgrounds.
+- **Primary (`#5046e5`):** Applied to primary submit buttons, range slider thumbs, and section icon accents.
+- **Secondary (`#f0f4f8`):** Low-contrast neutral used for secondary button backgrounds.
 - **Text (`#1a202c`):** High-contrast neutral for readable headings, labels, and primary copy.
 - **Card Background (`#f7fafc`):** Soft surface background separating grouped input controls and image preview containers from the page backdrop.
 - **Border (`#e2e8f0`):** Structural boundary lines on inputs, cards, and dividers.
-- **Feedback Accents:** State-specific alerts use semantic tokens: success (`#10b981`), error (`#ef4444`), warning (`#f59e0b`), and info (`#3b82f6`).
+- **Feedback Accents:** Inline validation errors render in Tailwind red-500 (`#ef4444`), matching the defined `error` token value. The `success`, `warning`, and `info` tokens are defined in the token block but have no current consumer in the markup.
 
 ## Themes
 
@@ -81,24 +86,25 @@ The interface supports Light and Dark modes toggled via the `#themeToggle` butto
 
 Typography relies on the native system sans font stack to ensure zero-latency rendering without external web-font requests.
 
-- **Primary Headings (`h1`):** 24px bold font used for page titles and modal dialog titles.
-- **Section Headings (`h2`):** 20px semi-bold font used for panel titles with leading icons.
+- **Page Titles (`h1`):** 24px bold font used for the page title and the login dialog title, stepping up one Tailwind size step at the md breakpoint.
+- **Section Headings (`h2`):** 18px semi-bold font used for panel titles with leading icons.
 - **Body (`body`):** 16px regular font for form controls and instructions.
+- **Labels (`label`):** 14px medium font used for form field labels.
 
 ## Layout
 
-The page layout centers content within a fixed-max-width container (`max-w-6xl` / 1200px) with responsive padding:
+The page layout centers content within a fixed-max-width container (72rem) with responsive padding:
 
-- **Two-Column Desktop Split:** When viewport is 1024px or wider, controls reside in a 2/5 width column and results reside in a 3/5 width column.
-- **Stacked Mobile Flow:** On viewports below 768px, columns collapse vertically to maintain full-width tap targets.
+- **Two-Column Desktop Split:** At the lg breakpoint and above, controls reside in a 2/5 width column and results reside in a 3/5 width column.
+- **Stacked Mobile Flow:** Below the lg breakpoint, columns collapse vertically to maintain full-width tap targets.
 
 ## Elevation & Depth
 
 Depth is conveyed through subtle tonal borders paired with two-level box shadows:
 
 - **Card Resting State:** Surface containment with `box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1)` and a 1px border.
-- **Card Hover State:** Interactive lift with `box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1)`.
-- **Modal Overlay:** Backdrop dimming using `rgba(0, 0, 0, 0.5)` with centered elevation dialog.
+- **Card Hover State:** Interactive lift with `box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)`.
+- **Modal Overlay:** Backdrop dimming using `rgba(0, 0, 0, 0.5)` with a centered elevated dialog.
 
 ## Shapes
 
@@ -109,12 +115,11 @@ Soft, consistent radii define container and interactive boundaries:
 
 ## Components
 
-- **Buttons:** Primary (`.btn-primary`) uses `{colors.primary}` with white text; secondary (`.btn-secondary`) uses `{colors.secondary}` with `{colors.border}` outline. Both enforce `:focus-visible` with `outline: 2px solid var(--primary)`.
+- **Buttons:** Primary (`.btn-primary`) uses `{colors.primary}` with white text and lifts on hover; secondary (`.btn-secondary`) uses `{colors.secondary}` with a `{colors.border}` outline. Buttons suppress the default focus outline but restore a `2px solid` `{colors.primary}` `:focus-visible` ring.
 - **Cards:** Grouped input panels and results use `.card` with `{colors.card-bg}` and `{rounded.card}`.
-- **Modals:** Centered dialog containers use `#loginModal` and `#adminModal` with darkened backdrop and focus isolation.
+- **Modals:** A single centered login dialog (`#loginModal`) renders over a dimmed full-viewport backdrop and is dismissed once session auth is present.
 
 ## Do's and Don'ts
 
-- Do apply `:focus-visible` consistently across both buttons and form inputs.
-- Do use CSS custom properties (`var(--primary)`, `var(--card-bg)`) rather than hardcoded hex values in inline styles.
-- Don't use outline-none without providing an accessible focus indicator.
+- Do preserve the distinct focus treatments: the `:focus-visible` outline on buttons and the `:focus` ring on form inputs.
+- Do reference CSS custom properties rather than hardcoded hex values when styling against theme tokens.
