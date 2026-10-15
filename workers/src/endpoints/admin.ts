@@ -31,18 +31,22 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+/**
+ * One OpenAI-style error envelope for every admin surface (per
+ * CODING_STANDARDS error envelopes). status is the transport code; type
+ * names the kind. Callers below only supply the message.
+ */
+function errorJson(
+  status: number,
+  message: string,
+  type: "invalid_request_error" | "api_error" = "invalid_request_error"
+): Response {
+  return json({ error: { message, type, code: null } }, status);
+}
+
 /** 403 response: standard OpenAI error envelope with invalid_request_error. */
 function forbidden(): Response {
-  return new Response(
-    JSON.stringify({
-      error: {
-        message: "Invalid admin key",
-        type: "invalid_request_error",
-        code: null,
-      },
-    }),
-    { status: 403, headers: { "Content-Type": "application/json" } }
-  );
+  return errorJson(403, "Invalid admin key");
 }
 
 const MAX_ADMIN_KEY_LENGTH = 512;
@@ -125,25 +129,11 @@ export interface AdminDeps {
 }
 
 function badRequest(message: string): Response {
-  return json(
-    {
-      error: { message, type: "invalid_request_error", code: null },
-    },
-    400
-  );
+  return errorJson(400, message);
 }
 
 function internalError(message = "Internal server error"): Response {
-  return json(
-    {
-      error: {
-        message,
-        type: "api_error",
-        code: null,
-      },
-    },
-    500
-  );
+  return errorJson(500, message, "api_error");
 }
 
 function storeError(error: unknown): Response {
@@ -151,16 +141,7 @@ function storeError(error: unknown): Response {
     if (error.status === 500) {
       return internalError("key write failed");
     }
-    return json(
-      {
-        error: {
-          message: error.message,
-          type: "invalid_request_error",
-          code: null,
-        },
-      },
-      error.status
-    );
+    return errorJson(error.status, error.message);
   }
   // Sanitize unexpected DB or runtime errors: do not leak raw error.message to caller
   console.error("Admin store error:", error);
@@ -267,16 +248,7 @@ export async function handleAdmin(
     if (request.method === "POST" && disable) {
       return await handleDisableKey(request, env, active, Number(disable[1]));
     }
-    return json(
-      {
-        error: {
-          message: "Not found",
-          type: "invalid_request_error",
-          code: null,
-        },
-      },
-      404
-    );
+    return errorJson(404, "Not found");
   } catch (error) {
     return storeError(error);
   }
