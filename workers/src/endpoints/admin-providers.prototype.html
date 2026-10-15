@@ -1,0 +1,1229 @@
+<!doctype html>
+<!--
+  ============================================================================
+  PROTOTYPE — THROWAWAY. NOT PRODUCTION. DO NOT SHIP.
+  ============================================================================
+  Question: "What should the admin AI-providers page look like — a dedicated
+  settings surface where an operator sets LLM API keys per AI provider family
+  (Cloudflare as one family among future ones), inspired by CLIProxyAPI's
+  management UI — instead of the current inline Provider Credentials modal?"
+
+  Three radically different variants, switchable via ?variant=a|b|c,
+  mounted as a standalone page next to the module they prototype
+  (workers/src/endpoints/frontend.ts):
+
+    A (Workbench table)  — CLIProxyAPI-style: provider rail + key table + detail drawer
+    B (Health cards)     — status-first card grid, keys nested inside each provider
+    C (Guided setup)     — stepper wizard for adding a key + compact inventory list
+
+  Run:  cd workers/src/endpoints && python3 -m http.server 8123
+  Then: http://localhost:8123/admin-providers.prototype.html?variant=a  (b, c)
+
+  Rules honored: in-memory state only (seed mirrors staging: cloudflare,
+  config v2, 3 keys); no real network (mutations log stub API calls);
+  no tests; state inspector rendered after every action.
+  When a winner is picked: fold the decision into frontend.ts, commit THIS
+  file to a throwaway branch (e.g. prototype/admin-providers-ui), and leave
+  a pointer on the implementation issue. Main keeps only the validated decision.
+
+  References (researched 2026-10-15):
+  - https://github.com/router-for-me/CLIProxyAPI (provider model, mgmt API v8)
+  - https://github.com/router-for-me/cli-proxy-api-management-center (single-file UI)
+  - https://github.com/router-for-me/CLIProxyAPI/blob/main/docs/management-api-v8.md
+  - live reference: http://localhost:8317/management.html (login + AI Providers
+    workbench: family rail, Refresh/New, active-resource chips, per-key Test)
+-->
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>[PROTOTYPE] Admin — AI Providers</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+    />
+    <style>
+      :root {
+        --primary: #5046e5;
+        --primary-light: #6e67eb;
+        --primary-dark: #4338ca;
+        --secondary: #f0f4f8;
+        --text: #1a202c;
+        --text-light: #4a5568;
+        --background: #ffffff;
+        --card-bg: #f7fafc;
+        --border: #e2e8f0;
+        --success: #10b981;
+        --error: #ef4444;
+        --warning: #f59e0b;
+        --info: #3b82f6;
+      }
+      .dark {
+        --primary: #6e67eb;
+        --primary-light: #8a84ee;
+        --primary-dark: #5046e5;
+        --secondary: #2d3748;
+        --text: #f7fafc;
+        --text-light: #cbd5e0;
+        --background: #111827;
+        --card-bg: #1f2937;
+        --border: #374151;
+        --success: #10b981;
+        --error: #ef4444;
+        --warning: #f59e0b;
+        --info: #3b82f6;
+      }
+      body {
+        background: var(--background);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+      }
+      .btn {
+        padding: 0.5rem 0.9rem;
+        border-radius: 0.375rem;
+        border: 1px solid var(--border);
+        background: var(--secondary);
+        color: var(--text);
+        font-size: 0.85rem;
+      }
+      .btn-primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      .btn-danger {
+        background: transparent;
+        border-color: var(--error);
+        color: var(--error);
+      }
+      .btn-xs {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.72rem;
+      }
+      .tswitch {
+        position: relative;
+        display: inline-block;
+        width: 34px;
+        height: 19px;
+        flex: none;
+        cursor: pointer;
+      }
+      .tswitch input {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        cursor: pointer;
+      }
+      .tswitch .track {
+        position: absolute;
+        inset: 0;
+        border-radius: 9999px;
+        background: var(--secondary);
+        border: 1px solid var(--border);
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .tswitch .thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 13px;
+        height: 13px;
+        border-radius: 9999px;
+        background: var(--text-light);
+        transition:
+          left 0.2s,
+          background 0.2s;
+      }
+      .tswitch input:checked + .track {
+        background: rgba(16, 185, 129, 0.35);
+        border-color: var(--success);
+      }
+      .tswitch input:checked + .track .thumb {
+        left: 17px;
+        background: var(--success);
+      }
+      .tswitch input:focus-visible + .track {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      input,
+      select,
+      textarea {
+        background: var(--background);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        width: 100%;
+        font-size: 0.85rem;
+      }
+      input[type="password"] {
+        font-family: ui-monospace, monospace;
+      }
+      .chip {
+        font-size: 0.72rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 9999px;
+        border: 1px solid var(--border);
+      }
+      .chip-ok {
+        background: rgba(16, 185, 129, 0.15);
+        border-color: var(--success);
+        color: var(--success);
+      }
+      .chip-warn {
+        background: rgba(245, 158, 11, 0.15);
+        border-color: var(--warning);
+        color: var(--warning);
+      }
+      .chip-mut {
+        opacity: 0.65;
+      }
+      .rail-item {
+        width: 100%;
+        text-align: left;
+        padding: 0.6rem 0.75rem;
+        border-radius: 0.375rem;
+        border: 1px solid transparent;
+        font-size: 0.85rem;
+      }
+      .rail-item:hover {
+        background: var(--secondary);
+      }
+      .rail-item.active {
+        border-color: var(--primary);
+        background: rgba(80, 70, 229, 0.08);
+      }
+      .meter {
+        height: 6px;
+        border-radius: 9999px;
+        background: var(--secondary);
+        overflow: hidden;
+      }
+      .meter > div {
+        height: 100%;
+        background: var(--success);
+      }
+      .step-dot {
+        width: 26px;
+        height: 26px;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        border: 1px solid var(--border);
+      }
+      .step-dot.done {
+        background: var(--success);
+        border-color: var(--success);
+        color: #fff;
+      }
+      .step-dot.now {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      #switcher {
+        position: fixed;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        background: #000;
+        color: #fff;
+        border: 2px solid #facc15;
+        border-radius: 9999px;
+        padding: 0.4rem 0.8rem;
+        display: flex;
+        gap: 0.7rem;
+        align-items: center;
+        font-family: ui-monospace, monospace;
+        font-size: 0.8rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      }
+      #switcher button {
+        background: #facc15;
+        color: #000;
+        border-radius: 9999px;
+        padding: 0.1rem 0.6rem;
+        font-weight: bold;
+      }
+      .proto-banner {
+        background: #7c2d12;
+        color: #fed7aa;
+        font-size: 0.75rem;
+        padding: 0.3rem 0.8rem;
+        font-family: ui-monospace, monospace;
+      }
+      pre.state {
+        font-size: 0.7rem;
+        max-height: 220px;
+        overflow: auto;
+        background: #000;
+        color: #a7f3d0;
+        padding: 0.6rem;
+        border-radius: 0.375rem;
+      }
+      details.statebox {
+        border: 1px dashed var(--warning);
+        border-radius: 0.5rem;
+        padding: 0.6rem;
+      }
+      details.statebox summary {
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-family: ui-monospace, monospace;
+        color: var(--warning);
+      }
+      table.keys {
+        width: 100%;
+        font-size: 0.82rem;
+        border-collapse: collapse;
+      }
+      table.keys th {
+        text-align: left;
+        opacity: 0.6;
+        font-weight: 600;
+        padding: 0.4rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+      table.keys td {
+        padding: 0.45rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+      tr.row-sel {
+        background: rgba(80, 70, 229, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto-banner">
+      ⚠ PROTOTYPE — throwaway UI spike. In-memory stub data, no real backend.
+      Variants: <b>?variant=a</b> workbench · <b>?variant=b</b> health cards ·
+      <b>?variant=c</b> guided setup
+    </div>
+    <div id="app" class="max-w-6xl mx-auto px-4 py-5"></div>
+
+    <div class="max-w-6xl mx-auto px-4 pb-24">
+      <details class="statebox">
+        <summary>
+          ▸ prototype diagnostics (state + stub API log, collapsed by default)
+        </summary>
+        <div class="grid md:grid-cols-2 gap-3 mt-2">
+          <div>
+            <div class="text-xs opacity-70 mb-1">STATE (in-memory)</div>
+            <pre class="state" id="stateView"></pre>
+          </div>
+          <div>
+            <div class="text-xs opacity-70 mb-1">
+              STUB API CALLS (what the real UI would send)
+            </div>
+            <pre class="state" id="apiLog"></pre>
+          </div>
+        </div>
+      </details>
+      <div
+        id="toast"
+        class="mt-2 text-sm"
+        role="status"
+        aria-live="polite"
+      ></div>
+    </div>
+
+    <div
+      id="switcher"
+      role="navigation"
+      aria-label="Prototype variant switcher"
+    >
+      <button id="swPrev" aria-label="Previous variant">←</button>
+      <span id="swLabel"></span>
+      <button id="swNext" aria-label="Next variant">→</button>
+    </div>
+
+    <script>
+      /* ================= shared stub model (mirrors staging + future families) ================= */
+      const MODELS_CF = [
+        "@cf/black-forest-labs/flux-1-schnell",
+        "@cf/leonardo/phoenix-1.0",
+        "@cf/bytedance/stable-diffusion-xl-lightning",
+      ];
+      function seed() {
+        return {
+          configVersion: 2,
+          providers: [
+            {
+              id: "cloudflare",
+              name: "Cloudflare Workers AI",
+              transport: "cloudflare-rest",
+              status: "healthy",
+              models: MODELS_CF,
+              keys: [
+                {
+                  id: 1,
+                  label: "imported-1",
+                  hint: "cf-sk******a1b2",
+                  accountId: "cf-acct-aaa111",
+                  baseUrl: "",
+                  weight: 1,
+                  enabled: true,
+                  activeVersion: 1,
+                  lastTest: "ok",
+                  testModel: "",
+                  models: [
+                    "@cf/black-forest-labs/flux-1-schnell",
+                    "@cf/leonardo/phoenix-1.0",
+                  ],
+                },
+                {
+                  id: 2,
+                  label: "imported-2",
+                  hint: "cf-sk******c3d4",
+                  accountId: "cf-acct-bbb222",
+                  baseUrl: "",
+                  weight: 1,
+                  enabled: true,
+                  activeVersion: 1,
+                  lastTest: "ok",
+                  testModel: "",
+                  models: ["@cf/bytedance/stable-diffusion-xl-lightning"],
+                },
+                {
+                  id: 3,
+                  label: "imported-3",
+                  hint: "cf-sk******e5f6",
+                  accountId: "cf-acct-ccc333",
+                  baseUrl: "",
+                  weight: 1,
+                  enabled: false,
+                  activeVersion: 1,
+                  lastTest: "untested",
+                  testModel: "",
+                  models: [],
+                },
+              ],
+            },
+          ],
+          selProvider: "cloudflare",
+          selKey: 1,
+          wizard: {
+            step: 1,
+            provider: "cloudflare",
+            label: "",
+            token: "",
+            weight: 1,
+            testResult: null,
+          },
+        };
+      }
+      let S = seed();
+      let REGISTRY = null; // fetched from /api/internal/models when hosted by the worker; stub fallback otherwise
+      async function loadRegistry() {
+        if (REGISTRY) return REGISTRY;
+        try {
+          const r = await fetch("/api/internal/models");
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const list = await r.json();
+          REGISTRY = list.map((m) => ({
+            id: m.id || m.modelId || m.name,
+            name: m.name || m.displayName || m.id,
+            provider: m.provider || "",
+          }));
+        } catch {
+          REGISTRY = null;
+        }
+        return REGISTRY;
+      }
+      function familyModels(pid) {
+        if (REGISTRY) {
+          const fam = prov(pid).models || [];
+          const ids = new Set(fam);
+          const reg = REGISTRY.filter(
+            (m) =>
+              ids.has(m.id) ||
+              (m.provider && pid.includes(m.provider)) ||
+              m.id.startsWith("@cf/")
+          );
+          if (reg.length) return reg.map((m) => m.id);
+        }
+        return (prov(pid).models || []).slice();
+      }
+      let apiCalls = [];
+      function api(method, path, body) {
+        apiCalls.unshift(
+          method + " " + path + (body ? "  " + JSON.stringify(body) : "")
+        );
+        apiCalls = apiCalls.slice(0, 12);
+      }
+      function prov(id) {
+        return S.providers.find((p) => p.id === id);
+      }
+      function activeKeys(p) {
+        return p.keys.filter((k) => k.enabled);
+      }
+      function chip(st) {
+        return st === "healthy"
+          ? '<span class="chip chip-ok">● healthy</span>'
+          : st === "degraded"
+            ? '<span class="chip chip-warn">● degraded</span>'
+            : '<span class="chip chip-mut">○ unconfigured</span>';
+      }
+      function testChip(t) {
+        return t === "ok"
+          ? '<span class="chip chip-ok">test ok</span>'
+          : t === "fail"
+            ? '<span class="chip chip-warn">test fail</span>'
+            : '<span class="chip chip-mut">untested</span>';
+      }
+      function esc(s) {
+        const d = document.createElement("div");
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      /* stub mutations — same semantics the real /api/admin/* would need */
+      function doTest(pid, kid) {
+        const k = prov(pid).keys.find((k) => k.id === kid);
+        api("POST", "/api/admin/keys/" + kid + "/test", { providerId: pid });
+        k.lastTest = "testing";
+        paint();
+        setTimeout(() => {
+          k.lastTest = Math.random() < 0.9 ? "ok" : "fail";
+          paint();
+        }, 600);
+      }
+      function fingerprint(token) {
+        const t = String(token);
+        return t.length < 6 ? "•••" : t.slice(0, 5) + "******" + t.slice(-4);
+      }
+      function doAdd(
+        pid,
+        label,
+        token,
+        weight,
+        accountId,
+        baseUrl,
+        models,
+        testModel
+      ) {
+        const p = prov(pid);
+        const id = Math.max(0, ...p.keys.map((k) => k.id)) + 1;
+        api("POST", "/api/admin/keys", {
+          providerId: pid,
+          label,
+          apiToken: "•••" + String(token).length + " chars",
+          keyHint: fingerprint(token),
+          weight,
+          accountId: pid === "cloudflare" ? accountId || null : undefined,
+          baseUrl: baseUrl || undefined,
+          models: models || undefined,
+          testModel: testModel || undefined,
+        });
+        p.keys.push({
+          id,
+          label,
+          hint: fingerprint(token),
+          accountId: pid === "cloudflare" ? accountId || "" : "",
+          baseUrl: baseUrl || "",
+          weight: weight || 1,
+          enabled: true,
+          activeVersion: 1,
+          lastTest: "untested",
+          testModel: testModel || "",
+          models: models || [],
+        });
+        S.configVersion++;
+        S.selKey = id;
+        paint();
+      }
+      function doRotate(pid, kid, token) {
+        const k = prov(pid).keys.find((k) => k.id === kid);
+        api("POST", "/api/admin/keys/" + kid + "/rotate", {
+          apiToken: "•••" + String(token).length + " chars",
+        });
+        k.activeVersion++;
+        k.lastTest = "untested";
+        S.configVersion++;
+        paint();
+      }
+      function doDisable(pid, kid) {
+        const k = prov(pid).keys.find((k) => k.id === kid);
+        api("POST", "/api/admin/keys/" + kid + "/disable", {});
+        k.enabled = false;
+        S.configVersion++;
+        paint();
+      }
+      function doToggle(pid, kid) {
+        const k = prov(pid).keys.find((k) => k.id === kid);
+        api("PATCH", "/api/admin/keys/" + kid, { enabled: !k.enabled });
+        k.enabled = !k.enabled;
+        S.configVersion++;
+        paint();
+      }
+
+      /* ================= VARIANT A — workbench table (CLIProxyAPI structure) ================= */
+      /* ---- shared one-component modal, two modes (add | rotate) ---- */
+      let MODAL = null; // {mode:"add"|"rotate"|"success", provider, keyId, err, okMsg}
+      function openAddModal(providerId) {
+        MODAL = {
+          mode: "add",
+          provider: providerId || S.selProvider,
+          label: "",
+          accountId: "",
+          baseUrl: "",
+          token: "",
+          weight: 1,
+          enabled: true,
+          showToken: false,
+          testState: null,
+          modelsOpen: false,
+          models: familyModels(providerId || S.selProvider),
+          err: "",
+          regNote: null,
+        };
+        loadRegistry().then((reg) => {
+          if (!MODAL || MODAL.mode !== "add") return;
+          if (reg) {
+            MODAL.models = familyModels(MODAL.provider);
+            MODAL.regNote = "registry: " + reg.length + " models";
+            paint();
+          } else {
+            MODAL.regNote = "registry unreachable — stub list";
+            paint();
+          }
+        });
+        paint();
+        setTimeout(() => {
+          const el = document.getElementById("mLabel");
+          if (el) el.focus();
+        }, 0);
+      }
+      function openEditModal(providerId, keyId) {
+        const k = prov(providerId).keys.find((k) => k.id === keyId);
+        MODAL = {
+          mode: "edit",
+          provider: providerId,
+          keyId,
+          accountId: k ? k.accountId || "" : "",
+          baseUrl: k ? k.baseUrl || "" : "",
+          token: "",
+          weight: k ? k.weight : 1,
+          enabled: k ? k.enabled : true,
+          showToken: false,
+          testState: null,
+          testModel: k ? k.testModel || "auto" : "auto",
+          modelsOpen: false,
+          models:
+            k && k.models && k.models.length
+              ? k.models.slice()
+              : familyModels(providerId),
+          regNote: null,
+          err: "",
+        };
+        loadRegistry().then((reg) => {
+          if (!MODAL || MODAL.mode !== "edit") return;
+          if (reg) {
+            MODAL.regNote = "registry: " + reg.length + " models";
+            paint();
+          } else {
+            MODAL.regNote = "registry unreachable — stub list";
+            paint();
+          }
+        });
+        paint();
+        setTimeout(() => {
+          const el = document.getElementById("mAcct");
+          if (el) el.focus();
+        }, 0);
+      }
+      function openRotateModal(providerId, keyId) {
+        openEditModal(providerId, keyId);
+      }
+      function closeModal() {
+        MODAL = null;
+        paint();
+      }
+      function modalHTML() {
+        if (!MODAL) return "";
+        const p = prov(MODAL.provider);
+        if (MODAL.mode === "success")
+          return `
+  <div class="fixed inset-0 flex items-stretch justify-end" style="background:rgba(0,0,0,.55);z-index:60" onclick="if(event.target===this)closeModal()">
+    <div class="card p-6 w-full" style="max-width:30rem;height:100%;overflow-y:auto;border-radius:0;border-top:0;border-right:0;border-bottom:0" role="dialog" aria-modal="true" aria-label="Key added">
+      <p class="text-lg">✓ <b>${esc(MODAL.okMsg || "")}</b></p>
+      <p class="text-xs opacity-60 mt-1">Token sealed server-side; re-test recommended.</p>
+      <div class="flex gap-2 mt-4 justify-end">
+        <button class="btn" onclick="openAddModal('${p.id}')">Add another</button>
+        <button class="btn btn-primary" onclick="closeModal()">Done</button>
+      </div>
+    </div>
+  </div>`;
+        const isRot = MODAL.mode === "rotate" || MODAL.mode === "edit";
+        const isEdit = MODAL.mode === "edit";
+        const k = isRot ? p.keys.find((k) => k.id === MODAL.keyId) : null;
+        return `
+  <div class="fixed inset-0 flex items-stretch justify-end" style="background:rgba(0,0,0,.55);z-index:60" onclick="if(event.target===this)closeModal()">
+    <div class="card p-6 w-full" style="max-width:30rem;height:100%;overflow-y:auto;border-radius:0;border-top:0;border-right:0;border-bottom:0" role="dialog" aria-modal="true" aria-label="${isRot ? "Rotate key" : "New key"}">
+      <p class="text-xs opacity-60 font-mono">${isEdit ? "EDIT" : isRot ? "ROTATE" : "NEW"}</p>
+      <h2 class="text-lg font-bold">${isEdit ? `Edit key — <b>${esc(k ? k.label : "")}</b> <span class="opacity-60 text-sm">(${esc(p.id)}${k && k.activeVersion ? " · currently v" + k.activeVersion : ""})</span>` : isRot ? `Rotate key — <b>${esc(k ? k.label : "")}</b> <span class="opacity-60 text-sm">(${esc(p.id)})</span>` : `New key <span class="opacity-60 text-sm">(${esc(p.id)})</span>`}</h2>
+      <p class="text-xs opacity-60 mt-1">${isEdit ? `Leave the token blank to keep the current version. Filling it rotates as part of save.` : isRot ? `Rotation bumps version and resets test status. Family + label are fixed.` : `Label is auto-assigned. Keys are sealed server-side on save.`}</p>
+      ${
+        isEdit
+          ? `<div class="mt-3 space-y-2">
+           ${
+             MODAL.provider === "cloudflare"
+               ? `<div><label class="text-xs opacity-60" for="mAcct">Cloudflare account ID</label>
+           <input id="mAcct" value="${esc(MODAL.accountId)}" oninput="MODAL.accountId=this.value" placeholder="e.g. abc123def456" autocomplete="off" autocapitalize="off" spellcheck="false"></div>`
+               : ""
+           }
+           <div><label class="text-xs opacity-60" for="mToken">API token <span class="opacity-60">(blank = keep v${k ? k.activeVersion : ""})</span></label>
+           <div class="flex gap-2">
+             <input id="mToken" type="password" autocomplete="new-password" data-1p-ignore="true" value="" oninput="MODAL.token=this.value" placeholder="leave blank to keep, or paste new token">
+             <button class="btn btn-xs" aria-label="${MODAL.showToken ? "Hide token" : "Show token"}" title="${MODAL.showToken ? "Hide token" : "Show token"}" onclick="MODAL.showToken=!MODAL.showToken;paint();setTimeout(()=>{const el=document.getElementById('mToken');if(el){el.type=MODAL.showToken?'text':'password';el.focus();}},0)"><i class="fa-solid ${MODAL.showToken ? "fa-eye-slash" : "fa-eye"}"></i></button>
+           </div></div>
+           <div class="flex gap-2">
+             <div class="flex-1"><label class="text-xs opacity-60" for="mWeight">Scheduling weight</label>
+             <input id="mWeight" type="number" min="0" max="1000000" step="1" value="${MODAL.weight}" oninput="MODAL.weight=+this.value||0"></div>
+             <div class="flex items-end pb-2"><label class="text-xs flex gap-2 items-center"><input type="checkbox" style="width:auto" ${MODAL.enabled ? "checked" : ""} onchange="MODAL.enabled=this.checked"> <span>Disable this entry<br><span class="opacity-60">Disabled entries won't be used</span></span></label></div>
+           </div>
+           <div class="flex gap-2 mt-2 items-center">
+             <button class="btn btn-xs" onclick="MODAL.testState='testing';paint();setTimeout(()=>{MODAL.testState=(document.getElementById('mToken')&&document.getElementById('mToken').value.trim().length>=8)?'ok':'fail';paint();},500)">Test</button>
+             ${MODAL.testState === "testing" ? '<span class="text-xs opacity-60"><i class="fa-solid fa-spinner fa-spin"></i> testing…</span>' : MODAL.testState === "ok" ? '<span class="chip chip-ok">test ok</span>' : MODAL.testState === "fail" ? '<span class="chip chip-warn">test fail</span>' : ""}
+             <span class="text-xs opacity-60">Used for connectivity testing only; not saved.</span>
+           </div>
+           <div><label class="text-xs opacity-60" for="mBase">Base URL <span class="opacity-60">(optional — defaults to Cloudflare API)</span></label>
+           <input id="mBase" value="${esc(MODAL.baseUrl)}" oninput="MODAL.baseUrl=this.value" placeholder="https://api.cloudflare.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+           ${modelsBlock()}</div>`
+          : isRot
+            ? `<div class="mt-3"><label class="text-xs opacity-60" for="mToken">New API token</label>
+           <div class="flex gap-2">
+             <input id="mToken" type="password" autocomplete="new-password" data-1p-ignore="true" value="${esc(MODAL.token)}" oninput="MODAL.token=this.value;MODAL.showToken=MODAL.showToken" placeholder="paste the new token">
+             <button class="btn btn-xs" aria-label="${MODAL.showToken ? "Hide token" : "Show token"}" title="${MODAL.showToken ? "Hide token" : "Show token"}" onclick="MODAL.showToken=!MODAL.showToken;paint();setTimeout(()=>{const el=document.getElementById('mToken');if(el){el.type=MODAL.showToken?'text':'password';el.focus();}},0)"><i class="fa-solid ${MODAL.showToken ? "fa-eye-slash" : "fa-eye"}"></i></button>
+           </div>
+           <div class="mt-2" id="mTestWrap"><label class="text-xs opacity-60" for="mTestModel">Test model <span class="opacity-60">· used for connectivity testing only; not saved</span></label>
+           <select id="mTestModel" onchange="MODAL.testModel=this.value">
+             <option value="auto">Auto${(prov(MODAL.provider).models || [])[0] ? " · " + (prov(MODAL.provider).models || [])[0] : " (no models added yet)"}</option>
+             ${(MODAL.models || []).map((m) => `<option value="${esc(m)}" ${MODAL.testModel === m ? "selected" : ""}>${esc(m)}</option>`).join("")}
+           </select></div>
+           <div class="flex gap-2 mt-2 items-center">
+             <button class="btn btn-xs" onclick="MODAL.testState='testing';paint();setTimeout(()=>{MODAL.testState=(document.getElementById('mToken')&&document.getElementById('mToken').value.trim().length>=8)?'ok':'fail';paint();},500)">Test</button>
+             ${MODAL.testState === "testing" ? '<span class="text-xs opacity-60"><i class="fa-solid fa-spinner fa-spin"></i> testing…</span>' : MODAL.testState === "ok" ? '<span class="chip chip-ok">test ok</span>' : MODAL.testState === "fail" ? '<span class="chip chip-warn">test fail</span>' : ""}
+             <span class="text-xs opacity-60">Tests <b>${esc(MODAL.testModel && MODAL.testModel !== "auto" ? MODAL.testModel : "auto")}</b> against this key's credential.</span>
+           </div></div>`
+            : `<div class="mt-3 space-y-2">
+           ${
+             MODAL.provider === "cloudflare"
+               ? `<div><label class="text-xs opacity-60" for="mAcct">Cloudflare account ID</label>
+           <input id="mAcct" value="${esc(MODAL.accountId)}" oninput="MODAL.accountId=this.value" placeholder="e.g. abc123def456" autocomplete="off" autocapitalize="off" spellcheck="false">
+           <p class="text-xs opacity-60 mt-1">Required — inference calls <code>/accounts/{account_id}/ai/run/…</code>. Stored alongside the key (not sealed).</p></div>`
+               : ""
+           }
+           <div><label class="text-xs opacity-60" for="mToken">API token</label>
+           <div class="flex gap-2">
+             <input id="mToken" type="password" autocomplete="new-password" data-1p-ignore="true" value="${esc(MODAL.token)}" oninput="MODAL.token=this.value" placeholder="paste token">
+             <button class="btn btn-xs" aria-label="${MODAL.showToken ? "Hide token" : "Show token"}" title="${MODAL.showToken ? "Hide token" : "Show token"}" onclick="MODAL.showToken=!MODAL.showToken;paint();setTimeout(()=>{const el=document.getElementById('mToken');if(el){el.type=MODAL.showToken?'text':'password';el.focus();}},0)"><i class="fa-solid ${MODAL.showToken ? "fa-eye-slash" : "fa-eye"}"></i></button>
+           </div></div>
+           <div class="flex gap-2">
+             <div class="flex-1"><label class="text-xs opacity-60" for="mWeight">Scheduling weight</label>
+             <input id="mWeight" type="number" min="0" max="1000000" step="1" value="${MODAL.weight}" oninput="MODAL.weight=+this.value||0" placeholder="1"></div>
+             <div class="flex items-end pb-2"><label class="text-xs flex gap-2 items-center"><input type="checkbox" style="width:auto" ${MODAL.enabled ? "checked" : ""} onchange="MODAL.enabled=this.checked"> <span>Disable this entry<br><span class="opacity-60">Disabled entries won't be used</span></span></label></div>
+           </div>
+           <p class="text-xs opacity-60">Default 1 · ≤ 0 is excluded · maximum 1,000,000.</p>
+           <div><label class="text-xs opacity-60" for="mBase">Base URL <span class="opacity-60">(optional — defaults to Cloudflare API)</span></label>
+           <input id="mBase" value="${esc(MODAL.baseUrl)}" oninput="MODAL.baseUrl=this.value" placeholder="https://api.cloudflare.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+           ${modelsBlock()}</div>`
+      }
+      ${MODAL.err ? `<p class="text-xs mt-2" style="color:var(--error)">${esc(MODAL.err)}</p>` : ""}
+      <div class="flex gap-2 mt-4 justify-end">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" ${MODAL.testState === "testing" ? "disabled" : ""} onclick="${isEdit ? `submitEdit()` : isRot ? `submitRotate()` : `submitAdd()`}">${isEdit ? "Save" : isRot ? "Rotate" : "Add key"}</button>
+      </div>
+    </div>
+  </div>`;
+      }
+      function unesc(s) {
+        const t = document.createElement("textarea");
+        t.innerHTML = s;
+        return t.value;
+      }
+      function modelsBlock() {
+        const regHint = MODAL.regNote
+          ? `<p class="text-xs opacity-60 mt-1">${esc(MODAL.regNote)}</p>`
+          : "";
+        return `<div><button class="btn btn-xs w-full" onclick="MODAL.modelsOpen=!MODAL.modelsOpen;paint()">${MODAL.modelsOpen ? "▾" : "▸"} Custom models (${(MODAL.models || []).length})</button>${regHint}
+  ${
+    MODAL.modelsOpen
+      ? `<div class="mt-2 space-y-2">${(MODAL.models || [])
+          .map(
+            (m, i) => `
+    <div class="flex gap-2">
+      <input value="${esc(m)}" oninput="MODAL.models[${i}]=this.value" aria-label="Model name" placeholder="Model name">
+      <button class="btn btn-xs" aria-label="Remove model" onclick="MODAL.models.splice(${i},1);paint()">✕</button>
+    </div>`
+          )
+          .join("")}
+    <button class="btn btn-xs" onclick="MODAL.models.push('');paint()">+ Add model</button></div>`
+      : ""
+  }</div>`;
+      }
+      function modalFail(msg, focusId) {
+        MODAL.err = msg;
+        paint();
+        setTimeout(() => {
+          const el = document.getElementById(focusId);
+          if (el) el.focus();
+        }, 0);
+      }
+      function submitAdd() {
+        const token = (MODAL.token || "").trim(),
+          accountId = (MODAL.accountId || "").trim();
+        const label =
+          "imported-" +
+          (Math.max(
+            0,
+            ...prov(MODAL.provider).keys.map(
+              (k) => parseInt(String(k.label).split("-").pop()) || 0
+            )
+          ) +
+            1);
+        if (MODAL.provider === "cloudflare" && !accountId)
+          return modalFail("Cloudflare account ID is required.", "mAcct");
+        if (!token) return modalFail("API token is required.", "mToken");
+        if (token.length < 8)
+          return modalFail(
+            "Token looks too short — paste the full value.",
+            "mToken"
+          );
+        if (!(MODAL.weight >= 0))
+          return modalFail("Weight must be 0 or more.", "mWeight");
+        doAdd(
+          MODAL.provider,
+          label,
+          token,
+          MODAL.weight,
+          accountId,
+          (MODAL.baseUrl || "").trim(),
+          (MODAL.models || []).map((m) => String(m).trim()).filter(Boolean)
+        );
+        MODAL = {
+          mode: "success",
+          provider: MODAL.provider,
+          okMsg: label + " added (v1, untested)",
+        };
+        paint();
+      }
+      function submitRotate() {
+        const token = (MODAL.token || "").trim();
+        if (!token) return modalFail("New API token is required.", "mToken");
+        if (token.length < 8)
+          return modalFail(
+            "Token looks too short — paste the full value.",
+            "mToken"
+          );
+        const pid = MODAL.provider,
+          kid = MODAL.keyId;
+        MODAL = null;
+        doRotate(pid, kid, token);
+      }
+      function submitEdit() {
+        const p = prov(MODAL.provider),
+          k = p.keys.find((k) => k.id === MODAL.keyId);
+        const accountId = (MODAL.accountId || "").trim(),
+          baseUrl = (MODAL.baseUrl || "").trim(),
+          token = (MODAL.token || "").trim();
+        const models = (MODAL.models || [])
+          .map((m) => String(m).trim())
+          .filter(Boolean);
+        if (MODAL.provider === "cloudflare" && !accountId)
+          return modalFail("Cloudflare account ID is required.", "mAcct");
+        if (token && token.length < 8)
+          return modalFail(
+            "Token looks too short — paste the full value, or leave blank to keep.",
+            "mToken"
+          );
+        if (!(MODAL.weight >= 0))
+          return modalFail("Weight must be 0 or more.", "mWeight");
+        const patch = {
+          accountId,
+          baseUrl: baseUrl || null,
+          weight: MODAL.weight,
+          enabled: MODAL.enabled,
+          models,
+        };
+        api(
+          "PATCH",
+          "/api/admin/keys/" + k.id,
+          token
+            ? {
+                ...patch,
+                apiToken: "•••" + token.length + " chars",
+                rotate: true,
+              }
+            : { ...patch }
+        );
+        k.accountId = accountId;
+        k.baseUrl = baseUrl;
+        k.weight = MODAL.weight;
+        k.enabled = MODAL.enabled;
+        k.models = models;
+        k.testModel = MODAL.testModel || "auto";
+        if (token) {
+          k.activeVersion++;
+          k.lastTest = "untested";
+          k.hint = fingerprint(token);
+        }
+        S.configVersion++;
+        toast(
+          `Saved ${k.label}${token ? " — v" + k.activeVersion + " active" : ""}`
+        );
+        MODAL = null;
+        paint();
+      }
+
+      function renderA() {
+        const p = prov(S.selProvider);
+        const totalActive = S.providers.reduce(
+          (n, x) => n + activeKeys(x).length,
+          0
+        );
+        const totalKeys = S.providers.reduce((n, x) => n + x.keys.length, 0);
+        return `
+  <div class="flex items-center mb-3">
+    <h1 class="text-2xl font-bold" title="config v${S.configVersion}"><i class="fa-solid fa-server mr-2"></i>AI Providers</h1>
+  </div>
+  <div class="flex gap-2 mb-4">
+    <span class="chip chip-ok">${totalActive}/${totalKeys} active keys</span>
+    <span class="chip">${S.providers.length} provider families</span>
+  </div>
+  <div class="flex flex-col md:flex-row gap-4">
+    <aside class="card p-2 md:w-56" style="align-self:flex-start">
+      <p class="text-xs opacity-60 px-2 pt-1 pb-2">PROVIDERS</p>
+      ${S.providers
+        .map(
+          (x) => `
+        <button class="rail-item ${x.id === p.id ? "active" : ""}" onclick="S.selProvider='${x.id}';paint()">
+          <div class="flex justify-between items-center"><b>${x.id === "cloudflare" ? `<i class="fa-brands fa-cloudflare mr-1" aria-hidden="true"></i>` : ""}${esc(x.name)}</b></div>
+          <div class="text-xs opacity-60 mt-1">${activeKeys(x).length}/${x.keys.length} active</div>
+        </button>`
+        )
+        .join("")}
+    </aside>
+    <section class="card p-4 flex-1">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="font-semibold">${p.id === "cloudflare" ? `<i class="fa-brands fa-cloudflare mr-1" aria-hidden="true"></i>` : ""}${esc(p.name)}</h2>
+        <div class="flex gap-2 items-center">
+          <button class="btn btn-primary btn-xs" onclick="openAddModal('${p.id}')"><i class="fa-solid fa-plus mr-1"></i>New key</button>
+        </div>
+      </div>
+      ${
+        p.keys.length === 0
+          ? `<div class="py-6 text-center"><p class="text-sm opacity-60">No keys yet.</p>
+        <button class="btn btn-primary btn-xs mt-2" onclick="openAddModal('${p.id}')"><i class="fa-solid fa-plus mr-1"></i>New key</button></div>`
+          : `
+      <table class="keys"><thead><tr><th>Key</th>${p.id === "cloudflare" ? "<th>Account ID</th>" : ""}<th>Base URL</th><th>Models</th><th></th></tr></thead>
+      <tbody>${p.keys
+        .map(
+          (k) => `
+        <tr style="${k.enabled ? "" : "opacity:.55"}">
+          <td><b>${esc(k.hint || k.label)}</b> <span class="opacity-60 text-xs">v${k.activeVersion}</span></td>${p.id === "cloudflare" ? `<td><code class="text-xs">${esc(k.accountId || "—")}</code></td>` : ""}<td class="text-xs opacity-70">${esc(k.baseUrl || "default")}</td><td class="text-xs opacity-70">${(k.models || []).length} model(s)</td>
+          <td class="whitespace-nowrap">
+            <span class="inline-flex gap-2 items-center">
+            <label class="tswitch" title="${k.enabled ? "Disable" : "Enable"} ${esc(k.label)}"><input type="checkbox" role="switch" aria-checked="${k.enabled}" aria-label="${k.enabled ? "Disable" : "Enable"} ${esc(k.label)}" ${k.enabled ? "checked" : ""} onchange="doToggle('${p.id}',${k.id})"><span class="track"><span class="thumb"></span></span></label>
+            <button class="btn btn-xs" aria-label="Edit ${esc(k.label)}" title="Edit ${esc(k.label)}" onclick="openEditModal('${p.id}',${k.id})"><i class="fa-solid fa-pen"></i></button>
+            </span>
+          </td></tr>`
+        )
+        .join("")}</tbody></table>`
+      }
+    </section>
+  </div>${modalHTML()}`;
+      }
+
+      /* ================= VARIANT B — health-first cards ================= */
+      function renderB() {
+        return `
+  <div class="flex items-center justify-between mb-1">
+    <h1 class="text-2xl font-bold"><i class="fa-solid fa-heart-pulse mr-2"></i>AI Providers</h1>
+    <span class="chip chip-mut">config v${S.configVersion} · updated just now</span>
+  </div>
+  <p class="text-sm opacity-60 mb-4">Status first, keys second. Expand a provider to manage its keys inline.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  ${S.providers
+    .map((p) => {
+      const open = p.id === S.selProvider,
+        act = activeKeys(p).length;
+      const pct = p.keys.length ? Math.round((act / p.keys.length) * 100) : 0;
+      return `<div class="card p-4">
+      <div class="flex justify-between items-center">
+        <h2 class="font-semibold">${esc(p.name)}</h2>${chip(p.status)}
+      </div>
+      <div class="flex items-center gap-3 mt-2">
+        <div class="meter flex-1"><div style="width:${pct}%"></div></div>
+        <span class="text-xs opacity-70">${act}/${p.keys.length} active</span>
+      </div>
+      <p class="text-xs opacity-60 mt-1">${esc(p.transport)}${p.models.length ? ` · ${p.models.length} model(s) mapped` : " · no models mapped"}</p>
+      <button class="btn btn-xs mt-2 w-full" onclick="S.selProvider='${p.id}';paint()">${open ? "Collapse" : "Manage keys"}</button>
+      ${
+        open
+          ? `<div class="mt-3 space-y-2">
+        ${
+          p.keys
+            .map(
+              (
+                k
+              ) => `<div class="border rounded p-2" style="border-color:var(--border)">
+          <div class="flex justify-between items-center text-sm">
+            <span><b>${esc(k.label)}</b> <span class="opacity-60">v${k.activeVersion} · w${k.weight}</span></span>
+            <span>${testChip(k.lastTest)}</span>
+          </div>
+          <div class="flex gap-2 mt-2 flex-wrap">
+            <button class="btn btn-xs" onclick="doTest('${p.id}',${k.id})">Test</button>
+            <button class="btn btn-xs" onclick="const t=prompt('New API token for ${esc(k.label)}:');if(t)doRotate('${p.id}',${k.id},t)">Rotate</button>
+            ${
+              k.enabled
+                ? `<button class="btn btn-xs" onclick="doDisable('${p.id}',${k.id})">Disable</button>`
+                : `<button class="btn btn-xs" onclick="doToggle('${p.id}',${k.id})">Enable</button>`
+            }
+          </div>
+        </div>`
+            )
+            .join("") ||
+          '<p class="text-xs opacity-60">No keys in this family yet.</p>'
+        }
+        <div class="flex gap-2">
+          <input id="addLabelB-${p.id}" placeholder="Label" aria-label="Label">
+          <input id="addTokenB-${p.id}" type="password" placeholder="API token" autocomplete="off" aria-label="Token">
+          <button class="btn btn-primary btn-xs whitespace-nowrap" onclick="doAdd('${p.id}',document.getElementById('addLabelB-${p.id}').value,document.getElementById('addTokenB-${p.id}').value,1)">Add</button>
+        </div>
+      </div>`
+          : ""
+      }
+    </div>`;
+    })
+    .join("")}
+  </div>`;
+      }
+
+      /* ================= VARIANT C — guided setup wizard ================= */
+      function renderC() {
+        const w = S.wizard,
+          steps = ["Provider", "Key + test", "Models", "Review"];
+        const p = prov(w.provider);
+        return `
+  <div class="flex items-center justify-between mb-1">
+    <h1 class="text-2xl font-bold"><i class="fa-solid fa-wand-magic-sparkles mr-2"></i>AI Providers</h1>
+    <span class="chip chip-mut">config v${S.configVersion}</span>
+  </div>
+  <div class="grid md:grid-cols-5 gap-4 mt-3">
+    <div class="card p-4 md:col-span-3">
+      <div class="flex gap-2 mb-4">${steps
+        .map(
+          (s, i) => `
+        <div class="flex items-center gap-1">
+          <span class="step-dot ${i + 1 < w.step ? "done" : i + 1 === w.step ? "now" : ""}">${i + 1 < w.step ? "✓" : i + 1}</span>
+          <span class="text-xs ${i + 1 === w.step ? "font-bold" : "opacity-60"}">${s}</span>
+        </div>`
+        )
+        .join("")}</div>
+      ${
+        w.step === 1
+          ? `
+        <h2 class="font-semibold mb-2">1 · Which provider family?</h2>
+        <div class="grid grid-cols-2 gap-2">
+        ${S.providers
+          .map(
+            (
+              x
+            ) => `<button class="rail-item ${x.id === w.provider ? "active" : ""}" onclick="S.wizard.provider='${x.id}';paint()">
+          <b>${esc(x.name)}</b><div class="text-xs opacity-60">${esc(x.transport)} · ${x.keys.length} key(s)</div></button>`
+          )
+          .join("")}
+        </div>
+        <button class="btn btn-primary mt-3" onclick="S.wizard.step=2;paint()">Continue →</button>`
+          : ""
+      }
+      ${
+        w.step === 2
+          ? `
+        <h2 class="font-semibold mb-2">2 · Paste key for <b>${esc(p.name)}</b>, then test it</h2>
+        <label class="text-xs opacity-60">Label</label>
+        <input id="wzLabel" class="mb-2" value="${esc(w.label)}" placeholder="e.g. billing">
+        <label class="text-xs opacity-60">API token (masked, never stored in clear)</label>
+        <input id="wzToken" type="password" autocomplete="off" placeholder="paste token">
+        <div class="flex gap-2 mt-2">
+          <button class="btn" onclick="S.wizard.label=document.getElementById('wzLabel').value;S.wizard.token=document.getElementById('wzToken').value;S.wizard.testResult='ok';api('POST','/api/admin/keys/test',{providerId:'${p.id}'});paint()">Test connectivity</button>
+          ${w.testResult ? '<span class="chip chip-ok">test ok — token accepted</span>' : ""}
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button class="btn" onclick="S.wizard.step=1;paint()">← Back</button>
+          <button class="btn btn-primary" onclick="S.wizard.label=document.getElementById('wzLabel').value;S.wizard.token=document.getElementById('wzToken').value;S.wizard.step=3;paint()">Continue →</button>
+        </div>`
+          : ""
+      }
+      ${
+        w.step === 3
+          ? `
+        <h2 class="font-semibold mb-2">3 · Models served through ${esc(p.name)}</h2>
+        ${
+          p.models.length
+            ? p.models
+                .map(
+                  (m) =>
+                    `<label class="flex gap-2 items-center text-sm py-1"><input type="checkbox" checked style="width:auto"> <code>${esc(m)}</code></label>`
+                )
+                .join("")
+            : `<p class="text-sm opacity-60">No models mapped yet — mapping happens in <code>models.json</code>; future families register here the same way.</p>`
+        }
+        <div class="flex gap-2 mt-3">
+          <button class="btn" onclick="S.wizard.step=2;paint()">← Back</button>
+          <button class="btn btn-primary" onclick="S.wizard.step=4;paint()">Review →</button>
+        </div>`
+          : ""
+      }
+      ${
+        w.step === 4
+          ? `
+        <h2 class="font-semibold mb-2">4 · Review & save</h2>
+        <div class="card p-3 text-sm">
+          provider <b>${esc(p.id)}</b><br>label <b>${esc(w.label || "(unset)")}</b><br>
+          token <b>•••${(w.token || "").length} chars (sealed server-side)</b><br>weight <b>${w.weight}</b>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button class="btn" onclick="S.wizard.step=3;paint()">← Back</button>
+          <button class="btn btn-primary" onclick="doAdd('${p.id}',S.wizard.label,S.wizard.token,1);S.wizard={step:1,provider:'${p.id}',label:'',token:'',weight:1,testResult:null};paint()">Save key</button>
+        </div>`
+          : ""
+      }
+    </div>
+    <div class="md:col-span-2">
+      <div class="card p-4">
+        <h3 class="font-semibold text-sm mb-2">CURRENT INVENTORY (${S.providers.reduce((n, x) => n + x.keys.length, 0)} keys)</h3>
+        ${S.providers
+          .map(
+            (
+              x
+            ) => `<div class="text-sm py-1 border-b" style="border-color:var(--border)">
+          <div class="flex justify-between"><b>${esc(x.name)}</b>${chip(x.status)}</div>
+          ${x.keys.map((k) => `<div class="text-xs opacity-75 ml-2">• ${esc(k.label)} v${k.activeVersion} ${k.enabled ? "" : "(disabled)"}</div>`).join("") || '<div class="text-xs opacity-50 ml-2">— no keys —</div>'}
+        </div>`
+          )
+          .join("")}
+      </div>
+    </div>
+  </div>`;
+      }
+
+      /* ================= shell: variant routing + switcher + state surface ================= */
+      const VARIANTS = {
+        a: { name: "Workbench table", fn: renderA },
+        b: { name: "Health cards", fn: renderB },
+        c: { name: "Guided setup", fn: renderC },
+      };
+      const ORDER = ["a", "b", "c"];
+      function current() {
+        const v = new URLSearchParams(location.search).get("variant");
+        return VARIANTS[v] ? v : "a";
+      }
+      function go(v) {
+        const u = new URL(location.href);
+        u.searchParams.set("variant", v);
+        history.replaceState(null, "", u);
+        paint();
+      }
+      function toast(msg) {
+        const t = document.getElementById("toast");
+        if (t) {
+          t.innerHTML = '<span class="chip chip-ok">' + esc(msg) + "</span>";
+          setTimeout(() => {
+            t.innerHTML = "";
+          }, 4000);
+        }
+      }
+      function paint() {
+        const v = current();
+        const keepModal = v === "a" && MODAL;
+        document.getElementById("app").innerHTML = VARIANTS[v].fn();
+        document.getElementById("swLabel").textContent =
+          v.toUpperCase() + " (" + VARIANTS[v].name + ")";
+        console.debug(
+          "[prototype]",
+          JSON.stringify({
+            variant: v,
+            configVersion: S.configVersion,
+            apiCalls: apiCalls.slice(0, 5),
+          })
+        );
+        const sv = document.getElementById("stateView");
+        if (sv)
+          sv.textContent = JSON.stringify(
+            {
+              configVersion: S.configVersion,
+              providers: S.providers.map((p) => ({
+                id: p.id,
+                status: p.status,
+                keys: p.keys.map((k) => ({
+                  label: k.label,
+                  v: k.activeVersion,
+                  enabled: k.enabled,
+                  test: k.lastTest,
+                })),
+              })),
+            },
+            null,
+            1
+          );
+        const al = document.getElementById("apiLog");
+        if (al)
+          al.textContent =
+            apiCalls.join("\n") || "(no stub calls yet — interact above)";
+      }
+      document.getElementById("swPrev").onclick = () => {
+        MODAL = null;
+        const i = ORDER.indexOf(current());
+        go(ORDER[(i + 2) % 3]);
+      };
+      document.getElementById("swNext").onclick = () => {
+        MODAL = null;
+        const i = ORDER.indexOf(current());
+        go(ORDER[(i + 1) % 3]);
+      };
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && MODAL) {
+          closeModal();
+          return;
+        }
+        if (
+          ["INPUT", "TEXTAREA", "SELECT"].includes(
+            document.activeElement.tagName
+          ) ||
+          document.activeElement.isContentEditable
+        )
+          return;
+        if (e.key === "ArrowLeft") document.getElementById("swPrev").click();
+        if (e.key === "ArrowRight") document.getElementById("swNext").click();
+      });
+      if (
+        window.matchMedia("(prefers-color-scheme: light)").matches &&
+        !location.search.includes("dark")
+      ) {
+      }
+      paint();
+    </script>
+  </body>
+</html>
