@@ -71,29 +71,29 @@ The interface supports Light and Dark modes toggled via the `#themeToggle` butto
 | `primary`       | `#5046e5`            | `#6e67eb`           | Primary action buttons, active slider thumbs, icon accents |
 | `primary-light` | `#6e67eb`            | `#8a84ee`           | Hover state for primary buttons                            |
 | `primary-dark`  | `#4338ca`            | `#5046e5`           | Active/pressed state for primary buttons                   |
-| `secondary`     | `#f0f4f8`            | `#2d3748`           | Secondary button backgrounds, pill badges                  |
+| `secondary`     | `#f0f4f8`            | `#2d3748`           | Secondary button backgrounds (no other current consumer)   |
 | `text`          | `#1a202c`            | `#f7fafc`           | Primary copy, titles, field labels                         |
 | `text-light`    | `#4a5568`            | `#cbd5e0`           | Secondary copy, metadata, helper text                      |
 | `background`    | `#ffffff`            | `#111827`           | Base page canvas background                                |
 | `card-bg`       | `#f7fafc`            | `#1f2937`           | Content cards, modal dialogs, output containers            |
 | `border`        | `#e2e8f0`            | `#374151`           | Element borders, dividers, input outlines                  |
-| `success`       | `#10b981`            | `#10b981`           | Success alerts, copy-to-clipboard confirmation             |
+| `success`       | `#10b981`            | `#10b981`           | Defined token, no current consumer                         |
 | `error`         | `#ef4444`            | `#ef4444`           | Validation error text, failure alert banners               |
-| `warning`       | `#f59e0b`            | `#f59e0b`           | Model capability notices, warning badges                   |
-| `info`          | `#3b82f6`            | `#3b82f6`           | Informational callouts and guidance                        |
+| `warning`       | `#f59e0b`            | `#f59e0b`           | Defined token, no current consumer                         |
+| `info`          | `#3b82f6`            | `#3b82f6`           | Defined token, no current consumer                         |
 
 ## Typography
 
 Typography relies on the native system sans font stack to ensure zero-latency rendering without external web-font requests.
 
-- **Page Titles (`h1`):** 24px bold font used for the page title and the login dialog title, stepping up one Tailwind size step at the md breakpoint.
+- **Page Titles (`h1`):** 24px bold font used for the page title, stepping up one Tailwind size step at the md breakpoint. The login dialog title uses the same 24px bold styling on an `h2` element.
 - **Section Headings (`h2`):** 18px semi-bold font used for panel titles with leading icons.
 - **Body (`body`):** 16px regular font for form controls and instructions.
 - **Labels (`label`):** 14px medium font used for form field labels.
 
 ## Layout
 
-The page layout centers content within a fixed-max-width container (72rem) with responsive padding:
+The page layout centers content within a fixed-max-width container with responsive padding (a custom `1200px` cap at `min-width: 1024px` overrides the `max-w-6xl` utility):
 
 - **Two-Column Desktop Split:** At the lg breakpoint and above, controls reside in a 2/5 width column and results reside in a 3/5 width column.
 - **Stacked Mobile Flow:** Below the lg breakpoint, columns collapse vertically to maintain full-width tap targets.
