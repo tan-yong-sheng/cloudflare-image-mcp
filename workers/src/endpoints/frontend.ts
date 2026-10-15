@@ -339,10 +339,41 @@ export function getFrontendHTML(): string {
                 </button>
             </div>
 
-            <!-- Right Image Display -->
+            <!-- Right: Provider Credentials (admin) -->
             <div class="w-full lg:w-3/5">
                 <div class="card h-full p-4 space-y-4 fade-in">
                     <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <i class="fa-solid fa-key mr-2 text-primary"></i>Provider Credentials
+                        </h2>
+                        <span id="adminHealthState" class="text-xs opacity-75" role="status"></span>
+                    </div>
+                    <p class="text-sm opacity-75">Keys are sealed server-side on save. Unlock with the management key to view and manage them.</p>
+                    <div>
+                        <label for="adminKey" class="block text-sm font-medium mb-1">Management key</label>
+                        <div class="flex gap-2">
+                            <input type="password" id="adminKey" class="w-full" placeholder="Admin key (never stored)" autocomplete="off">
+                            <button id="adminUnlock" class="btn btn-secondary text-sm py-1 px-3">Unlock</button>
+                            <button id="adminLock" class="btn btn-secondary text-sm py-1 px-3 hidden">Lock</button>
+                        </div>
+                        <p id="adminError" class="text-sm text-red-500 hidden" role="alert"></p>
+                    </div>
+                    <div id="adminPanel" class="space-y-3 hidden">
+                        <div id="adminKeys" class="space-y-2"></div>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                            <input id="newKeyLabel" class="w-full" placeholder="Label (e.g. billing)" aria-label="New key label">
+                            <input type="password" id="newKeyToken" class="w-full" placeholder="API token" aria-label="New API token" autocomplete="off">
+                            <select id="newKeyProvider" class="w-full" aria-label="Provider"></select>
+                            <button id="addKeyButton" class="btn btn-primary text-sm py-1 px-3">Add key</button>
+                        </div>
+                        <p id="adminNotice" class="text-sm hidden" role="status"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
                         <h2 class="text-lg font-semibold flex items-center">
                             <i class="fa-solid fa-image mr-2 text-primary"></i>Result
                         </h2>
@@ -806,6 +837,169 @@ export function getFrontendHTML(): string {
                     showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
                 }
             }
+        });
+
+        // ---- Provider Credentials (admin, R2 #74) ----
+        // The management key lives in memory only: never persisted, never
+        // logged. Key rows render labels + flags; tokens travel one way
+        // (add/rotate request bodies) and are cleared from the inputs and
+        // any in-memory reference immediately after the fetch resolves.
+        let adminKey = '';
+        const adminKeyInput = document.getElementById('adminKey');
+        const adminUnlock = document.getElementById('adminUnlock');
+        const adminLock = document.getElementById('adminLock');
+        const adminError = document.getElementById('adminError');
+        const adminNotice = document.getElementById('adminNotice');
+        const adminPanel = document.getElementById('adminPanel');
+        const adminKeys = document.getElementById('adminKeys');
+        const adminHealthState = document.getElementById('adminHealthState');
+        const newKeyLabel = document.getElementById('newKeyLabel');
+        const newKeyToken = document.getElementById('newKeyToken');
+        const newKeyProvider = document.getElementById('newKeyProvider');
+        const addKeyButton = document.getElementById('addKeyButton');
+
+        function adminHeaders() {
+            return {
+                'Authorization': 'Bearer ' + authToken,
+                'X-Admin-Key': adminKey,
+                'Content-Type': 'application/json',
+            };
+        }
+
+        function showAdminError(message) {
+            adminError.textContent = message;
+            adminError.classList.remove('hidden');
+        }
+
+        function clearAdminError() {
+            adminError.textContent = '';
+            adminError.classList.add('hidden');
+        }
+
+        function showAdminNotice(message) {
+            adminNotice.textContent = message;
+            adminNotice.classList.remove('hidden');
+        }
+
+        function lockAdmin() {
+            adminKey = '';
+            if (adminKeyInput) adminKeyInput.value = '';
+            adminPanel.classList.add('hidden');
+            adminLock.classList.add('hidden');
+            adminUnlock.classList.remove('hidden');
+            adminHealthState.textContent = '';
+            adminKeys.innerHTML = '';
+            clearAdminError();
+        }
+
+        function renderKeys(keys) {
+            adminKeys.innerHTML = '';
+            for (const k of keys) {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between gap-2 text-sm border rounded p-2';
+                const name = document.createElement('span');
+                // textContent, never innerHTML: labels come from the store.
+                name.textContent = k.label + ' (' + k.providerId + ') v' + (k.activeVersion ?? '?') + (k.enabled ? '' : ' — disabled');
+                const actions = document.createElement('div');
+                actions.className = 'flex gap-2';
+                if (k.enabled) {
+                    const rotateBtn = document.createElement('button');
+                    rotateBtn.className = 'btn btn-secondary text-xs py-1 px-2';
+                    rotateBtn.textContent = 'Rotate';
+                    rotateBtn.addEventListener('click', () => rotateKey(k.id));
+                    actions.appendChild(rotateBtn);
+                    const disableBtn = document.createElement('button');
+                    disableBtn.className = 'btn btn-secondary text-xs py-1 px-2';
+                    disableBtn.textContent = 'Disable';
+                    disableBtn.addEventListener('click', () => disableKey(k.id));
+                    actions.appendChild(disableBtn);
+                }
+                row.appendChild(name);
+                row.appendChild(actions);
+                adminKeys.appendChild(row);
+            }
+        }
+
+        async function refreshAdmin() {
+            const response = await fetch('/api/admin/health', { headers: adminHeaders() });
+            if (response.status === 401) { showAdminError('API key rejected — log in again.'); lockAdmin(); return; }
+            if (response.status === 403) { showAdminError('Wrong management key.'); lockAdmin(); return; }
+            if (!response.ok) { showAdminError('Health check failed: ' + response.status); return; }
+            const health = await response.json();
+            adminHealthState.textContent = 'config v' + health.configVersion + ' · ' + health.keys.length + ' key(s)';
+            newKeyProvider.innerHTML = '';
+            for (const p of health.providers) {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.displayName || p.id;
+                newKeyProvider.appendChild(opt);
+            }
+            renderKeys(health.keys);
+        }
+
+        async function unlockAdmin() {
+            clearAdminError();
+            adminKey = adminKeyInput.value;
+            if (adminKeyInput) adminKeyInput.value = '';
+            if (!adminKey) { showAdminError('Enter the management key.'); return; }
+            adminPanel.classList.remove('hidden');
+            adminLock.classList.remove('hidden');
+            adminUnlock.classList.add('hidden');
+            await refreshAdmin();
+        }
+
+        async function addKey() {
+            clearAdminError();
+            adminNotice.classList.add('hidden');
+            const label = newKeyLabel.value.trim();
+            const token = newKeyToken.value;
+            const providerId = newKeyProvider.value;
+            if (!label || !token) { showAdminError('Label and API token are required.'); return; }
+            const response = await fetch('/api/admin/keys', {
+                method: 'POST',
+                headers: adminHeaders(),
+                body: JSON.stringify({ providerId, label, apiToken: token }),
+            });
+            newKeyToken.value = '';
+            if (response.status === 409) { showAdminError('That label already exists.'); return; }
+            if (!response.ok) { showAdminError('Add failed: ' + response.status); return; }
+            const created = await response.json();
+            newKeyLabel.value = '';
+            showAdminNotice('Added ' + created.label + ' (v' + created.activeVersion + ').');
+            await refreshAdmin();
+        }
+
+        async function rotateKey(id) {
+            const token = window.prompt('New API token for key ' + id + ':');
+            if (!token) return;
+            const response = await fetch('/api/admin/keys/' + id + '/rotate', {
+                method: 'POST',
+                headers: adminHeaders(),
+                body: JSON.stringify({ apiToken: token }),
+            });
+            if (response.status === 404) { showAdminError('Key not found.'); return; }
+            if (!response.ok) { showAdminError('Rotate failed: ' + response.status); return; }
+            const rotated = await response.json();
+            showAdminNotice('Rotated to v' + rotated.activeVersion + '.');
+            await refreshAdmin();
+        }
+
+        async function disableKey(id) {
+            if (!window.confirm('Disable key ' + id + '? It stays stored but is no longer served.')) return;
+            const response = await fetch('/api/admin/keys/' + id + '/disable', {
+                method: 'POST',
+                headers: adminHeaders(),
+            });
+            if (!response.ok) { showAdminError('Disable failed: ' + response.status); return; }
+            showAdminNotice('Key disabled.');
+            await refreshAdmin();
+        }
+
+        adminUnlock.addEventListener('click', unlockAdmin);
+        adminLock.addEventListener('click', lockAdmin);
+        addKeyButton.addEventListener('click', addKey);
+        adminKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') unlockAdmin();
         });
 
         // Download image
