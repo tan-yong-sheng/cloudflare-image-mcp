@@ -88,3 +88,22 @@ when `authToken` is present) opening a workbench modal that mirrors variant A:
 ## Design documentation
 
 - After acceptance: update `docs/CREDENTIALS_SETUP.md` (workbench flow + PATCH) and record the deferred-items decision in the follow-up issue for Base URL / per-key models / connectivity test.
+
+## Deviations recorded during implementation
+
+- **Add path extended**: `POST /api/admin/keys` now also accepts
+  `{ accountId, weight, enabled }` (the workbench's add sheet writes
+  them). Cloudflare keys require `accountId` at add **and** edit — the
+  account id is load-bearing for inference (`/accounts/{id}/ai/run`).
+  This changes the `POST` contract #74 shipped; existing store/e2e
+  tests were updated explicitly (seeds gained an account id).
+- **Checkbox label semantics**: the prototype's "Disable this entry"
+  checkbox rendered checked-when-enabled, which reads backwards. The
+  implementation labels the control **Enabled** (checked = served,
+  uncheck = parked); row switch and edit checkbox share that semantics.
+- **Health read extended**: `getAdminHealth` keys now carry
+  `externalAccountId` (the table's Account ID column reads it).
+- **Selective deferral**: Base URL / per-key Custom models /
+  connectivity Test are absent from the shipped UI this slice (no
+  schema home / no test endpoint) — see "Deferred" above; the sheet ends
+  at account id, token, weight, enabled.

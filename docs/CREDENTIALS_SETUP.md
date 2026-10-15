@@ -165,22 +165,37 @@ configured: with `API_KEYS` unset the app-wide auth bypass would leave
 admin on the management key alone, so `/api/admin/*` refuses with 403 in
 that state.
 
+The signed-in frontend exposes the same operations through the **Provider
+Credentials workbench** (the 🔑 Admin button in the header): the management
+key is entered in the UI, held in memory only, and cleared on lock, close,
+or logout — never persisted.
+
 - **Health** — `GET /api/admin/health` returns providers, key labels
-  with weights/flags/active versions, the exposure overlay rows, and the
-  config version. Labels and counts only, never secret values.
+  with weights/flags/active versions/account ids, the exposure overlay
+  rows, and the config version. Labels and counts only, never secret
+  values.
 - **Add** — `POST /api/admin/keys` with
-  `{ "providerId", "label", "apiToken" }`. The token is sealed
+  `{ "providerId", "label", "apiToken" }` plus optional
+  `accountId`, `weight`, `enabled`. The token is sealed
   server-side with `PROVIDER_DATA_KEY`; the response echoes identity only
   (`id`, `label`, `providerId`, `activeVersion`). Duplicate labels fail
-  with 409; unknown providers with 400. `providerId` rides on every
-  write, so a second provider needs no API change — today
-  `"cloudflare"` is the only row in the catalog.
+  with 409; unknown providers with 400. Cloudflare keys require
+  `accountId` (inference addresses `/accounts/{account_id}/ai/run`).
+  `providerId` rides on every write, so a second provider needs no API
+  change — today `"cloudflare"` is the only row in the catalog.
+- **Edit / rotate-on-save** — `PATCH /api/admin/keys/:id` with any of
+  `{ "accountId", "weight", "enabled", "apiToken" }`. A present
+  token revokes the active version and inserts the next one in the same
+  transaction as the field edits (rotate-on-save); an absent token keeps
+  the current version. Echoes identity plus the edited fields. This is
+  the path the workbench's Edit sheet uses.
 - **Rotate** — `POST /api/admin/keys/:id/rotate` with
   `{ "apiToken" }`: revokes the active version and inserts the next one
   in a single transaction (a concurrent rotation loses loudly with 409
   instead of forking versions).
 - **Disable** — `POST /api/admin/keys/:id/disable`: the row is kept but no
-  longer served (`enabled: 0` in health).
+  longer served (`enabled: 0` in health). The workbench's row switch
+  sends `PATCH { "enabled": false }` for the same effect.
 
 Every mutation bumps `config_versions` (the pool cache's reload signal)
 and writes an `admin_audit` row (actor, action, key, timestamp) — who
