@@ -913,28 +913,84 @@ export function getFrontendHTML(): string {
         function renderKeys(keys) {
             adminKeys.innerHTML = '';
             for (const k of keys) {
+                const item = document.createElement('div');
+                item.className = 'border rounded p-2 space-y-2';
+
                 const row = document.createElement('div');
-                row.className = 'flex items-center justify-between gap-2 text-sm border rounded p-2';
+                row.className = 'flex items-center justify-between gap-2 text-sm';
                 const name = document.createElement('span');
                 // textContent, never innerHTML: labels come from the store.
                 name.textContent = k.label + ' (' + k.providerId + ') v' + (k.activeVersion ?? '?') + (k.enabled ? '' : ' — disabled');
                 const actions = document.createElement('div');
                 actions.className = 'flex gap-2';
+
                 if (k.enabled) {
                     const rotateBtn = document.createElement('button');
                     rotateBtn.className = 'btn btn-secondary text-xs py-1 px-2';
                     rotateBtn.textContent = 'Rotate';
-                    rotateBtn.addEventListener('click', () => rotateKey(k.id));
-                    actions.appendChild(rotateBtn);
+
                     const disableBtn = document.createElement('button');
                     disableBtn.className = 'btn btn-secondary text-xs py-1 px-2';
                     disableBtn.textContent = 'Disable';
                     disableBtn.addEventListener('click', () => disableKey(k.id));
+
+                    // Inline masked rotation form — eliminates plaintext prompt
+                    const rotateForm = document.createElement('div');
+                    rotateForm.className = 'flex gap-2 hidden';
+                    const rotateInput = document.createElement('input');
+                    rotateInput.type = 'password';
+                    rotateInput.placeholder = 'New API token';
+                    rotateInput.className = 'w-full text-xs';
+                    rotateInput.autocomplete = 'off';
+                    const rotateSave = document.createElement('button');
+                    rotateSave.className = 'btn btn-primary text-xs py-1 px-2';
+                    rotateSave.textContent = 'Save';
+                    const rotateCancel = document.createElement('button');
+                    rotateCancel.className = 'btn btn-secondary text-xs py-1 px-2';
+                    rotateCancel.textContent = 'Cancel';
+
+                    rotateBtn.addEventListener('click', () => {
+                        rotateForm.classList.remove('hidden');
+                        rotateInput.focus();
+                    });
+                    rotateCancel.addEventListener('click', () => {
+                        rotateInput.value = '';
+                        rotateForm.classList.add('hidden');
+                    });
+                    rotateSave.addEventListener('click', async () => {
+                        const token = rotateInput.value;
+                        if (!token) return;
+                        rotateInput.value = '';
+                        rotateForm.classList.add('hidden');
+                        await rotateKey(k.id, token);
+                    });
+                    rotateInput.addEventListener('keypress', async (e) => {
+                        if (e.key === 'Enter') {
+                            const token = rotateInput.value;
+                            if (!token) return;
+                            rotateInput.value = '';
+                            rotateForm.classList.add('hidden');
+                            await rotateKey(k.id, token);
+                        }
+                    });
+
+                    actions.appendChild(rotateBtn);
                     actions.appendChild(disableBtn);
+                    row.appendChild(name);
+                    row.appendChild(actions);
+                    item.appendChild(row);
+
+                    rotateForm.appendChild(rotateInput);
+                    rotateForm.appendChild(rotateSave);
+                    rotateForm.appendChild(rotateCancel);
+                    item.appendChild(rotateForm);
+                } else {
+                    row.appendChild(name);
+                    row.appendChild(actions);
+                    item.appendChild(row);
                 }
-                row.appendChild(name);
-                row.appendChild(actions);
-                adminKeys.appendChild(row);
+
+                adminKeys.appendChild(item);
             }
         }
 
@@ -1002,8 +1058,8 @@ export function getFrontendHTML(): string {
             }
         }
 
-        async function rotateKey(id) {
-            let token = window.prompt('New API token for key ' + id + ':');
+        async function rotateKey(id, apiToken) {
+            let token = apiToken;
             if (!token) return;
             clearAdminError();
             adminNotice.classList.add('hidden');

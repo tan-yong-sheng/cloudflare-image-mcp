@@ -48,14 +48,19 @@ const MAX_ADMIN_KEY_LENGTH = 512;
 
 /**
  * Constant-time comparison using fixed-size SHA-256 digests over padded buffers.
- * Padding both inputs to MAX_ADMIN_KEY_LENGTH bytes ensures that the SHA-256
- * block compression steps and digest comparison loops process identical byte
- * counts regardless of input key lengths, eliminating timing leakage.
+ * Encodes inputs to UTF-8 and pads both buffers to MAX_ADMIN_KEY_LENGTH bytes.
+ * Validates byte lengths first so multibyte strings never overflow the buffer.
  */
 async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const enc = new TextEncoder();
   const ab = enc.encode(a);
   const bb = enc.encode(b);
+  if (
+    ab.byteLength > MAX_ADMIN_KEY_LENGTH ||
+    bb.byteLength > MAX_ADMIN_KEY_LENGTH
+  ) {
+    return false;
+  }
   const paddedA = new Uint8Array(MAX_ADMIN_KEY_LENGTH);
   const paddedB = new Uint8Array(MAX_ADMIN_KEY_LENGTH);
   paddedA.set(ab);
@@ -66,7 +71,7 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   ]);
   const viewA = new Uint8Array(digestA);
   const viewB = new Uint8Array(digestB);
-  let diff = ab.length ^ bb.length;
+  let diff = ab.byteLength ^ bb.byteLength;
   for (let i = 0; i < 32; i++) {
     diff |= viewA[i] ^ viewB[i];
   }
@@ -76,21 +81,24 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 /** Second gate for admin routes; call after the bearer gate passed.
  * Fail-closed: an unconfigured management key (or an empty presented
  * key) never authenticates — empty-equals-empty must not open the gate.
- * Inputs exceeding MAX_ADMIN_KEY_LENGTH fail closed before hashing to
- * prevent unbounded work or memory allocation. */
+ * Inputs exceeding MAX_ADMIN_KEY_LENGTH fail closed before hashing. */
 export async function checkAdminKey(
   request: Request,
   env: Env
 ): Promise<boolean> {
-  const configured = env.ADMIN_API_KEY ?? "";
-  if (configured.length === 0 || configured.length > MAX_ADMIN_KEY_LENGTH) {
+  try {
+    const configured = env.ADMIN_API_KEY ?? "";
+    if (configured.length === 0 || configured.length > MAX_ADMIN_KEY_LENGTH) {
+      return false;
+    }
+    const presented = request.headers.get("X-Admin-Key") ?? "";
+    if (presented.length === 0 || presented.length > MAX_ADMIN_KEY_LENGTH) {
+      return false;
+    }
+    return await timingSafeEqual(presented, configured);
+  } catch {
     return false;
   }
-  const presented = request.headers.get("X-Admin-Key") ?? "";
-  if (presented.length === 0 || presented.length > MAX_ADMIN_KEY_LENGTH) {
-    return false;
-  }
-  return timingSafeEqual(presented, configured);
 }
 
 /**
