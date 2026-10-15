@@ -312,13 +312,27 @@ export async function addProviderKey(
     }
     throw error;
   }
-  const id = (
-    await db
-      .prepare("SELECT id FROM provider_keys WHERE label = ?")
-      .bind(label)
-      .first<{ id: number }>()
-  )?.id;
-  if (id === undefined) throw new AdminStoreError(500, "key write failed");
+  let id: number | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const row = await db
+        .prepare("SELECT id FROM provider_keys WHERE label = ?")
+        .bind(label)
+        .first<{ id: number }>();
+      if (row?.id !== undefined) {
+        id = row.id;
+        break;
+      }
+    } catch {
+      // Transient read failure after successful commit; retry
+    }
+  }
+  if (id === undefined) {
+    throw new AdminStoreError(
+      500,
+      `key committed successfully but id resolution for '${label}' failed; query health to verify`
+    );
+  }
   return { id, label, providerId, activeVersion: 1 };
 }
 
