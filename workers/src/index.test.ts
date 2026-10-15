@@ -119,6 +119,9 @@ describe("provider credentials panel (R2)", () => {
     const html = await response.text();
     // Every element id the panel script addresses must exist.
     for (const id of [
+      "adminModalButton",
+      "adminModal",
+      "adminModalClose",
       "adminKey",
       "adminUnlock",
       "adminLock",

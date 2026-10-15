@@ -222,12 +222,52 @@ export function getFrontendHTML(): string {
         </div>
     </div>
 
+    <!-- Admin Modal -->
+    <div id="adminModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
+        <div class="card p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-3">
+                <h2 id="adminModalTitle" class="text-xl font-semibold flex items-center">
+                    <i class="fa-solid fa-key mr-2 text-primary"></i>Provider Credentials
+                </h2>
+                <div class="flex items-center gap-2">
+                    <span id="adminHealthState" class="text-xs opacity-75" role="status"></span>
+                    <button id="adminModalClose" class="btn btn-secondary p-1 h-8 w-8 flex items-center justify-center rounded" aria-label="Close admin dialog">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+            <p class="text-sm opacity-75">Keys are sealed server-side on save. Unlock with the management key to view and manage them.</p>
+            <div>
+                <label for="adminKey" class="block text-sm font-medium mb-1">Management key</label>
+                <div class="flex gap-2">
+                    <input type="password" id="adminKey" class="w-full" placeholder="Admin key (never stored)" autocomplete="off">
+                    <button id="adminUnlock" class="btn btn-secondary text-sm py-1 px-3">Unlock</button>
+                    <button id="adminLock" class="btn btn-secondary text-sm py-1 px-3 hidden">Lock</button>
+                </div>
+                <p id="adminError" class="text-sm text-red-500 hidden" role="alert"></p>
+            </div>
+            <div id="adminPanel" class="space-y-3 hidden">
+                <div id="adminKeys" class="space-y-2"></div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <input id="newKeyLabel" class="w-full" placeholder="Label (e.g. billing)" aria-label="New key label">
+                    <input type="password" id="newKeyToken" class="w-full" placeholder="API token" aria-label="New API token" autocomplete="off">
+                    <select id="newKeyProvider" class="w-full" aria-label="Provider"></select>
+                    <button id="addKeyButton" class="btn btn-primary text-sm py-1 px-3">Add key</button>
+                </div>
+                <p id="adminNotice" class="text-sm hidden" role="status"></p>
+            </div>
+        </div>
+    </div>
+
     <div class="container mx-auto px-4 py-4 max-w-6xl">
         <div class="flex items-center justify-between mb-6">
             <h1 class="text-2xl md:text-3xl font-bold flex items-center">
                 <i class="fa-solid fa-image mr-2"></i>AI Image Generator
             </h1>
             <div class="flex items-center space-x-2">
+                <button id="adminModalButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Manage Provider Credentials">
+                    <i class="fa-solid fa-key mr-2 text-primary"></i>Admin
+                </button>
                 <button id="logoutButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Logout">
                     <i class="fa-solid fa-sign-out-alt mr-2"></i>Logout
                 </button>
@@ -339,38 +379,8 @@ export function getFrontendHTML(): string {
                 </button>
             </div>
 
-            <!-- Credentials + Result column -->
+            <!-- Result column -->
             <div class="w-full lg:w-3/5 space-y-6">
-                <!-- Panel: Provider Credentials (admin) -->
-                <div class="card p-4 space-y-4 fade-in">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold flex items-center">
-                            <i class="fa-solid fa-key mr-2 text-primary"></i>Provider Credentials
-                        </h2>
-                        <span id="adminHealthState" class="text-xs opacity-75" role="status"></span>
-                    </div>
-                    <p class="text-sm opacity-75">Keys are sealed server-side on save. Unlock with the management key to view and manage them.</p>
-                    <div>
-                        <label for="adminKey" class="block text-sm font-medium mb-1">Management key</label>
-                        <div class="flex gap-2">
-                            <input type="password" id="adminKey" class="w-full" placeholder="Admin key (never stored)" autocomplete="off">
-                            <button id="adminUnlock" class="btn btn-secondary text-sm py-1 px-3">Unlock</button>
-                            <button id="adminLock" class="btn btn-secondary text-sm py-1 px-3 hidden">Lock</button>
-                        </div>
-                        <p id="adminError" class="text-sm text-red-500 hidden" role="alert"></p>
-                    </div>
-                    <div id="adminPanel" class="space-y-3 hidden">
-                        <div id="adminKeys" class="space-y-2"></div>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                            <input id="newKeyLabel" class="w-full" placeholder="Label (e.g. billing)" aria-label="New key label">
-                            <input type="password" id="newKeyToken" class="w-full" placeholder="API token" aria-label="New API token" autocomplete="off">
-                            <select id="newKeyProvider" class="w-full" aria-label="Provider"></select>
-                            <button id="addKeyButton" class="btn btn-primary text-sm py-1 px-3">Add key</button>
-                        </div>
-                        <p id="adminNotice" class="text-sm hidden" role="status"></p>
-                    </div>
-                </div>
-
                 <!-- Panel: Result -->
                 <div class="card p-4 space-y-4 fade-in">
                     <div class="flex justify-between items-center">
@@ -425,15 +435,20 @@ export function getFrontendHTML(): string {
         const loginButton = document.getElementById('loginButton');
         const loginError = document.getElementById('loginError');
         const logoutButton = document.getElementById('logoutButton');
+        const adminModalButton = document.getElementById('adminModalButton');
+        const adminModal = document.getElementById('adminModal');
+        const adminModalClose = document.getElementById('adminModalClose');
 
         // Check auth status on load
         function checkAuth() {
             if (authToken) {
                 loginModal.classList.add('hidden');
                 logoutButton.classList.remove('hidden');
+                adminModalButton.classList.remove('hidden');
             } else {
                 loginModal.classList.remove('hidden');
                 logoutButton.classList.add('hidden');
+                adminModalButton.classList.add('hidden');
             }
         }
 
@@ -486,6 +501,7 @@ export function getFrontendHTML(): string {
         logoutButton.addEventListener('click', () => {
             authToken = '';
             sessionStorage.removeItem('api_key');
+            adminModal.classList.add('hidden');
             lockAdmin();
             checkAuth();
         });
@@ -1038,6 +1054,24 @@ export function getFrontendHTML(): string {
         addKeyButton.addEventListener('click', addKey);
         adminKeyInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') unlockAdmin();
+        });
+
+        // Admin modal controls
+        adminModalButton.addEventListener('click', () => {
+            clearAdminError();
+            adminModal.classList.remove('hidden');
+            if (adminKeyInput && !adminKey) adminKeyInput.focus();
+        });
+        adminModalClose.addEventListener('click', () => {
+            adminModal.classList.add('hidden');
+        });
+        adminModal.addEventListener('click', (e) => {
+            if (e.target === adminModal) adminModal.classList.add('hidden');
+        });
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !adminModal.classList.contains('hidden')) {
+                adminModal.classList.add('hidden');
+            }
         });
 
         // Download image
