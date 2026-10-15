@@ -65,6 +65,20 @@ describe("admin health (R2)", () => {
     expect(response.status).toBe(403);
   });
 
+  test("missing admin key is a 403 even when none is configured", async () => {
+    // Fail-closed regression: empty-equals-empty must not open the gate.
+    // The bearer passes gate one, but an unprovisioned ADMIN_API_KEY
+    // denies everything at gate two — omitting the header gets 403,
+    // never access.
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).ADMIN_API_KEY;
+    const response = await worker.fetch(
+      get("/api/admin/health", bearer("user-key")),
+      unconfigured
+    );
+    expect(response.status).toBe(403);
+  });
+
   test("right bearer and right admin key reach the health payload", async () => {
     const response = await worker.fetch(
       get(

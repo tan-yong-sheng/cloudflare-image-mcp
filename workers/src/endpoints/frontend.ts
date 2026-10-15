@@ -339,8 +339,9 @@ export function getFrontendHTML(): string {
                 </button>
             </div>
 
-            <!-- Right: Provider Credentials (admin) -->
-            <div class="w-full lg:w-3/5">
+            <!-- Credentials + Result column -->
+            <div class="w-full lg:w-3/5 space-y-6">
+            <!-- Panel: Provider Credentials (admin) -->
                 <div class="card h-full p-4 space-y-4 fade-in">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold flex items-center">
@@ -370,10 +371,11 @@ export function getFrontendHTML(): string {
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <script>
+            <!-- Panel: Result -->
+            <div class="w-full">
+                <div class="card h-full p-4 space-y-4 fade-in">
+                    <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold flex items-center">
                             <i class="fa-solid fa-image mr-2 text-primary"></i>Result
                         </h2>

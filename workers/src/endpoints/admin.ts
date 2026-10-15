@@ -54,10 +54,15 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** Second gate for admin routes; call after the bearer gate passed. */
+/** Second gate for admin routes; call after the bearer gate passed.
+ * Fail-closed: an unconfigured management key (or an empty presented
+ * key) never authenticates — empty-equals-empty must not open the gate. */
 export function checkAdminKey(request: Request, env: Env): boolean {
+  const configured = env.ADMIN_API_KEY ?? "";
+  if (configured.length === 0) return false;
   const presented = request.headers.get("X-Admin-Key") ?? "";
-  return timingSafeEqual(presented, env.ADMIN_API_KEY ?? "");
+  if (presented.length === 0) return false;
+  return timingSafeEqual(presented, configured);
 }
 
 interface D1Row {
