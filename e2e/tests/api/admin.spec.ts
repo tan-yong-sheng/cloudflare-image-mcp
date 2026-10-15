@@ -7,8 +7,8 @@ import { getAuthHeaders } from "../../lib/auth";
  * Runs against a DEPLOYED backend carrying the R2 routes with
  * ADMIN_API_KEY set (post-merge staging at the earliest): the spec is
  * written now so the contract is pinned, but it can only execute once
- * the routes and the management secret exist on the target. Until then
- * every test here fails at the gate assertions — loudly, by design, so
+ * the routes and the management secret exist on the target. Until then the
+ * management-key tests here fail at the gate assertions — loudly, by design, so
  * an unprovisioned target cannot fake a green run.
  *
  * Conventions mirrored from the vitest S1 seam: two gates (login bearer

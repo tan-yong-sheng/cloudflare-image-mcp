@@ -391,8 +391,9 @@ jobs:
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured (role: endpoint auth — MCP + OpenAI + frontend)' || '❌ Missing (role: endpoint auth — endpoints are public)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (role: AI inference — multi-account)' || 'ℹ️ Not set (role: AI inference — falls back to deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- AI_ACCOUNTS → D1 import: ${{ inputs.import_credentials == true && '✅ Ran this deploy (envelopes applied; row evidence above)' || 'ℹ️ Not run (opt-in via the import_credentials workflow_dispatch input)' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- D1 provider store: binding PROVIDER_DB (role: provider schema/migrations applied before deploy; no app reads yet — R1a)" >> $GITHUB_STEP_SUMMARY
+          echo "- D1 provider store: binding PROVIDER_DB (role: provider schema/migrations applied before deploy; /api/admin/* reads and writes it — R2 #74)" >> $GITHUB_STEP_SUMMARY
           echo "- PROVIDER_DATA_KEY: ${{ secrets.PROVIDER_DATA_KEY != '' && '✅ Configured (role: AES-GCM envelope data key — consumed from R1b)' || 'ℹ️ Not set (role: AES-GCM envelope data key — needed before R1b reads D1)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY != '' && '✅ Configured (role: management key gating /api/admin/*)' || 'ℹ️ Not set (role: management key — admin routes fail closed with 403)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- TZ: ${{ secrets.TZ != '' && '✅ Configured (role: runtime logging timezone)' || 'ℹ️ Not set (role: runtime logging timezone — defaults to UTC)' }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup sensitive files
