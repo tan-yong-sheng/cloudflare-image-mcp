@@ -58,16 +58,23 @@ function asD1(db: DatabaseSync): AdminD1 {
     commit: async (rawWrites) => {
       const writes = rawWrites as { sql: string; params: readonly unknown[] }[];
       db.exec("BEGIN");
+      let keyId: number | null = null;
       try {
-        for (const w of writes)
-          db.prepare(w.sql).run(
-            ...(w.params as (string | number | bigint | null)[])
-          );
+        for (let i = 0; i < writes.length; i++) {
+          const info = db
+            .prepare(writes[i].sql)
+            .run(...(writes[i].params as (string | number | bigint | null)[]));
+          if (i === 0) {
+            const lri = info.lastInsertRowid;
+            keyId = typeof lri === "bigint" ? Number(lri) : lri;
+          }
+        }
         db.exec("COMMIT");
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;
       }
+      return { keyId };
     },
   };
 }
@@ -112,6 +119,12 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       activeVersion: 1,
     });
+    // The id is resolved inside the atomic commit (no post-commit read):
+    // it must equal the actual provider_keys row id.
+    const keyRow = db
+      .prepare("SELECT id FROM provider_keys WHERE label = 'page-key-1'")
+      .get() as { id: number };
+    expect(summary.id).toBe(keyRow.id);
 
     // The stored envelope opens with the data key to the exact token —
     // sealing happened against THIS request, not a fixture.
@@ -130,6 +143,19 @@ describe("admin store against the real migrations (S2)", () => {
         key_id: summary.id,
       },
     ]);
+  });
+
+  test("add rejects a token over the seal bound without writing", async () => {
+    const db = freshDb();
+    await expect(
+      addProviderKey(asD1(db), seal, {
+        providerId: "cloudflare",
+        label: "big",
+        apiToken: "x".repeat(4097),
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(versionOf(db)).toBe(1);
+    expect(auditRows(db)).toEqual([]);
   });
 
   test("add rejects an unknown provider without writing", async () => {

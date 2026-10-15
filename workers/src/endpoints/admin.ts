@@ -19,6 +19,7 @@ import {
   disableProviderKey,
   getAdminHealth,
   rotateProviderKey,
+  type AdminCommitResult,
   type AdminD1,
   type AdminWrite,
 } from "../services/admin-store.js";
@@ -45,6 +46,9 @@ function forbidden(): Response {
 }
 
 const MAX_ADMIN_KEY_LENGTH = 512;
+
+/** Admin write bodies are tiny ({providerId,label,apiToken}); cap the read. */
+const MAX_ADMIN_BODY_BYTES = 16 * 1024;
 
 /**
  * Constant-time comparison using fixed-size SHA-256 digests over padded buffers.
@@ -176,14 +180,53 @@ function storeError(error: unknown): Response {
   return internalError("Internal server error");
 }
 
-async function requestJson(request: Request): Promise<Record<string, unknown>> {
+/**
+ * Read the request body as text, refusing anything over MAX_ADMIN_BODY_BYTES.
+ * Content-Length short-circuits the common case; the reader also counts bytes
+ * so an absent or understated header cannot smuggle a large body past JSON
+ * parsing and sealing. Oversize is a 413, not a silent truncation.
+ */
+async function readBoundedBody(request: Request): Promise<string> {
+  const declared = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(declared) && declared > MAX_ADMIN_BODY_BYTES) {
+    throw new AdminStoreError(413, "request body too large");
+  }
+  const body = request.body;
+  if (!body) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
   try {
-    const parsed = (await request.json()) as unknown;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_ADMIN_BODY_BYTES) {
+        throw new AdminStoreError(413, "request body too large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } catch (error) {
+    if (error instanceof AdminStoreError) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    }
+    throw new AdminStoreError(400, "request body must be a JSON object");
+  }
+  return text;
+}
+
+async function requestJson(request: Request): Promise<Record<string, unknown>> {
+  const raw = await readBoundedBody(request);
+  try {
+    const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
   } catch {
-    // Falls through to the empty-object rejection below.
+    // Falls through to the object-shape rejection below.
   }
   throw new AdminStoreError(400, "request body must be a JSON object");
 }
@@ -261,8 +304,17 @@ export async function handleAdmin(
 export function commitWithD1(
   db: NonNullable<Env["PROVIDER_DB"]>
 ): AdminD1["commit"] {
-  return async (writes: readonly AdminWrite[]): Promise<void> => {
-    await db.batch(writes.map((w) => db.prepare(w.sql).bind(...w.params)));
+  return async (writes: readonly AdminWrite[]): Promise<AdminCommitResult> => {
+    const results = (await db.batch(
+      writes.map((w) => db.prepare(w.sql).bind(...w.params))
+    )) as readonly { meta?: { last_row_id?: number } }[];
+    // D1 reports the inserted row id on the first write's result; hand it
+    // back so add keys resolve inside the commit, never via a later read.
+    const keyId =
+      typeof results[0]?.meta?.last_row_id === "number"
+        ? results[0].meta.last_row_id
+        : null;
+    return { keyId };
   };
 }
 

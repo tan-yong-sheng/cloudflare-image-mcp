@@ -9,6 +9,8 @@
 
 import { describe, expect, test } from "vitest";
 import worker from "../index.js";
+import { handleAdmin } from "./admin.js";
+import type { AdminD1 } from "../services/admin-store.js";
 import type { Env } from "../types.js";
 
 function env(): Env {
@@ -226,6 +228,64 @@ describe("production adapter shape (atomic batch contract)", () => {
       "batch:UPDATE config_versions SET version = 2 WHERE id = 1",
       "batch:INSERT INTO admin_audit (actor) VALUES (?)",
     ]);
+  });
+});
+
+describe("admin write bounds (R2)", () => {
+  // requestJson runs before any store call, so a stub satisfying the seam
+  // is enough: an oversized body must be refused before JSON parsing and
+  // before sealing, even when the request carries no Content-Length.
+  const stubStore = {
+    prepare: () => {
+      const stmt = {
+        first: async () => null,
+        all: async () => ({ results: [] }),
+        run: async () => ({}),
+      };
+      return { ...stmt, bind: () => stmt };
+    },
+    commit: async () => ({ keyId: null }),
+  } as unknown as AdminD1;
+
+  function postRaw(
+    body: BodyInit,
+    init: Record<string, unknown> = {}
+  ): Request {
+    return new Request("https://worker.test/api/admin/keys", {
+      method: "POST",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": "admin-key" }),
+        "Content-Type": "application/json",
+      },
+      body,
+      ...init,
+    } as RequestInit);
+  }
+
+  test("a body over the cap is refused with 413 before parsing", async () => {
+    const huge = JSON.stringify({
+      providerId: "cloudflare",
+      label: "k",
+      apiToken: "x".repeat(20000),
+    });
+    const res = await handleAdmin(postRaw(huge), "/api/admin/keys", env(), {
+      adminStore: stubStore,
+    });
+    expect(res?.status).toBe(413);
+  });
+
+  test("a streamed body over the cap is refused even with no Content-Length", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(20000)));
+        controller.close();
+      },
+    });
+    const request = postRaw(stream, { duplex: "half" });
+    const res = await handleAdmin(request, "/api/admin/keys", env(), {
+      adminStore: stubStore,
+    });
+    expect(res?.status).toBe(413);
   });
 });
 

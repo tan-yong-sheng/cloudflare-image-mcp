@@ -24,13 +24,32 @@ export interface AdminD1 {
   prepare(sql: string): BoundStmt & {
     bind(...params: unknown[]): BoundStmt;
   };
-  commit(writes: readonly AdminWrite[]): Promise<void>;
+  commit(writes: readonly AdminWrite[]): Promise<AdminCommitResult>;
+}
+
+/**
+ * Result of an atomic write batch. keyId is the row id the engine assigned
+ * to the first write (the provider_keys INSERT for add) so the response
+ * carries the identity resolved INSIDE the commit — no read-your-write
+ * round trip that can fail after the mutation already landed.
+ */
+export interface AdminCommitResult {
+  keyId: number | null;
 }
 
 /** A bound write the store hands to the engine for atomic commit. */
 export interface AdminWrite {
   readonly sql: string;
   readonly params: readonly unknown[];
+}
+
+/** Provider API tokens are short opaque strings; bound what we will seal. */
+const MAX_API_TOKEN_LENGTH = 4096;
+
+function assertTokenLength(apiToken: string): void {
+  if (apiToken.length > MAX_API_TOKEN_LENGTH) {
+    throw new AdminStoreError(400, "apiToken is too long");
+  }
 }
 
 /** The admin API itself, acting through the bearer+management-key gates. */
@@ -281,6 +300,7 @@ export async function addProviderKey(
   if (!apiToken || apiToken.length === 0) {
     throw new AdminStoreError(400, "apiToken is required");
   }
+  assertTokenLength(apiToken);
   if (!(await providerExists(db, providerId))) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
@@ -304,16 +324,22 @@ export async function addProviderKey(
     bumpWrite(),
     auditWrite("add", providerId, null, label),
   ];
+  let commit: AdminCommitResult;
   try {
-    await db.commit(writes);
+    commit = await db.commit(writes);
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AdminStoreError(409, `label '${label}' already exists`);
     }
     throw error;
   }
-  let id: number | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // The id comes back from the atomic commit; the read is a belt-and-braces
+  // fallback for an engine that reports no row id. A failure here happens
+  // only AFTER the mutation landed, so it is retried, never reported as a
+  // failed write the caller would try to repeat into a duplicate 409.
+  let id: number | undefined =
+    typeof commit.keyId === "number" ? commit.keyId : undefined;
+  for (let attempt = 0; attempt < 3 && id === undefined; attempt++) {
     try {
       const row = await db
         .prepare("SELECT id FROM provider_keys WHERE label = ?")
@@ -351,6 +377,7 @@ export async function rotateProviderKey(
   if (!token || token.length === 0) {
     throw new AdminStoreError(400, "apiToken is required");
   }
+  assertTokenLength(token);
   const key = await keyRow(db, keyId);
   if (!key) throw new AdminStoreError(404, `unknown provider key ${keyId}`);
   const current = await db
