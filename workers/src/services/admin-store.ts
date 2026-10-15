@@ -402,6 +402,42 @@ export async function addProviderKey(
 }
 
 /**
+ * Append the R1b rotate ledger writes: revoke the active version (if any)
+ * then insert the next, in the order `uq_credential_single_active` forces —
+ * the revoke must precede the insert even inside one transaction. Returns
+ * the new active version. One home for the ledger order shared by rotate and
+ * update-with-token.
+ */
+function appendRotateWrites(
+  writes: AdminWrite[],
+  keyId: number,
+  envelope: string,
+  current: { v: number | null } | null
+): number {
+  const next = (current?.v ?? 0) + 1;
+  if (current?.v !== null && current?.v !== undefined) {
+    writes.push(
+      write(
+        "UPDATE credential_versions SET revoked_at = unixepoch() " +
+          "WHERE provider_key_id = ? AND revoked_at IS NULL",
+        keyId
+      )
+    );
+  }
+  writes.push(
+    write(
+      "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
+        "VALUES (?, ?, ?, ?)",
+      keyId,
+      next,
+      envelope,
+      ADMIN_ACTOR
+    )
+  );
+  return next;
+}
+
+/**
  * Rotate a key through the R1b ledger order: revoke the active version,
  * insert the next one, atomically. A concurrent rotate loses loudly (409)
  * on the single-active index instead of silently forking versions.
@@ -425,27 +461,10 @@ export async function rotateProviderKey(
     )
     .bind(keyId)
     .first<{ v: number | null }>();
-  const next = (current?.v ?? 0) + 1;
   const envelope = await seal(token);
   const writes: AdminWrite[] = [];
-  if (current?.v !== null && current?.v !== undefined) {
-    writes.push(
-      write(
-        "UPDATE credential_versions SET revoked_at = unixepoch() " +
-          "WHERE provider_key_id = ? AND revoked_at IS NULL",
-        keyId
-      )
-    );
-  }
+  const next = appendRotateWrites(writes, keyId, envelope, current);
   writes.push(
-    write(
-      "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
-        "VALUES (?, ?, ?, ?)",
-      keyId,
-      next,
-      envelope,
-      ADMIN_ACTOR
-    ),
     bumpWrite(),
     auditWrite("rotate", key.provider_id, keyId, key.label)
   );
@@ -587,27 +606,7 @@ export async function updateProviderKey(
     .first<{ v: number | null }>();
   if (token) {
     const envelope = await seal(token);
-    const next = (current?.v ?? 0) + 1;
-    if (current?.v !== null && current?.v !== undefined) {
-      writes.push(
-        write(
-          "UPDATE credential_versions SET revoked_at = unixepoch() " +
-            "WHERE provider_key_id = ? AND revoked_at IS NULL",
-          input.keyId
-        )
-      );
-    }
-    writes.push(
-      write(
-        "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
-          "VALUES (?, ?, ?, ?)",
-        input.keyId,
-        next,
-        envelope,
-        ADMIN_ACTOR
-      )
-    );
-    activeVersion = next;
+    activeVersion = appendRotateWrites(writes, input.keyId, envelope, current);
   } else {
     activeVersion = current?.v ?? null;
   }
