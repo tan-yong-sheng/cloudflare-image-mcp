@@ -40,12 +40,14 @@ Create a token with these **Account-scoped** permissions:
 
 ## Optional Secrets
 
-| Variable            | Description                                                                                                                                                                        | Example                   |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                                                              | `mykey1,mykey2`           |
-| `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                                                                | See below                 |
-| `TZ`                | Timezone for logging                                                                                                                                                               | `America/New_York`        |
-| `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Required for the R1b D1 provider store; set it before running the one-shot import (see below). | `openssl rand -base64 32` |
+| Variable            | Description                                                                                                                                                                        | Example                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                                                              | `mykey1,mykey2`                         |
+| `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                                                                | See below                               |
+| `TZ`                | Timezone for logging                                                                                                                                                               | `America/New_York`                      |
+| `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Required for the R1b D1 provider store; set it before running the one-shot import (see below). | `openssl rand -base64 32`               |
+| `AGNES_API_KEY`     | Bearer key for the Agnes AI image API, enabling the `@agnes/*` models. Without it, requests for those models fail with a clear "not configured" error.                             | `npx wrangler secret put AGNES_API_KEY` |
+| `AGNES_BASE_URL`    | Optional override for the Agnes API base URL (default `https://apihub.agnes-ai.com`).                                                                                              | `https://apihub.agnes-ai.com`           |
 
 ### `AI_ACCOUNTS` Format
 

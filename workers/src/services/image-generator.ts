@@ -18,6 +18,7 @@ import {
   type AITransport,
   type ImageStore,
 } from "./generation-adapters.js";
+import { OpenAITransport } from "./openai-transport.js";
 import type { GeneratedImage } from "../utils/image-request.js";
 import {
   MODEL_CONFIGS,
@@ -88,6 +89,11 @@ export class ImageGeneratorService {
   private transport: AITransport;
   private store: ImageStore;
   private models: Map<string, ModelConfig>;
+  private env: Env;
+  /** Injected OpenAI-compatible transport (tests, or a prebuilt one). */
+  private openaiTransport?: AITransport;
+  /** Lazily built OpenAI-compatible transport from env credentials. */
+  private builtOpenAITransport: AITransport | null = null;
 
   private async extractImageResult(
     result: unknown
@@ -151,8 +157,11 @@ export class ImageGeneratorService {
       store?: ImageStore;
       pool?: ProviderPool;
       exposureOverlay?: ExposureOverlay;
+      openaiTransport?: AITransport;
     }
   ) {
+    this.env = env;
+    this.openaiTransport = deps?.openaiTransport;
     this.models = new Map(
       Object.entries(
         overlayRegistry(MODEL_CONFIGS, deps?.exposureOverlay ?? null)
@@ -244,6 +253,34 @@ export class ImageGeneratorService {
     this.transport =
       deps?.transport ?? new RestAITransport(aiAccounts, credentialSource);
     this.store = deps?.store ?? new R2StorageService(env);
+  }
+
+  /**
+   * Select the transport for a model (R3-Agnes): openai-compat models use
+   * the OpenAI-compatible seam, everything else the Cloudflare REST seam.
+   * An injected openaiTransport always wins (tests / prebuilt config).
+   */
+  private transportFor(model: ModelConfig): AITransport {
+    if ((model.transport ?? "cloudflare-rest") === "openai-compat") {
+      if (this.openaiTransport) return this.openaiTransport;
+      this.builtOpenAITransport ??= this.buildOpenAITransport();
+      return this.builtOpenAITransport;
+    }
+    return this.transport;
+  }
+
+  /** Build the OpenAI-compatible transport from env credentials. */
+  private buildOpenAITransport(): AITransport {
+    const apiKey = this.env.AGNES_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "Agnes provider is not configured: set AGNES_API_KEY to enable @agnes/* models"
+      );
+    }
+    return new OpenAITransport({
+      baseUrl: this.env.AGNES_BASE_URL || "https://apihub.agnes-ai.com",
+      apiKeys: [apiKey],
+    });
   }
 
   /**
@@ -400,7 +437,7 @@ export class ImageGeneratorService {
     const payload = ParamParser.toCFPayload(params, model);
 
     // Run the model via the injected transport
-    const result = await this.transport.run(model.id, payload, model);
+    const result = await this.transportFor(model).run(model.id, payload, model);
 
     return await this.finishParsed(model, params, result, returnBase64);
   }
@@ -489,7 +526,12 @@ export class ImageGeneratorService {
     const payload = ParamParser.toCFPayload(params, model);
 
     // Run the model via the injected transport (pass images for multipart handling)
-    const result = await this.transport.run(model.id, payload, model, images);
+    const result = await this.transportFor(model).run(
+      model.id,
+      payload,
+      model,
+      images
+    );
 
     return await this.finishParsed(model, params, result, returnBase64);
   }
@@ -538,7 +580,7 @@ export class ImageGeneratorService {
     const payload = ParamParser.toCFPayload(params, model);
 
     // Run the model via the injected transport
-    const result = await this.transport.run(model.id, payload, model);
+    const result = await this.transportFor(model).run(model.id, payload, model);
 
     return await this.finishParsed(model, params, result, returnBase64);
   }

@@ -16,11 +16,28 @@ import {
 import modelsJson from "./models.json" with { type: "json" };
 
 describe("model registry validity", () => {
-  test("every model id matches its @cf/provider/name key", () => {
+  test("every model id matches its registry key", () => {
     for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
       expect(config.id).toBe(key);
-      expect(key.startsWith("@cf/")).toBe(true);
     }
+  });
+
+  test("Cloudflare models live under the @cf/ namespace", () => {
+    // R3-Agnes (#75) added a non-Cloudflare provider; the @cf/ namespace
+    // now scopes only the models served by the Cloudflare REST transport.
+    for (const config of Object.values(MODEL_CONFIGS)) {
+      if ((config.transport ?? "cloudflare-rest") === "cloudflare-rest") {
+        expect(config.id.startsWith("@cf/")).toBe(true);
+      }
+    }
+  });
+
+  test("non-Cloudflare providers get a distinct namespace (R3-Agnes)", () => {
+    const agnes = MODEL_CONFIGS["@agnes/agnes-image-2.5-flash"];
+    expect(agnes).toBeDefined();
+    expect(agnes.provider).toBe("agnes");
+    expect(agnes.transport).toBe("openai-compat");
+    expect(agnes.id.startsWith("@cf/")).toBe(false);
   });
 
   test("every model declares prompt, tasks, and width/height limits", () => {
