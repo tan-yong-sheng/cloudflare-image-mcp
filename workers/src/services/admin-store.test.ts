@@ -16,6 +16,7 @@ import {
   addProviderKey,
   AdminStoreError,
   disableProviderKey,
+  getAdminHealth,
   rotateProviderKey,
   type AdminD1,
 } from "./admin-store.js";
@@ -220,6 +221,45 @@ describe("admin store against the real migrations (S2)", () => {
 });
 
 describe("admin health exposure rows (S2)", () => {
+  test("getAdminHealth returns providers, keys, exposure overrides, and configVersion", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    db.exec(
+      "INSERT INTO exposure_overrides (model_id, enabled, alias, is_default, updated_by) VALUES ('@cf/model-a', 0, 'short-a', 1, 'r2-test')"
+    );
+    db.exec(
+      "INSERT INTO excluded_scopes (model_id, scope) VALUES ('@cf/model-a', 's1')"
+    );
+    await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "health-key",
+      apiToken: "cf-token-123",
+    });
+
+    const health = await getAdminHealth(d1);
+    expect(health.providers).toEqual([
+      { id: "cloudflare", displayName: "Cloudflare Workers AI" },
+    ]);
+    expect(health.keys).toEqual([
+      {
+        id: expect.any(Number),
+        providerId: "cloudflare",
+        label: "health-key",
+        weight: 1,
+        enabled: true,
+        activeVersion: 1,
+      },
+    ]);
+    expect(health.configVersion).toBe(2);
+    expect(health.exposure).toContainEqual({
+      modelId: "@cf/model-a",
+      enabled: false,
+      alias: "short-a",
+      isDefault: true,
+      scope: "s1",
+    });
+  });
+
   test("exposure rows serialize model flags with scopes", async () => {
     const db = freshDb();
     db.exec(

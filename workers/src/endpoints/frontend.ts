@@ -486,6 +486,7 @@ export function getFrontendHTML(): string {
         logoutButton.addEventListener('click', () => {
             authToken = '';
             sessionStorage.removeItem('api_key');
+            lockAdmin();
             checkAuth();
         });
 
@@ -937,7 +938,8 @@ export function getFrontendHTML(): string {
                 }
                 renderKeys(health.keys);
             } catch (err) {
-                showAdminError('Network error loading admin health: ' + (err.message || 'unknown error'));
+                const msg = err instanceof Error ? err.message : String(err);
+                showAdminError('Network error loading admin health: ' + (msg || 'unknown error'));
             }
         }
 
@@ -965,6 +967,8 @@ export function getFrontendHTML(): string {
                     headers: adminHeaders(),
                     body: JSON.stringify({ providerId, label, apiToken: token }),
                 });
+                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
+                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
                 if (response.status === 409) { showAdminError('That label already exists.'); return; }
                 if (!response.ok) { showAdminError('Add failed: ' + response.status); return; }
                 const created = await response.json();
@@ -972,14 +976,15 @@ export function getFrontendHTML(): string {
                 showAdminNotice('Added ' + created.label + ' (v' + created.activeVersion + ').');
                 await refreshAdmin();
             } catch (err) {
-                showAdminError('Network error adding key: ' + (err.message || 'unknown error'));
+                const msg = err instanceof Error ? err.message : String(err);
+                showAdminError('Network error adding key: ' + (msg || 'unknown error'));
             } finally {
                 newKeyToken.value = '';
             }
         }
 
         async function rotateKey(id) {
-            const token = window.prompt('New API token for key ' + id + ':');
+            let token = window.prompt('New API token for key ' + id + ':');
             if (!token) return;
             clearAdminError();
             adminNotice.classList.add('hidden');
@@ -989,13 +994,18 @@ export function getFrontendHTML(): string {
                     headers: adminHeaders(),
                     body: JSON.stringify({ apiToken: token }),
                 });
+                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
+                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
                 if (response.status === 404) { showAdminError('Key not found.'); return; }
                 if (!response.ok) { showAdminError('Rotate failed: ' + response.status); return; }
                 const rotated = await response.json();
                 showAdminNotice('Rotated to v' + rotated.activeVersion + '.');
                 await refreshAdmin();
             } catch (err) {
-                showAdminError('Network error rotating key: ' + (err.message || 'unknown error'));
+                const msg = err instanceof Error ? err.message : String(err);
+                showAdminError('Network error rotating key: ' + (msg || 'unknown error'));
+            } finally {
+                token = null;
             }
         }
 
@@ -1008,11 +1018,14 @@ export function getFrontendHTML(): string {
                     method: 'POST',
                     headers: adminHeaders(),
                 });
+                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
+                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
                 if (!response.ok) { showAdminError('Disable failed: ' + response.status); return; }
                 showAdminNotice('Key disabled.');
                 await refreshAdmin();
             } catch (err) {
-                showAdminError('Network error disabling key: ' + (err.message || 'unknown error'));
+                const msg = err instanceof Error ? err.message : String(err);
+                showAdminError('Network error disabling key: ' + (msg || 'unknown error'));
             }
         }
 

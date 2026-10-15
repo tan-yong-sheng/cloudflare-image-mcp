@@ -17,6 +17,7 @@ import {
   addProviderKey,
   AdminStoreError,
   disableProviderKey,
+  getAdminHealth,
   rotateProviderKey,
   type AdminD1,
   type AdminWrite,
@@ -38,18 +39,22 @@ function forbidden(): Response {
 }
 
 /**
- * Comparison with no early exit: iterate the full maximum length so
- * neither the presence of a key nor its length is a timing oracle.
- * Short/missing inputs pad to the loop length; any difference — in
- * bytes or in length — fails closed at the single return.
+ * Constant-time comparison using fixed-size SHA-256 digests.
+ * Hashing both inputs to fixed 32-byte digests guarantees that
+ * loop duration is strictly invariant to input string lengths,
+ * eliminating length-oracle timing leakage.
  */
-function timingSafeEqual(a: string, b: string): boolean {
-  const ab = new TextEncoder().encode(a);
-  const bb = new TextEncoder().encode(b);
-  const n = Math.max(ab.length, bb.length, 1);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < n; i++) {
-    diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0);
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [digestA, digestB] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const viewA = new Uint8Array(digestA);
+  const viewB = new Uint8Array(digestB);
+  let diff = 0;
+  for (let i = 0; i < 32; i++) {
+    diff |= viewA[i] ^ viewB[i];
   }
   return diff === 0;
 }
@@ -57,24 +62,15 @@ function timingSafeEqual(a: string, b: string): boolean {
 /** Second gate for admin routes; call after the bearer gate passed.
  * Fail-closed: an unconfigured management key (or an empty presented
  * key) never authenticates — empty-equals-empty must not open the gate. */
-export function checkAdminKey(request: Request, env: Env): boolean {
+export async function checkAdminKey(
+  request: Request,
+  env: Env
+): Promise<boolean> {
   const configured = env.ADMIN_API_KEY ?? "";
   if (configured.length === 0) return false;
   const presented = request.headers.get("X-Admin-Key") ?? "";
   if (presented.length === 0) return false;
   return timingSafeEqual(presented, configured);
-}
-
-interface D1Row {
-  [key: string]: unknown;
-}
-
-function rows(res: { results?: D1Row[] } | null | undefined): D1Row[] {
-  return res?.results ?? [];
-}
-
-function num(value: unknown): number {
-  return typeof value === "number" ? value : 0;
 }
 
 /**
@@ -170,72 +166,12 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
  * their flag so an operator can see what is parked.
  */
 export async function handleAdminHealth(
-  _request: Request,
-  env: Env
+  store: AdminD1 | null
 ): Promise<Response> {
-  const db = env.PROVIDER_DB;
-  if (!db)
+  if (!store) {
     return json({ providers: [], keys: [], exposure: [], configVersion: null });
-
-  const providers = rows(
-    await db.prepare("SELECT id, display_name FROM providers").all()
-  ).map((p) => ({
-    id: String(p["id"]),
-    displayName: String(p["display_name"]),
-  }));
-
-  const keys = rows(
-    await db
-      .prepare(
-        `SELECT k.id AS id,
-                k.provider_id AS providerId,
-                k.label AS label,
-                k.weight AS weight,
-                k.enabled AS enabled,
-                MAX(v.version) AS activeVersion
-           FROM provider_keys k
-           LEFT JOIN credential_versions v
-             ON v.provider_key_id = k.id AND v.revoked_at IS NULL
-          GROUP BY k.id`
-      )
-      .all()
-  ).map((k) => ({
-    id: num(k["id"]),
-    providerId: String(k["providerId"]),
-    label: String(k["label"]),
-    weight: num(k["weight"]),
-    enabled: num(k["enabled"]) === 1,
-    activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
-  }));
-
-  const versionRow = await db
-    .prepare("SELECT version FROM config_versions WHERE id = 1")
-    .first<{ version: number }>();
-  const exposure = rows(
-    await db
-      .prepare(
-        `SELECT e.model_id AS modelId,
-                e.enabled AS enabled,
-                e.alias AS alias,
-                e.is_default AS isDefault,
-                s.scope AS scope
-           FROM exposure_overrides e
-           LEFT JOIN excluded_scopes s ON s.model_id = e.model_id`
-      )
-      .all()
-  ).map((r) => ({
-    modelId: String(r["modelId"]),
-    enabled: num(r["enabled"]) === 1,
-    alias: r["alias"] === null ? null : String(r["alias"]),
-    isDefault: num(r["isDefault"]) === 1,
-    scope: r["scope"] === null ? null : String(r["scope"]),
-  }));
-  return json({
-    providers,
-    keys,
-    exposure,
-    configVersion: versionRow?.version ?? null,
-  });
+  }
+  return json(await getAdminHealth(store));
 }
 
 /**
@@ -253,15 +189,15 @@ export async function handleAdmin(
   deps?: AdminDeps
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
-  if (!checkAdminKey(request, env)) return forbidden();
+  if (!(await checkAdminKey(request, env))) return forbidden();
   try {
     const store = deps?.adminStore;
-    if (request.method === "GET" && path === "/api/admin/health") {
-      return await handleAdminHealth(request, env);
-    }
     const db = env.PROVIDER_DB;
-    if (!db) return internalError("no provider store bound");
-    const active = store ?? d1AdminStore(db);
+    const active = store ?? (db ? d1AdminStore(db) : null);
+    if (request.method === "GET" && path === "/api/admin/health") {
+      return await handleAdminHealth(active);
+    }
+    if (!active) return internalError("no provider store bound");
     if (request.method === "POST" && path === "/api/admin/keys") {
       return await handleAddKey(request, env, active);
     }
@@ -350,7 +286,7 @@ async function handleRotateKey(
   if (!dataKey) {
     return internalError("no sealing key configured");
   }
-  if (typeof body["apiToken"] !== "string" || body["apiToken"].trim() === "") {
+  if (typeof body["apiToken"] !== "string" || body["apiToken"].length === 0) {
     return badRequest("apiToken is required");
   }
   try {

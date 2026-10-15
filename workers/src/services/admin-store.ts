@@ -44,6 +44,35 @@ export class AdminStoreError extends Error {
   }
 }
 
+export interface AdminProviderSummary {
+  id: string;
+  displayName: string;
+}
+
+export interface AdminKeySummary {
+  id: number;
+  providerId: string;
+  label: string;
+  weight: number;
+  enabled: boolean;
+  activeVersion: number | null;
+}
+
+export interface AdminExposureSummary {
+  modelId: string;
+  enabled: boolean;
+  alias: string | null;
+  isDefault: boolean;
+  scope: string | null;
+}
+
+export interface AdminHealthSummary {
+  providers: AdminProviderSummary[];
+  keys: AdminKeySummary[];
+  exposure: AdminExposureSummary[];
+  configVersion: number | null;
+}
+
 export interface AddKeyInput {
   providerId: string;
   label: string;
@@ -69,6 +98,86 @@ function write(sql: string, ...params: unknown[]): AdminWrite {
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function rows<T>(res: { results?: T[] } | null | undefined): T[] {
+  return res?.results ?? [];
+}
+
+function num(value: unknown): number {
+  return typeof value === "number" ? value : 0;
+}
+
+/**
+ * Health read: pool counts, active key summaries, exposure overrides, and
+ * the config cache version. Reads live in the store so endpoints contain
+ * zero SQL.
+ */
+export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
+  const providerRows = rows<Record<string, unknown>>(
+    await db.prepare("SELECT id, display_name FROM providers").all()
+  );
+  const providers: AdminProviderSummary[] = providerRows.map((p) => ({
+    id: String(p["id"]),
+    displayName: String(p["display_name"]),
+  }));
+
+  const keyRows = rows<Record<string, unknown>>(
+    await db
+      .prepare(
+        `SELECT k.id AS id,
+                k.provider_id AS providerId,
+                k.label AS label,
+                k.weight AS weight,
+                k.enabled AS enabled,
+                MAX(v.version) AS activeVersion
+           FROM provider_keys k
+           LEFT JOIN credential_versions v
+             ON v.provider_key_id = k.id AND v.revoked_at IS NULL
+          GROUP BY k.id`
+      )
+      .all()
+  );
+  const keys: AdminKeySummary[] = keyRows.map((k) => ({
+    id: num(k["id"]),
+    providerId: String(k["providerId"]),
+    label: String(k["label"]),
+    weight: num(k["weight"]),
+    enabled: num(k["enabled"]) === 1,
+    activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
+  }));
+
+  const versionRow = await db
+    .prepare("SELECT version FROM config_versions WHERE id = 1")
+    .first<{ version: number }>();
+
+  const exposureRows = rows<Record<string, unknown>>(
+    await db
+      .prepare(
+        `SELECT e.model_id AS modelId,
+                e.enabled AS enabled,
+                e.alias AS alias,
+                e.is_default AS isDefault,
+                s.scope AS scope
+           FROM exposure_overrides e
+           LEFT JOIN excluded_scopes s ON s.model_id = e.model_id`
+      )
+      .all()
+  );
+  const exposure: AdminExposureSummary[] = exposureRows.map((r) => ({
+    modelId: String(r["modelId"]),
+    enabled: num(r["enabled"]) === 1,
+    alias: r["alias"] === null ? null : String(r["alias"]),
+    isDefault: num(r["isDefault"]) === 1,
+    scope: r["scope"] === null ? null : String(r["scope"]),
+  }));
+
+  return {
+    providers,
+    keys,
+    exposure,
+    configVersion: versionRow?.version ?? null,
+  };
 }
 
 async function keyRow(db: AdminD1, keyId: number): Promise<KeyRow | null> {
@@ -153,10 +262,12 @@ export async function addProviderKey(
 ): Promise<KeySummary> {
   const providerId = clean(input.providerId);
   const label = clean(input.label);
-  const apiToken = clean(input.apiToken);
+  const apiToken = typeof input.apiToken === "string" ? input.apiToken : "";
   if (!providerId) throw new AdminStoreError(400, "providerId is required");
   if (!label) throw new AdminStoreError(400, "label is required");
-  if (!apiToken) throw new AdminStoreError(400, "apiToken is required");
+  if (!apiToken || apiToken.length === 0) {
+    throw new AdminStoreError(400, "apiToken is required");
+  }
   if (!(await providerExists(db, providerId))) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
@@ -209,8 +320,10 @@ export async function rotateProviderKey(
   keyId: number,
   apiToken: string
 ): Promise<KeySummary> {
-  const token = clean(apiToken);
-  if (!token) throw new AdminStoreError(400, "apiToken is required");
+  const token = typeof apiToken === "string" ? apiToken : "";
+  if (!token || token.length === 0) {
+    throw new AdminStoreError(400, "apiToken is required");
+  }
   const key = await keyRow(db, keyId);
   if (!key) throw new AdminStoreError(404, `unknown provider key ${keyId}`);
   const current = await db
