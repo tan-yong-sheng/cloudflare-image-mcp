@@ -582,6 +582,55 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       supportedSizes: ["256x256", "512x512", "768x768", "1024x1024"],
     },
   },
+  // R3-Agnes (#75): non-Cloudflare provider behind the same seam. The
+  // namespaced id keeps it distinct from Cloudflare models; transport
+  // selects OpenAITransport and providerModel names the upstream model.
+  "@agnes/agnes-image-2.5-flash": {
+    id: "@agnes/agnes-image-2.5-flash",
+    name: "Agnes Image 2.5 Flash",
+    description:
+      "Agnes AI text-to-image and image-composition model with 1K-4K output tiers and aspect-ratio control",
+    provider: "agnes",
+    transport: "openai-compat",
+    providerModel: "agnes-image-2.5-flash",
+    apiVersion: 1,
+    inputFormat: "json",
+    responseFormat: "base64",
+    supportedTasks: ["text-to-image", "image-to-image"],
+    maxInputImages: 4,
+    parameters: {
+      prompt: promptParam,
+      size: {
+        cfParam: "size",
+        type: "string",
+        default: "1024x1024",
+        description:
+          "Output size as WxH; mapped to the nearest 1K/2K/3K/4K tier and aspect ratio",
+      },
+    },
+    limits: {
+      maxPromptLength: 2048,
+      defaultSteps: 1,
+      maxSteps: 1,
+      minWidth: 512,
+      maxWidth: 4096,
+      minHeight: 512,
+      maxHeight: 4096,
+      supportedSizes: [
+        "1024x1024",
+        "864x1152",
+        "1152x864",
+        "1312x736",
+        "736x1312",
+        "832x1248",
+        "1248x832",
+        "1568x672",
+        "2048x2048",
+        "3072x3072",
+        "4096x4096",
+      ],
+    },
+  },
 };
 
 // R0 (#69): operator exposure flags. enabled defaults true (absent =

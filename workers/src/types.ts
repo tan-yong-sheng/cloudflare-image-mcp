@@ -18,6 +18,18 @@ export interface ModelConfig {
   name: string;
   description: string;
   provider: string;
+  /**
+   * Which transport serves this model (R3-Agnes). Omitted means
+   * "cloudflare-rest" (the Workers AI REST seam); "openai-compat" routes
+   * through OpenAITransport to a non-Cloudflare OpenAI-compatible API.
+   */
+  transport?: "cloudflare-rest" | "openai-compat";
+  /**
+   * Upstream model name for openai-compat providers, when it differs from
+   * the namespaced registry id (e.g. "@agnes/agnes-image-2.5-flash" sends
+   * "agnes-image-2.5-flash").
+   */
+  providerModel?: string;
   apiVersion: number;
   inputFormat: "json" | "multipart";
   responseFormat: "base64" | "binary";
@@ -104,6 +116,8 @@ export interface Env {
   IMAGE_EXPIRY_HOURS: string;
   API_KEYS?: string; // Comma-separated list of valid API keys
   AI_ACCOUNTS?: string; // JSON array of {account_id, api_token} for multi-account AI inference
+  AGNES_API_KEY?: string; // Bearer key for the Agnes AI (openai-compat) image API (R3-Agnes)
+  AGNES_BASE_URL?: string; // Override the Agnes API base URL (default https://apihub.agnes-ai.com)
   PROVIDER_DATA_KEY?: string; // AES-GCM data key sealing provider tokens in D1 (R1b); Worker secret
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;

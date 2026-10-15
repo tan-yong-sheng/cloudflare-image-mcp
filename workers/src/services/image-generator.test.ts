@@ -135,6 +135,74 @@ describe("listModels delegation (C3)", () => {
   });
 });
 
+describe("provider routing (R3-Agnes)", () => {
+  const AGNES_MODEL = "@agnes/agnes-image-2.5-flash";
+
+  function routingSetup() {
+    const cloudflare = new MemoryTransport();
+    const agnes = new MemoryTransport();
+    const store = new MemoryStore();
+    const env = {
+      CLOUDFLARE_ACCOUNT_ID: "account",
+      CLOUDFLARE_API_TOKEN: "token",
+      IMAGE_EXPIRY_HOURS: "24",
+      IMAGE_BUCKET: {},
+    } as unknown as Env;
+    const generator = new ImageGeneratorService(env, {
+      transport: cloudflare,
+      openaiTransport: agnes,
+      store,
+    });
+    return { generator, cloudflare, agnes, store };
+  }
+
+  test("openai-compat models use the OpenAI transport", async () => {
+    const { generator, cloudflare, agnes } = routingSetup();
+
+    const result = await generator.runOnce({
+      modelId: AGNES_MODEL,
+      prompt: "a cat",
+      explicitParams: { size: "2048x2048" },
+    });
+
+    expect(result.success).toBe(true);
+    expect(agnes.calls).toHaveLength(1);
+    expect(cloudflare.calls).toHaveLength(0);
+    expect(agnes.calls[0].modelId).toBe(AGNES_MODEL);
+    expect(agnes.calls[0].payload.size).toBe("2048x2048");
+  });
+
+  test("Cloudflare models still use the Cloudflare transport", async () => {
+    const { generator, cloudflare, agnes } = routingSetup();
+
+    const result = await generator.runOnce(textRequest());
+
+    expect(result.success).toBe(true);
+    expect(cloudflare.calls).toHaveLength(1);
+    expect(agnes.calls).toHaveLength(0);
+  });
+
+  test("an unconfigured agnes provider reports the missing key", async () => {
+    const transport = new MemoryTransport();
+    const store = new MemoryStore();
+    const env = {
+      CLOUDFLARE_ACCOUNT_ID: "account",
+      CLOUDFLARE_API_TOKEN: "token",
+      IMAGE_EXPIRY_HOURS: "24",
+      IMAGE_BUCKET: {},
+    } as unknown as Env;
+    const generator = new ImageGeneratorService(env, { transport, store });
+
+    const result = await generator.runOnce({
+      modelId: AGNES_MODEL,
+      prompt: "a cat",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/AGNES_API_KEY/);
+  });
+});
+
 describe("runOnce text-to-image", () => {
   test("returns the stored image URL and records upload metadata", async () => {
     const { generator, transport, store } = setup();
