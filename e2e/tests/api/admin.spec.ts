@@ -83,7 +83,7 @@ test.describe("Admin key lifecycle", () => {
         providerId: "cloudflare",
         label,
         apiToken: "e2e-token-value",
-        externalAccountId: "e2e-account-id",
+        accountId: "e2e-account-id",
       },
     });
     expect(added.status()).toBe(201);
@@ -121,7 +121,7 @@ test.describe("Admin key lifecycle", () => {
         providerId: "cloudflare",
         label,
         apiToken: "e2e-token-v1",
-        externalAccountId: "e2e-account-id",
+        accountId: "e2e-account-id",
       },
     });
     expect(added.status()).toBe(201);
