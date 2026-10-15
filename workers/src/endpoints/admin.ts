@@ -111,25 +111,12 @@ export async function checkAdminKey(
  * commit — the same write lists the S2 harness runs inside BEGIN/COMMIT.
  */
 function d1AdminStore(db: NonNullable<Env["PROVIDER_DB"]>): AdminD1 {
-  const commit = commitWithD1(db);
-  const wrap = (stmt: {
-    first<T>(): Promise<T | null>;
-    all<T>(): Promise<{ results?: T[] }>;
-    run(): Promise<unknown>;
-  }) => ({
-    first: <T>() => stmt.first<T>(),
-    all: <T>() => stmt.all<T>(),
-    run: () => stmt.run(),
-  });
   return {
-    commit,
-    prepare: (sql: string) => {
-      const unbound = wrap(db.prepare(sql));
-      return {
-        ...unbound,
-        bind: (...params: unknown[]) => wrap(db.prepare(sql).bind(...params)),
-      };
-    },
+    commit: commitWithD1(db),
+    // D1PreparedStatement already satisfies BoundStmt & { bind }, so the
+    // engine's own statement crosses the seam directly. An extra adapter
+    // here would be a pass-through: its interface mirrors the statement's.
+    prepare: (sql: string) => db.prepare(sql),
   };
 }
 

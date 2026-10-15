@@ -310,3 +310,94 @@ describe("admin health exposure (R2)", () => {
     expect(Array.isArray(body.keys)).toBe(true);
   });
 });
+
+describe("production D1 adapter (R2)", () => {
+  // The default store (d1AdminStore over PROVIDER_DB) is the served path
+  // and has no other direct test. A D1Database-shaped fake pins that the
+  // engine's own statement crosses the seam for both the unbound (health)
+  // and bound (write) reads, and that commit extracts the fresh row id.
+  function d1Shaped(): { db: unknown; batched: string[] } {
+    const batched: string[] = [];
+    const db = {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => {
+            if (sql.includes("config_versions")) return { version: 3 };
+            if (sql.includes("FROM providers WHERE id")) return { one: 1 };
+            return null;
+          },
+          all: async () => {
+            if (sql.includes("FROM providers")) {
+              return {
+                results: [{ id: "cloudflare", display_name: "Cloudflare" }],
+              };
+            }
+            return { results: [] };
+          },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return {
+          ...stmt,
+          bind: (..._params: unknown[]) => ({ ...stmt }),
+        };
+      },
+      batch: async (stmts: { sql: string }[]) => {
+        for (const st of stmts) batched.push(st.sql);
+        return stmts.map((_, i) =>
+          i === 0 ? { meta: { last_row_id: 7 } } : {}
+        );
+      },
+    };
+    return { db, batched };
+  }
+
+  function envWithDb(db: unknown): Env {
+    return { ...env(), PROVIDER_DB: db } as unknown as Env;
+  }
+
+  test("health reads rows through the adapter", async () => {
+    const { db } = d1Shaped();
+    const response = await handleAdmin(
+      get(
+        "/api/admin/health",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      "/api/admin/health",
+      envWithDb(db)
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response!.json()) as {
+      providers: { id: string }[];
+      configVersion: number | null;
+    };
+    expect(body.providers).toEqual([
+      { id: "cloudflare", displayName: "Cloudflare" },
+    ]);
+    expect(body.configVersion).toBe(3);
+  });
+
+  test("add resolves the key id from the atomic batch", async () => {
+    const { db, batched } = d1Shaped();
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/keys", {
+        method: "POST",
+        headers: {
+          ...bearer("user-key", { "X-Admin-Key": "admin-key" }),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "cloudflare",
+          label: "served-key",
+          apiToken: "cf-token-abc",
+        }),
+      }),
+      "/api/admin/keys",
+      envWithDb(db)
+    );
+    expect(response?.status).toBe(201);
+    const body = (await response!.json()) as { id: number };
+    expect(body.id).toBe(7);
+    // One atomic batch: key, credential version, config bump, audit.
+    expect(batched).toHaveLength(4);
+  });
+});
