@@ -157,11 +157,10 @@ commit it, and delete it after applying.
 
 ### Managing keys after the import (R2 admin API)
 
-The import is one-shot; day-to-day key management goes through the admin
-API (`/api/admin/*`, R2 #74) or the Provider Credentials panel on the
-frontend, which calls the same endpoints. Both sit behind two gates: the
-usual login bearer, then the `ADMIN_API_KEY` management key in the
-`X-Admin-Key` header (wrong key → 403, checked constant-time).
+The import is one-shot; day-to-day key management goes through the
+admin API (`/api/admin/*`, R2 #74), behind two gates: the usual login
+bearer, then the `ADMIN_API_KEY` management key in the `X-Admin-Key`
+header (wrong key → 403, checked constant-time).
 
 - **Health** — `GET /api/admin/health` returns providers, key labels
   with weights/flags/active versions, the exposure overlay rows, and the
@@ -181,9 +180,9 @@ usual login bearer, then the `ADMIN_API_KEY` management key in the
   longer served (`enabled: 0` in health).
 
 Every mutation bumps `config_versions` (the pool cache's reload signal)
-and writes an `admin_audit` row (actor, action, key, timestamp) — the
-`created_by` half of full auditability, the panel's unlock flow the other.
-Tokens never appear in responses, logs, or the audit table.
+and writes an `admin_audit` row (actor, action, key, timestamp) — who
+acted, what changed, when. Tokens never appear in responses, logs, or the
+audit table.
 
 ## Where to Set These
 

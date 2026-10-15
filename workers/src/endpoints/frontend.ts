@@ -222,52 +222,12 @@ export function getFrontendHTML(): string {
         </div>
     </div>
 
-    <!-- Admin Modal -->
-    <div id="adminModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
-        <div class="card p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
-            <div class="flex justify-between items-center border-b border-gray-700 pb-3">
-                <h2 id="adminModalTitle" class="text-xl font-semibold flex items-center">
-                    <i class="fa-solid fa-key mr-2 text-primary"></i>Provider Credentials
-                </h2>
-                <div class="flex items-center gap-2">
-                    <span id="adminHealthState" class="text-xs opacity-75" role="status"></span>
-                    <button id="adminModalClose" class="btn btn-secondary p-1 h-8 w-8 flex items-center justify-center rounded" aria-label="Close admin dialog">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-            </div>
-            <p class="text-sm opacity-75">Keys are sealed server-side on save. Unlock with the management key to view and manage them.</p>
-            <div>
-                <label for="adminKey" class="block text-sm font-medium mb-1">Management key</label>
-                <div class="flex gap-2">
-                    <input type="password" id="adminKey" class="w-full" placeholder="Admin key (never stored)" autocomplete="off">
-                    <button id="adminUnlock" class="btn btn-secondary text-sm py-1 px-3">Unlock</button>
-                    <button id="adminLock" class="btn btn-secondary text-sm py-1 px-3 hidden">Lock</button>
-                </div>
-                <p id="adminError" class="text-sm text-red-500 hidden" role="alert"></p>
-            </div>
-            <div id="adminPanel" class="space-y-3 hidden">
-                <div id="adminKeys" class="space-y-2"></div>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                    <input id="newKeyLabel" class="w-full" placeholder="Label (e.g. billing)" aria-label="New key label">
-                    <input type="password" id="newKeyToken" class="w-full" placeholder="API token" aria-label="New API token" autocomplete="off">
-                    <select id="newKeyProvider" class="w-full" aria-label="Provider"></select>
-                    <button id="addKeyButton" class="btn btn-primary text-sm py-1 px-3">Add key</button>
-                </div>
-                <p id="adminNotice" class="text-sm hidden" role="status"></p>
-            </div>
-        </div>
-    </div>
-
     <div class="container mx-auto px-4 py-4 max-w-6xl">
         <div class="flex items-center justify-between mb-6">
             <h1 class="text-2xl md:text-3xl font-bold flex items-center">
                 <i class="fa-solid fa-image mr-2"></i>AI Image Generator
             </h1>
             <div class="flex items-center space-x-2">
-                <button id="adminModalButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Manage Provider Credentials">
-                    <i class="fa-solid fa-key mr-2 text-primary"></i>Admin
-                </button>
                 <button id="logoutButton" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Logout">
                     <i class="fa-solid fa-sign-out-alt mr-2"></i>Logout
                 </button>
@@ -379,10 +339,9 @@ export function getFrontendHTML(): string {
                 </button>
             </div>
 
-            <!-- Result column -->
-            <div class="w-full lg:w-3/5 space-y-6">
-                <!-- Panel: Result -->
-                <div class="card p-4 space-y-4 fade-in">
+            <!-- Right Image Display -->
+            <div class="w-full lg:w-3/5">
+                <div class="card h-full p-4 space-y-4 fade-in">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold flex items-center">
                             <i class="fa-solid fa-image mr-2 text-primary"></i>Result
@@ -435,20 +394,15 @@ export function getFrontendHTML(): string {
         const loginButton = document.getElementById('loginButton');
         const loginError = document.getElementById('loginError');
         const logoutButton = document.getElementById('logoutButton');
-        const adminModalButton = document.getElementById('adminModalButton');
-        const adminModal = document.getElementById('adminModal');
-        const adminModalClose = document.getElementById('adminModalClose');
 
         // Check auth status on load
         function checkAuth() {
             if (authToken) {
                 loginModal.classList.add('hidden');
                 logoutButton.classList.remove('hidden');
-                adminModalButton.classList.remove('hidden');
             } else {
                 loginModal.classList.remove('hidden');
                 logoutButton.classList.add('hidden');
-                adminModalButton.classList.add('hidden');
             }
         }
 
@@ -501,8 +455,6 @@ export function getFrontendHTML(): string {
         logoutButton.addEventListener('click', () => {
             authToken = '';
             sessionStorage.removeItem('api_key');
-            adminModal.classList.add('hidden');
-            lockAdmin();
             checkAuth();
         });
 
@@ -853,285 +805,6 @@ export function getFrontendHTML(): string {
                 } else {
                     showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
                 }
-            }
-        });
-
-        // ---- Provider Credentials (admin, R2 #74) ----
-        // The management key lives in memory only: never persisted, never
-        // logged. Key rows render labels + flags; tokens travel one way
-        // (add/rotate request bodies) and are cleared from the inputs and
-        // any in-memory reference immediately after the fetch resolves.
-        let adminKey = '';
-        const adminKeyInput = document.getElementById('adminKey');
-        const adminUnlock = document.getElementById('adminUnlock');
-        const adminLock = document.getElementById('adminLock');
-        const adminError = document.getElementById('adminError');
-        const adminNotice = document.getElementById('adminNotice');
-        const adminPanel = document.getElementById('adminPanel');
-        const adminKeys = document.getElementById('adminKeys');
-        const adminHealthState = document.getElementById('adminHealthState');
-        const newKeyLabel = document.getElementById('newKeyLabel');
-        const newKeyToken = document.getElementById('newKeyToken');
-        const newKeyProvider = document.getElementById('newKeyProvider');
-        const addKeyButton = document.getElementById('addKeyButton');
-
-        function adminHeaders() {
-            return {
-                'Authorization': 'Bearer ' + authToken,
-                'X-Admin-Key': adminKey,
-                'Content-Type': 'application/json',
-            };
-        }
-
-        function showAdminError(message) {
-            adminError.textContent = message;
-            adminError.classList.remove('hidden');
-        }
-
-        function clearAdminError() {
-            adminError.textContent = '';
-            adminError.classList.add('hidden');
-        }
-
-        function showAdminNotice(message) {
-            adminNotice.textContent = message;
-            adminNotice.classList.remove('hidden');
-        }
-
-        function lockAdmin(keepError = false) {
-            adminKey = '';
-            if (adminKeyInput) adminKeyInput.value = '';
-            if (newKeyToken) newKeyToken.value = '';
-            adminPanel.classList.add('hidden');
-            adminLock.classList.add('hidden');
-            adminUnlock.classList.remove('hidden');
-            adminHealthState.textContent = '';
-            adminKeys.innerHTML = '';
-            if (!keepError) clearAdminError();
-        }
-
-        function renderKeys(keys) {
-            adminKeys.innerHTML = '';
-            for (const k of keys) {
-                const item = document.createElement('div');
-                item.className = 'border rounded p-2 space-y-2';
-
-                const row = document.createElement('div');
-                row.className = 'flex items-center justify-between gap-2 text-sm';
-                const name = document.createElement('span');
-                // textContent, never innerHTML: labels come from the store.
-                name.textContent = k.label + ' (' + k.providerId + ') v' + (k.activeVersion ?? '?') + (k.enabled ? '' : ' — disabled');
-                const actions = document.createElement('div');
-                actions.className = 'flex gap-2';
-
-                if (k.enabled) {
-                    const rotateBtn = document.createElement('button');
-                    rotateBtn.className = 'btn btn-secondary text-xs py-1 px-2';
-                    rotateBtn.textContent = 'Rotate';
-
-                    const disableBtn = document.createElement('button');
-                    disableBtn.className = 'btn btn-secondary text-xs py-1 px-2';
-                    disableBtn.textContent = 'Disable';
-                    disableBtn.addEventListener('click', () => disableKey(k.id));
-
-                    // Inline masked rotation form — eliminates plaintext prompt
-                    const rotateForm = document.createElement('div');
-                    rotateForm.className = 'flex gap-2 hidden';
-                    const rotateInput = document.createElement('input');
-                    rotateInput.type = 'password';
-                    rotateInput.placeholder = 'New API token';
-                    rotateInput.className = 'w-full text-xs';
-                    rotateInput.autocomplete = 'off';
-                    const rotateSave = document.createElement('button');
-                    rotateSave.className = 'btn btn-primary text-xs py-1 px-2';
-                    rotateSave.textContent = 'Save';
-                    const rotateCancel = document.createElement('button');
-                    rotateCancel.className = 'btn btn-secondary text-xs py-1 px-2';
-                    rotateCancel.textContent = 'Cancel';
-
-                    rotateBtn.addEventListener('click', () => {
-                        rotateForm.classList.remove('hidden');
-                        rotateInput.focus();
-                    });
-                    rotateCancel.addEventListener('click', () => {
-                        rotateInput.value = '';
-                        rotateForm.classList.add('hidden');
-                    });
-                    rotateSave.addEventListener('click', async () => {
-                        const token = rotateInput.value;
-                        if (!token) return;
-                        rotateInput.value = '';
-                        rotateForm.classList.add('hidden');
-                        await rotateKey(k.id, token);
-                    });
-                    rotateInput.addEventListener('keypress', async (e) => {
-                        if (e.key === 'Enter') {
-                            const token = rotateInput.value;
-                            if (!token) return;
-                            rotateInput.value = '';
-                            rotateForm.classList.add('hidden');
-                            await rotateKey(k.id, token);
-                        }
-                    });
-
-                    actions.appendChild(rotateBtn);
-                    actions.appendChild(disableBtn);
-                    row.appendChild(name);
-                    row.appendChild(actions);
-                    item.appendChild(row);
-
-                    rotateForm.appendChild(rotateInput);
-                    rotateForm.appendChild(rotateSave);
-                    rotateForm.appendChild(rotateCancel);
-                    item.appendChild(rotateForm);
-                } else {
-                    row.appendChild(name);
-                    row.appendChild(actions);
-                    item.appendChild(row);
-                }
-
-                adminKeys.appendChild(item);
-            }
-        }
-
-        async function refreshAdmin() {
-            try {
-                const response = await fetch('/api/admin/health', { headers: adminHeaders() });
-                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
-                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
-                if (!response.ok) { showAdminError('Health check failed: ' + response.status); return; }
-                const health = await response.json();
-                adminHealthState.textContent = 'config v' + health.configVersion + ' · ' + health.keys.length + ' key(s)';
-                newKeyProvider.innerHTML = '';
-                for (const p of health.providers) {
-                    const opt = document.createElement('option');
-                    opt.value = p.id;
-                    opt.textContent = p.displayName || p.id;
-                    newKeyProvider.appendChild(opt);
-                }
-                renderKeys(health.keys);
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                showAdminError('Network error loading admin health: ' + (msg || 'unknown error'));
-            }
-        }
-
-        async function unlockAdmin() {
-            clearAdminError();
-            adminKey = adminKeyInput.value;
-            if (adminKeyInput) adminKeyInput.value = '';
-            if (!adminKey) { showAdminError('Enter the management key.'); return; }
-            adminPanel.classList.remove('hidden');
-            adminLock.classList.remove('hidden');
-            adminUnlock.classList.add('hidden');
-            await refreshAdmin();
-        }
-
-        async function addKey() {
-            clearAdminError();
-            adminNotice.classList.add('hidden');
-            const label = newKeyLabel.value.trim();
-            let token = newKeyToken.value;
-            const providerId = newKeyProvider.value;
-            if (!label || !token) { showAdminError('Label and API token are required.'); return; }
-            try {
-                const response = await fetch('/api/admin/keys', {
-                    method: 'POST',
-                    headers: adminHeaders(),
-                    body: JSON.stringify({ providerId, label, apiToken: token }),
-                });
-                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
-                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
-                if (response.status === 409) { showAdminError('That label already exists.'); return; }
-                if (!response.ok) { showAdminError('Add failed: ' + response.status); return; }
-                const created = await response.json();
-                token = '';
-                newKeyToken.value = '';
-                newKeyLabel.value = '';
-                showAdminNotice('Added ' + created.label + ' (v' + created.activeVersion + ').');
-                await refreshAdmin();
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                showAdminError('Network error adding key: ' + (msg || 'unknown error'));
-            } finally {
-                newKeyToken.value = '';
-            }
-        }
-
-        async function rotateKey(id, apiToken) {
-            let token = apiToken;
-            if (!token) return;
-            clearAdminError();
-            adminNotice.classList.add('hidden');
-            try {
-                const response = await fetch('/api/admin/keys/' + id + '/rotate', {
-                    method: 'POST',
-                    headers: adminHeaders(),
-                    body: JSON.stringify({ apiToken: token }),
-                });
-                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
-                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
-                if (response.status === 404) { showAdminError('Key not found.'); return; }
-                if (!response.ok) { showAdminError('Rotate failed: ' + response.status); return; }
-                const rotated = await response.json();
-                token = null;
-                showAdminNotice('Rotated to v' + rotated.activeVersion + '.');
-                await refreshAdmin();
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                showAdminError('Network error rotating key: ' + (msg || 'unknown error'));
-            } finally {
-                token = null;
-            }
-        }
-
-        async function disableKey(id) {
-            if (!window.confirm('Disable key ' + id + '? It stays stored but is no longer served.')) return;
-            clearAdminError();
-            adminNotice.classList.add('hidden');
-            try {
-                const response = await fetch('/api/admin/keys/' + id + '/disable', {
-                    method: 'POST',
-                    headers: adminHeaders(),
-                });
-                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
-                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
-                if (!response.ok) { showAdminError('Disable failed: ' + response.status); return; }
-                showAdminNotice('Key disabled.');
-                await refreshAdmin();
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                showAdminError('Network error disabling key: ' + (msg || 'unknown error'));
-            }
-        }
-
-        function closeAdminModal() {
-            adminModal.classList.add('hidden');
-            lockAdmin();
-        }
-
-        adminUnlock.addEventListener('click', unlockAdmin);
-        adminLock.addEventListener('click', () => {
-            closeAdminModal();
-        });
-        addKeyButton.addEventListener('click', addKey);
-        adminKeyInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') unlockAdmin();
-        });
-
-        // Admin modal controls
-        adminModalButton.addEventListener('click', () => {
-            clearAdminError();
-            adminModal.classList.remove('hidden');
-            if (adminKeyInput && !adminKey) adminKeyInput.focus();
-        });
-        adminModalClose.addEventListener('click', closeAdminModal);
-        adminModal.addEventListener('click', (e) => {
-            if (e.target === adminModal) closeAdminModal();
-        });
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !adminModal.classList.contains('hidden')) {
-                closeAdminModal();
             }
         });
 

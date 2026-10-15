@@ -112,38 +112,3 @@ describe("router public paths", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 });
-
-describe("provider credentials panel (R2)", () => {
-  test("the panel unlocks with the management key, never stored", async () => {
-    const response = await worker.fetch(get("/"), env());
-    const html = await response.text();
-    // Every element id the panel script addresses must exist.
-    for (const id of [
-      "adminModalButton",
-      "adminModal",
-      "adminModalClose",
-      "adminKey",
-      "adminUnlock",
-      "adminLock",
-      "adminError",
-      "adminPanel",
-      "adminKeys",
-      "adminHealthState",
-      "newKeyLabel",
-      "newKeyToken",
-      "newKeyProvider",
-      "addKeyButton",
-      "adminNotice",
-    ]) {
-      expect(html).toContain('id="' + id + '"');
-    }
-    // The panel talks to the admin API with the management-key header.
-    expect(html).toContain("/api/admin/health");
-    expect(html).toContain("/api/admin/keys");
-    expect(html).toContain("X-Admin-Key");
-    // It must never persist the management key: sessionStorage keeps the
-    // login bearer precedent, but the admin key must not join it.
-    expect(html).not.toMatch(/sessionStorage\.(set|get)Item\('admin/);
-    expect(html).not.toMatch(/localStorage.*admin/i);
-  });
-});
