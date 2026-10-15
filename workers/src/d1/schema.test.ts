@@ -11,7 +11,11 @@
 
 import { describe, expect, test } from "vitest";
 import type { DatabaseSync } from "node:sqlite";
-import { freshDb, migrationFiles } from "../test-utils/migration-fixtures.js";
+import {
+  columnsOf,
+  freshDb,
+  migrationFiles,
+} from "../test-utils/migration-fixtures.js";
 
 function userTables(db: DatabaseSync): string[] {
   return (
@@ -45,6 +49,19 @@ describe("provider schema migrations (R1a)", () => {
     ]) {
       expect(tables).toContain(t);
     }
+  });
+
+  test("0002 adds the admin audit table (R2)", () => {
+    expect(userTables(freshDb())).toContain("admin_audit");
+    expect(columnsOf(freshDb(), "admin_audit")).toEqual([
+      "id",
+      "actor",
+      "action",
+      "provider_id",
+      "key_id",
+      "key_label",
+      "created_at",
+    ]);
   });
 
   test("provider catalog is seeded with Cloudflare only", () => {
