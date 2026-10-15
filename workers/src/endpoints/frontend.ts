@@ -1025,7 +1025,13 @@ export function getFrontendHTML(): string {
             }
 
             async function loadHealth() {
-                const res = await api('GET', '/api/admin/health');
+                let res;
+                try {
+                    res = await api('GET', '/api/admin/health');
+                } catch (error) {
+                    showError(errorLine, error instanceof Error ? error.message : String(error));
+                    return;
+                }
                 if (!res.ok) {
                     if (res.status === 403) {
                         lock();
@@ -1101,14 +1107,22 @@ export function getFrontendHTML(): string {
                 box.setAttribute('aria-label', (k.enabled ? 'Disable ' : 'Enable ') + k.label);
                 box.checked = k.enabled;
                 box.addEventListener('change', async () => {
-                    const res = await api('PATCH', '/api/admin/keys/' + k.id, { enabled: box.checked });
-                    if (!res.ok) {
-                        showError(errorLine, errorMessage(res));
+                    box.setAttribute('aria-checked', String(box.checked));
+                    try {
+                        const res = await api('PATCH', '/api/admin/keys/' + k.id, { enabled: box.checked });
+                        if (!res.ok) {
+                            showError(errorLine, errorMessage(res));
+                            box.checked = k.enabled;
+                            box.setAttribute('aria-checked', String(k.enabled));
+                            return;
+                        }
+                        showNotice(k.label + (box.checked ? ' enabled' : ' parked'));
+                        loadHealth();
+                    } catch (error) {
+                        showError(errorLine, error instanceof Error ? error.message : String(error));
                         box.checked = k.enabled;
-                        return;
+                        box.setAttribute('aria-checked', String(k.enabled));
                     }
-                    showNotice(k.label + (box.checked ? ' enabled' : ' parked'));
-                    loadHealth();
                 });
                 const track = document.createElement('span');
                 track.className = 'track';
@@ -1248,8 +1262,8 @@ export function getFrontendHTML(): string {
                     sheetToken.focus();
                     return;
                 }
-                if (!Number.isInteger(weight) || weight < 0) {
-                    showError(sheetError, 'Weight must be 0 or more.');
+                if (!Number.isInteger(weight) || weight < 0 || weight > 1000000) {
+                    showError(sheetError, 'Weight must be an integer between 0 and 1000000.');
                     sheetWeight.focus();
                     return;
                 }
