@@ -305,6 +305,7 @@ jobs:
               API_KEYS: process.env.API_KEYS_VALUE,
               AI_ACCOUNTS: process.env.AI_ACCOUNTS_VALUE,
               PROVIDER_DATA_KEY: process.env.PROVIDER_DATA_KEY_VALUE,
+              ADMIN_API_KEY: process.env.ADMIN_API_KEY_VALUE,
               TZ: process.env.TZ_VALUE,
             };
             for (const [k, v] of Object.entries(optional)) if (v) required[k] = v;
@@ -318,6 +319,7 @@ jobs:
           API_KEYS_VALUE: ${{ secrets.API_KEYS }}
           AI_ACCOUNTS_VALUE: ${{ secrets.AI_ACCOUNTS }}
           PROVIDER_DATA_KEY_VALUE: ${{ secrets.PROVIDER_DATA_KEY }}
+          ADMIN_API_KEY_VALUE: ${{ secrets.ADMIN_API_KEY }}
           TZ_VALUE: ${{ secrets.TZ }}
 
       - name: Derive Workers URL

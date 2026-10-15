@@ -46,6 +46,7 @@ Create a token with these **Account-scoped** permissions:
 | `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                                                                | See below                 |
 | `TZ`                | Timezone for logging                                                                                                                                                               | `America/New_York`        |
 | `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Required for the R1b D1 provider store; set it before running the one-shot import (see below). | `openssl rand -base64 32` |
+| `ADMIN_API_KEY`     | Management key gating the `/api/admin/*` routes (R2 #74). Checked server-side against the `X-Admin-Key` header; never the login bearer. Generate like `PROVIDER_DATA_KEY`.         | `openssl rand -base64 32` |
 
 ### `AI_ACCOUNTS` Format
 
@@ -154,7 +155,35 @@ not a second import run.
 Treat `import.sql` as sensitive-but-not-secret (envelopes only): do not
 commit it, and delete it after applying.
 
----
+### Managing keys after the import (R2 admin API)
+
+The import is one-shot; day-to-day key management goes through the admin
+API (`/api/admin/*`, R2 #74) or the Provider Credentials panel on the
+frontend, which calls the same endpoints. Both sit behind two gates: the
+usual login bearer, then the `ADMIN_API_KEY` management key in the
+`X-Admin-Key` header (wrong key → 403, checked constant-time).
+
+- **Health** — `GET /api/admin/health` returns providers, key labels
+  with weights/flags/active versions, the exposure overlay rows, and the
+  config version. Labels and counts only, never secret values.
+- **Add** — `POST /api/admin/keys` with
+  `{ "providerId", "label", "apiToken" }`. The token is sealed
+  server-side with `PROVIDER_DATA_KEY`; the response echoes identity only
+  (`id`, `label`, `providerId`, `activeVersion`). Duplicate labels fail
+  with 409; unknown providers with 400. `providerId` rides on every
+  write, so a second provider needs no API change — today
+  `"cloudflare"` is the only row in the catalog.
+- **Rotate** — `POST /api/admin/keys/:id/rotate` with
+  `{ "apiToken" }`: revokes the active version and inserts the next one
+  in a single transaction (a concurrent rotation loses loudly with 409
+  instead of forking versions).
+- **Disable** — `POST /api/admin/keys/:id/disable`: the row is kept but no
+  longer served (`enabled: 0` in health).
+
+Every mutation bumps `config_versions` (the pool cache's reload signal)
+and writes an `admin_audit` row (actor, action, key, timestamp) — the
+`created_by` half of full auditability, the panel's unlock flow the other.
+Tokens never appear in responses, logs, or the audit table.
 
 ## Where to Set These
 
