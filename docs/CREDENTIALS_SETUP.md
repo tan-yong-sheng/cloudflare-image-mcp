@@ -184,6 +184,23 @@ and writes an `admin_audit` row (actor, action, key, timestamp) — who
 acted, what changed, when. Tokens never appear in responses, logs, or the
 audit table.
 
+### Rotating and revoking the admin key
+
+`ADMIN_API_KEY` is an **optional** Worker secret. The deploy workflow uploads
+it in one bulk call and **omits it when the GitHub secret is unset** — an
+omitted key is left untouched, so simply removing the GitHub secret does
+**not** revoke the key on a running Worker. To change or revoke it, act on the
+Worker secret directly:
+
+```bash
+cd workers
+npx wrangler secret put ADMIN_API_KEY      # rotate to a new value
+npx wrangler secret delete ADMIN_API_KEY   # revoke: X-Admin-Key then fails closed (403)
+```
+
+An absent or empty `ADMIN_API_KEY` disables the `/api/admin/*` routes (the
+management-key gate fails closed); the rest of the Worker is unaffected.
+
 ## Where to Set These
 
 ### GitHub Actions (Recommended)

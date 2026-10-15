@@ -60,4 +60,37 @@ error envelope once. Two commits, `npm run check` + `npm test` green
 
 ## Pass 2
 
-Recorded in the Iteration Log; findings delta and rejections below.
+Command: `ocr review --from origin/main --to feat/r2-admin-api` (after the
+Phase 2 fixes and both Phase 3 architecture commits).
+Result: 1 finding across 7 reviewed items (down from 2; both pass-1
+findings are gone). Raw output: `/tmp/ocr-r2-pass2.txt`.
+
+### Finding 3 — `.github/workflows/deploy-workers.yml:308` (security, medium)
+
+> If `ADMIN_API_KEY` is removed or unset in GitHub, this optional value is
+> omitted from the bulk payload and Wrangler leaves the previously deployed
+> Worker secret untouched. The admin endpoint can therefore remain accessible
+> with a stale key even after operators believe they have revoked it.
+
+Triage: **real hazard, rejected as out of scope for a bounded in-branch fix.**
+
+- The behaviour is the pre-existing optional-secret contract, shared by
+  `API_KEYS`, `AI_ACCOUNTS`, `PROVIDER_DATA_KEY`, and `TZ` — the branch adds
+  one line to that map, so it is not introduced by the admin API slice the
+  objective scopes (`workers/src/endpoints/admin.ts`, `.../admin-store.ts`,
+  `.../types.ts`). Changing omission semantics for one key (or all) is a
+  deploy-contract change, not an admin-API fix.
+- The runtime gate is already fail-closed: `checkAdminKey` rejects an empty or
+  absent `ADMIN_API_KEY` (`workers/src/endpoints/admin.ts:98-105`), so an
+  operator who never sets it does not expose admin. The gap is only the
+  remove-after-set case.
+- A correct auto-revoke is not safely implementable here: wrangler's
+  `secret delete` has no non-interactive flag and errors when the secret is
+  absent, and whether `bulk` accepts an empty value is unverified. Neither
+  path can be verified in this environment (no deployed target), so a
+  speculative CI edit would risk breaking every future deploy.
+- Mitigation applied: the operator-facing revocation path is now documented
+  in `docs/CREDENTIALS_SETUP.md` ("Rotating and revoking the admin key").
+  Recommended follow-up if the whole optional-secret set is migrated: a
+  guarded Cloudflare API step that deletes the Worker's `ADMIN_API_KEY`
+  secret and tolerates a 404 (already absent).
