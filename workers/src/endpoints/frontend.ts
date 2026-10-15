@@ -1049,8 +1049,15 @@ export function getFrontendHTML(): string {
             }
         }
 
+        function closeAdminModal() {
+            adminModal.classList.add('hidden');
+            lockAdmin();
+        }
+
         adminUnlock.addEventListener('click', unlockAdmin);
-        adminLock.addEventListener('click', lockAdmin);
+        adminLock.addEventListener('click', () => {
+            closeAdminModal();
+        });
         addKeyButton.addEventListener('click', addKey);
         adminKeyInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') unlockAdmin();
@@ -1062,15 +1069,13 @@ export function getFrontendHTML(): string {
             adminModal.classList.remove('hidden');
             if (adminKeyInput && !adminKey) adminKeyInput.focus();
         });
-        adminModalClose.addEventListener('click', () => {
-            adminModal.classList.add('hidden');
-        });
+        adminModalClose.addEventListener('click', closeAdminModal);
         adminModal.addEventListener('click', (e) => {
-            if (e.target === adminModal) adminModal.classList.add('hidden');
+            if (e.target === adminModal) closeAdminModal();
         });
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !adminModal.classList.contains('hidden')) {
-                adminModal.classList.add('hidden');
+                closeAdminModal();
             }
         });
 

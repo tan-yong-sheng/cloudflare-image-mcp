@@ -44,28 +44,34 @@ function forbidden(): Response {
   );
 }
 
+const MAX_ADMIN_KEY_LENGTH = 512;
+
 /**
- * Constant-time comparison using fixed-size SHA-256 digests.
- * Hashing both inputs to fixed 32-byte digests guarantees that
- * loop duration is strictly invariant to input string lengths,
- * eliminating length-oracle timing leakage.
+ * Constant-time comparison using fixed-size SHA-256 digests over padded buffers.
+ * Padding both inputs to MAX_ADMIN_KEY_LENGTH bytes ensures that the SHA-256
+ * block compression steps and digest comparison loops process identical byte
+ * counts regardless of input key lengths, eliminating timing leakage.
  */
 async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  const paddedA = new Uint8Array(MAX_ADMIN_KEY_LENGTH);
+  const paddedB = new Uint8Array(MAX_ADMIN_KEY_LENGTH);
+  paddedA.set(ab);
+  paddedB.set(bb);
   const [digestA, digestB] = await Promise.all([
-    crypto.subtle.digest("SHA-256", enc.encode(a)),
-    crypto.subtle.digest("SHA-256", enc.encode(b)),
+    crypto.subtle.digest("SHA-256", paddedA),
+    crypto.subtle.digest("SHA-256", paddedB),
   ]);
   const viewA = new Uint8Array(digestA);
   const viewB = new Uint8Array(digestB);
-  let diff = 0;
+  let diff = ab.length ^ bb.length;
   for (let i = 0; i < 32; i++) {
     diff |= viewA[i] ^ viewB[i];
   }
   return diff === 0;
 }
-
-const MAX_ADMIN_KEY_LENGTH = 512;
 
 /** Second gate for admin routes; call after the bearer gate passed.
  * Fail-closed: an unconfigured management key (or an empty presented
