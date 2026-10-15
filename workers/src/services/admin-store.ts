@@ -75,6 +75,7 @@ export interface AdminKeySummary {
   weight: number;
   enabled: boolean;
   activeVersion: number | null;
+  externalAccountId: string | null;
 }
 
 export interface AdminExposureSummary {
@@ -96,6 +97,27 @@ export interface AddKeyInput {
   providerId: string;
   label: string;
   apiToken: string;
+  externalAccountId?: string;
+  weight?: number;
+  enabled?: boolean;
+}
+
+export interface UpdateKeyInput {
+  keyId: number;
+  externalAccountId?: string | null;
+  weight?: number;
+  enabled?: boolean;
+  apiToken?: string;
+}
+
+export interface UpdateKeySummary {
+  id: number;
+  label: string;
+  providerId: string;
+  activeVersion: number | null;
+  weight: number;
+  enabled: boolean;
+  externalAccountId: string | null;
 }
 
 export interface KeySummary {
@@ -149,6 +171,7 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
                 k.label AS label,
                 k.weight AS weight,
                 k.enabled AS enabled,
+                k.external_account_id AS externalAccountId,
                 MAX(v.version) AS activeVersion
            FROM provider_keys k
            LEFT JOIN credential_versions v
@@ -164,6 +187,8 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
     weight: num(k["weight"]),
     enabled: num(k["enabled"]) === 1,
     activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
+    externalAccountId:
+      k["externalAccountId"] === null ? null : String(k["externalAccountId"]),
   }));
 
   const versionRow = await db
@@ -238,7 +263,7 @@ function bumpWrite(): AdminWrite {
 }
 
 function auditWrite(
-  action: "add" | "rotate" | "disable",
+  action: "add" | "rotate" | "disable" | "update",
   providerId: string,
   keyId: number | null,
   label: string
@@ -304,15 +329,29 @@ export async function addProviderKey(
   if (!(await providerExists(db, providerId))) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
+  const accountId =
+    input.externalAccountId !== undefined ? clean(input.externalAccountId) : "";
+  if (providerId === "cloudflare" && accountId.length === 0) {
+    throw new AdminStoreError(
+      400,
+      "externalAccountId is required for cloudflare keys"
+    );
+  }
+  const weight = input.weight !== undefined ? num(input.weight) : 1;
+  const enabled = input.enabled !== undefined ? input.enabled === true : true;
   const envelope = await seal(apiToken);
   // Atomic single-commit: all 4 statements (key, credential version,
   // config bump, audit log) execute together in one batch. A duplicate
   // label rolls the entire batch back (no partial writes, no audit, no bump).
   const writes: AdminWrite[] = [
     write(
-      "INSERT INTO provider_keys (provider_id, label) VALUES (?, ?)",
+      "INSERT INTO provider_keys (provider_id, label, external_account_id, weight, enabled) " +
+        "VALUES (?, ?, ?, ?, ?)",
       providerId,
-      label
+      label,
+      accountId.length > 0 ? accountId : null,
+      weight,
+      enabled ? 1 : 0
     ),
     write(
       "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
@@ -442,4 +481,139 @@ export async function disableProviderKey(
     auditWrite("disable", key.provider_id, keyId, key.label),
   ]);
   return { id: keyId, enabled: false as const };
+}
+
+/** Full key row the update path edits and echoes back. */
+async function keyRowFull(
+  db: AdminD1,
+  keyId: number
+): Promise<{
+  id: number;
+  provider_id: string;
+  label: string;
+  weight: number;
+  enabled: number;
+  external_account_id: string | null;
+} | null> {
+  return db
+    .prepare(
+      "SELECT id, provider_id, label, weight, enabled, external_account_id " +
+        "FROM provider_keys WHERE id = ?"
+    )
+    .bind(keyId)
+    .first();
+}
+
+/**
+ * Update a key: field edits (account id, weight, enabled) with optional
+ * rotate-on-save, one transaction. A present token rides the same
+ * revoke-before-insert ledger order as rotateProviderKey so a save can
+ * never fork versions. The cloudflare account id is load-bearing for
+ * inference, so a change that would leave it empty is rejected.
+ */
+export async function updateProviderKey(
+  db: AdminD1,
+  seal: (token: string) => Promise<string>,
+  input: UpdateKeyInput
+): Promise<UpdateKeySummary> {
+  const key = await keyRowFull(db, input.keyId);
+  if (!key)
+    throw new AdminStoreError(404, `unknown provider key ${input.keyId}`);
+
+  const accountId =
+    input.externalAccountId !== undefined
+      ? clean(input.externalAccountId)
+      : (key.external_account_id ?? "");
+  if (key.provider_id === "cloudflare" && accountId.length === 0) {
+    throw new AdminStoreError(
+      400,
+      "externalAccountId is required for cloudflare keys"
+    );
+  }
+  const storedAccountId = accountId.length > 0 ? accountId : null;
+
+  const weight =
+    input.weight !== undefined ? num(input.weight) : num(key.weight);
+  const enabled =
+    input.enabled !== undefined
+      ? input.enabled === true
+      : num(key.enabled) === 1;
+  const token = typeof input.apiToken === "string" ? input.apiToken : "";
+  if (
+    input.weight === undefined &&
+    input.enabled === undefined &&
+    input.externalAccountId === undefined &&
+    token.length === 0
+  ) {
+    throw new AdminStoreError(400, "no fields to update");
+  }
+
+  const writes: AdminWrite[] = [
+    write(
+      "UPDATE provider_keys SET external_account_id = ?, weight = ?, enabled = ? WHERE id = ?",
+      storedAccountId,
+      weight,
+      enabled ? 1 : 0,
+      input.keyId
+    ),
+  ];
+
+  let activeVersion: number | null;
+  const current = await db
+    .prepare(
+      "SELECT MAX(version) AS v FROM credential_versions WHERE provider_key_id = ?"
+    )
+    .bind(input.keyId)
+    .first<{ v: number | null }>();
+  if (token) {
+    const envelope = await seal(token);
+    const next = (current?.v ?? 0) + 1;
+    if (current?.v !== null && current?.v !== undefined) {
+      writes.push(
+        write(
+          "UPDATE credential_versions SET revoked_at = unixepoch() " +
+            "WHERE provider_key_id = ? AND revoked_at IS NULL",
+          input.keyId
+        )
+      );
+    }
+    writes.push(
+      write(
+        "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
+          "VALUES (?, ?, ?, ?)",
+        input.keyId,
+        next,
+        envelope,
+        ADMIN_ACTOR
+      )
+    );
+    activeVersion = next;
+  } else {
+    activeVersion = current?.v ?? null;
+  }
+
+  writes.push(
+    bumpWrite(),
+    auditWrite("update", key.provider_id, input.keyId, key.label)
+  );
+  try {
+    await db.commit(writes);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AdminStoreError(
+        409,
+        `key ${input.keyId} changed concurrently; retry the save`
+      );
+    }
+    throw error;
+  }
+  return {
+    id: input.keyId,
+    label: key.label,
+    providerId: key.provider_id,
+    activeVersion,
+    weight,
+    enabled,
+    externalAccountId: storedAccountId,
+  };
 }

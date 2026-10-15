@@ -79,7 +79,12 @@ test.describe("Admin key lifecycle", () => {
     const label = `e2e-${Date.now()}`;
     const added = await request.post("/api/admin/keys", {
       headers: adminHeaders(managementKey()),
-      data: { providerId: "cloudflare", label, apiToken: "e2e-token-value" },
+      data: {
+        providerId: "cloudflare",
+        label,
+        apiToken: "e2e-token-value",
+        externalAccountId: "e2e-account-id",
+      },
     });
     expect(added.status()).toBe(201);
     const created = await added.json();
@@ -106,5 +111,62 @@ test.describe("Admin key lifecycle", () => {
       })
     ).json()) as { keys: { label: string; enabled: boolean }[] };
     expect(parked.keys.find((k) => k.label === label)?.enabled).toBe(false);
+  });
+
+  test("PATCH edits fields and rotates on save", async ({ request }) => {
+    const label = `e2e-patch-${Date.now()}`;
+    const added = await request.post("/api/admin/keys", {
+      headers: adminHeaders(managementKey()),
+      data: {
+        providerId: "cloudflare",
+        label,
+        apiToken: "e2e-token-v1",
+        externalAccountId: "e2e-account-id",
+      },
+    });
+    expect(added.status()).toBe(201);
+    const created = (await added.json()) as { id: number };
+
+    // Field-only edit: weight/enabled change, version stays.
+    const edited = await request.patch(`/api/admin/keys/${created.id}`, {
+      headers: adminHeaders(managementKey()),
+      data: { weight: 3, enabled: false },
+    });
+    expect(edited.status()).toBe(200);
+    const editedBody = (await edited.json()) as {
+      weight: number;
+      enabled: boolean;
+      activeVersion: number;
+    };
+    expect(editedBody.weight).toBe(3);
+    expect(editedBody.enabled).toBe(false);
+    expect(editedBody.activeVersion).toBe(1);
+
+    // Rotate-on-save: a present token bumps the version in one write.
+    const rotated = await request.patch(`/api/admin/keys/${created.id}`, {
+      headers: adminHeaders(managementKey()),
+      data: { accountId: "e2e-account-id", apiToken: "e2e-token-v2" },
+    });
+    expect(rotated.status()).toBe(200);
+    const rotatedBody = (await rotated.json()) as { activeVersion: number };
+    expect(rotatedBody.activeVersion).toBe(2);
+    expect(JSON.stringify(rotatedBody)).not.toContain("e2e-token-v2");
+
+    const health = (await (
+      await request.get("/api/admin/health", {
+        headers: adminHeaders(managementKey()),
+      })
+    ).json()) as { keys: { label: string; enabled: boolean }[] };
+    expect(health.keys.find((k) => k.label === label)?.enabled).toBe(false);
+  });
+
+  test("PATCH validation rejects a non-integer weight with 400", async ({
+    request,
+  }) => {
+    const response = await request.patch("/api/admin/keys/1", {
+      headers: adminHeaders(managementKey()),
+      data: { weight: 1.5 },
+    });
+    expect(response.status()).toBe(400);
   });
 });

@@ -404,6 +404,7 @@ describe("production D1 adapter (R2)", () => {
         body: JSON.stringify({
           providerId: "cloudflare",
           label: "served-key",
+          accountId: "acct-1",
           apiToken: "cf-token-abc",
         }),
       }),
@@ -415,5 +416,179 @@ describe("production D1 adapter (R2)", () => {
     expect(body.id).toBe(7);
     // One atomic batch: key, credential version, config bump, audit.
     expect(batched).toHaveLength(4);
+  });
+});
+
+describe("admin PATCH (R2 follow-up, #91)", () => {
+  async function handle(request: Request, store?: unknown): Promise<Response> {
+    const { handleAdmin } = await import("./admin.js");
+    const response = await handleAdmin(
+      request,
+      new URL(request.url).pathname,
+      env(),
+      store ? { adminStore: store as never } : undefined
+    );
+    if (!response) throw new Error("no admin route matched");
+    return response;
+  }
+
+  function patchRequest(
+    path: string,
+    body: unknown,
+    adminKey = "admin-key"
+  ): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "PATCH",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": adminKey }),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const keyRow = {
+    id: 7,
+    provider_id: "cloudflare",
+    label: "imported-1",
+    weight: 1,
+    enabled: 1,
+    external_account_id: "acct-1",
+  };
+
+  /** Recording stub: the S2 seam owns SQL truth; this pins wiring. */
+  function stubStore(activeVersion: number | null = 1) {
+    const commits: { sql: string; params: readonly unknown[] }[] = [];
+    const stmt = (sql: string) => {
+      const value = sql.includes("MAX(version)")
+        ? activeVersion === null
+          ? null
+          : { v: activeVersion }
+        : keyRow;
+      const bound = {
+        first: async () => value,
+        all: async () => ({ results: [] as unknown[] }),
+        run: async () => ({ meta: { changes: 1 } }),
+        bind: () => bound,
+      };
+      return bound;
+    };
+    return {
+      commits,
+      store: {
+        prepare: (sql: string) => stmt(sql),
+        commit: async (
+          writes: readonly { sql: string; params: readonly unknown[] }[]
+        ) => {
+          commits.push(...writes);
+        },
+      },
+    };
+  }
+
+  test("PATCH without a store is a 500, never a silent no-op", async () => {
+    const response = await worker.fetch(
+      patchRequest("/api/admin/keys/7", { weight: 2 }),
+      env()
+    );
+    expect(response.status).toBe(500);
+  });
+
+  test("PATCH with a wrong admin key is a 403", async () => {
+    const { store } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", { weight: 2 }, "wrong-key"),
+      store
+    );
+    expect(response.status).toBe(403);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+  });
+
+  test("PATCH on a non-numeric key path is a 404", async () => {
+    const { store } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/abc", { weight: 2 }),
+      store
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("PATCH validates the body before any write", async () => {
+    for (const body of [
+      { weight: 1.5 },
+      { weight: -1 },
+      { weight: "2" },
+      { enabled: "yes" },
+      { accountId: 5 },
+      { apiToken: 7 },
+    ]) {
+      const { store, commits } = stubStore();
+      const response = await handle(
+        patchRequest("/api/admin/keys/7", body),
+        store
+      );
+      expect(response.status).toBe(400);
+      expect(commits).toEqual([]);
+    }
+  });
+
+  test("PATCH edits fields: update + bump + audit in one commit, no new version", async () => {
+    const { store, commits } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", {
+        accountId: "acct-2",
+        weight: 5,
+        enabled: false,
+      }),
+      store
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: 7,
+      label: "imported-1",
+      providerId: "cloudflare",
+      activeVersion: 1,
+      weight: 5,
+      enabled: false,
+      externalAccountId: "acct-2",
+    });
+    const sqls = commits.map((w) => w.sql);
+    expect(sqls[0]).toContain("UPDATE provider_keys");
+    expect(
+      sqls.some((s) => s.includes("INSERT INTO credential_versions"))
+    ).toBe(false);
+    expect(sqls.some((s) => s.includes("UPDATE config_versions"))).toBe(true);
+    const audit = commits.find((w) =>
+      w.sql.includes("INSERT INTO admin_audit")
+    );
+    expect(audit?.params).toEqual([
+      "admin-api",
+      "update",
+      "cloudflare",
+      7,
+      "imported-1",
+    ]);
+  });
+
+  test("PATCH with a token rotates: revoke + insert in the same commit, token never echoes", async () => {
+    const { store, commits } = stubStore(3);
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", {
+        accountId: "acct-1",
+        apiToken: "new-token-value",
+      }),
+      store
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { activeVersion: number };
+    expect(body.activeVersion).toBe(4);
+    expect(JSON.stringify(body)).not.toContain("new-token-value");
+    const sqls = commits.map((w) => w.sql);
+    expect(
+      sqls.some((s) => s.includes("UPDATE credential_versions SET revoked_at"))
+    ).toBe(true);
+    expect(
+      sqls.some((s) => s.includes("INSERT INTO credential_versions"))
+    ).toBe(true);
   });
 });

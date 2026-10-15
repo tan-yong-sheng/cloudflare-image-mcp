@@ -19,6 +19,7 @@ import {
   disableProviderKey,
   getAdminHealth,
   rotateProviderKey,
+  updateProviderKey,
   type AdminCommitResult,
   type AdminD1,
   type AdminWrite,
@@ -255,6 +256,10 @@ export async function handleAdmin(
     if (request.method === "POST" && disable) {
       return await handleDisableKey(request, env, active, Number(disable[1]));
     }
+    const update = path.match(/^\/api\/admin\/keys\/(\d+)$/);
+    if (request.method === "PATCH" && update) {
+      return await handleUpdateKey(request, env, active, Number(update[1]));
+    }
     return errorJson(404, "Not found");
   } catch (error) {
     return storeError(error);
@@ -296,6 +301,12 @@ async function handleAddKey(
   } catch (error) {
     return storeError(error);
   }
+  let fields: KeyFields;
+  try {
+    fields = parseKeyFields(body, { requireToken: true });
+  } catch (error) {
+    return storeError(error);
+  }
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
     return internalError("no sealing key configured");
@@ -305,7 +316,10 @@ async function handleAddKey(
       providerId:
         typeof body["providerId"] === "string" ? body["providerId"] : "",
       label: typeof body["label"] === "string" ? body["label"] : "",
-      apiToken: typeof body["apiToken"] === "string" ? body["apiToken"] : "",
+      apiToken: fields.apiToken ?? "",
+      externalAccountId: fields.externalAccountId,
+      weight: fields.weight,
+      enabled: fields.enabled,
     });
     // Identity only: the settings page echoes this — the token that
     // arrived in the request must never come back out.
@@ -357,6 +371,106 @@ async function handleDisableKey(
 ): Promise<Response> {
   try {
     return json(await disableProviderKey(store, keyId));
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+const MAX_WEIGHT = 1_000_000;
+
+interface KeyFields {
+  externalAccountId?: string;
+  weight?: number;
+  enabled?: boolean;
+  apiToken?: string;
+}
+
+/** Shared body parsing for add/edit writes; 400s as AdminStoreError. */
+function parseKeyFields(
+  body: Record<string, unknown>,
+  options: { requireToken: boolean }
+): KeyFields {
+  const fields: KeyFields = {};
+  if (body["accountId"] !== undefined) {
+    if (typeof body["accountId"] !== "string") {
+      throw new AdminStoreError(400, "accountId must be a string");
+    }
+    fields.externalAccountId = body["accountId"];
+  }
+  if (body["weight"] !== undefined) {
+    const weight = body["weight"];
+    if (
+      typeof weight !== "number" ||
+      !Number.isInteger(weight) ||
+      weight < 0 ||
+      weight > MAX_WEIGHT
+    ) {
+      throw new AdminStoreError(
+        400,
+        "weight must be an integer between 0 and 1000000"
+      );
+    }
+    fields.weight = weight;
+  }
+  if (body["enabled"] !== undefined) {
+    if (typeof body["enabled"] !== "boolean") {
+      throw new AdminStoreError(400, "enabled must be a boolean");
+    }
+    fields.enabled = body["enabled"];
+  }
+  if (body["apiToken"] !== undefined) {
+    if (typeof body["apiToken"] !== "string") {
+      throw new AdminStoreError(400, "apiToken must be a string");
+    }
+    fields.apiToken = body["apiToken"];
+  }
+  if (options.requireToken && !fields.apiToken) {
+    throw new AdminStoreError(400, "apiToken is required");
+  }
+  return fields;
+}
+
+/**
+ * PATCH /api/admin/keys/:id — edit a key. Field edits (account id,
+ * weight, enabled) with optional rotate-on-save: a present apiToken
+ * rides the revoke-then-insert ledger inside the same transaction.
+ * Echoes identity + edited fields only; the token never comes back out.
+ */
+async function handleUpdateKey(
+  request: Request,
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await requestJson(request);
+  } catch (error) {
+    return storeError(error);
+  }
+  let fields: KeyFields;
+  try {
+    fields = parseKeyFields(body, { requireToken: false });
+  } catch (error) {
+    return storeError(error);
+  }
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (fields.apiToken && !dataKey) {
+    return internalError("no sealing key configured");
+  }
+  try {
+    const summary = await updateProviderKey(
+      store,
+      (t) => sealToken(t, dataKey ?? ""),
+      {
+        keyId,
+        externalAccountId: fields.externalAccountId,
+        weight: fields.weight,
+        enabled: fields.enabled,
+        apiToken: fields.apiToken ? fields.apiToken : undefined,
+      }
+    );
+    return json(summary);
   } catch (error) {
     return storeError(error);
   }
