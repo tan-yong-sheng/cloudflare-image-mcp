@@ -144,9 +144,6 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       API_KEY: ${{ secrets.API_KEY }}
       API_KEYS: ${{ secrets.API_KEYS }}
-      # Target worker's management key; unset is deliberate until staging is
-      # provisioned — the admin e2e then fails loudly instead of faking green.
-      ADMIN_API_KEY_E2E: ${{ secrets.ADMIN_API_KEY }}
 
     steps:
       - name: Checkout code
@@ -258,6 +255,11 @@ jobs:
           echo "✅ /health reachable"
 
       - name: Run E2E tests
+        env:
+          # Scoped to this step: a credential must not sit in every step's
+          # environment. Unset is deliberate until staging is provisioned —
+          # the admin e2e then fails loudly instead of faking green.
+          ADMIN_API_KEY_E2E: ${{ secrets.ADMIN_API_KEY }}
         run: |
           cd e2e
           # Tier semantics live in e2e/lib/tiers.ts (tier → grep+timeout);
