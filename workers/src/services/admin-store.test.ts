@@ -54,7 +54,8 @@ function asD1(db: DatabaseSync): AdminD1 {
         },
       };
     },
-    commit: async (writes) => {
+    commit: async (rawWrites) => {
+      const writes = rawWrites as { sql: string; params: readonly unknown[] }[];
       db.exec("BEGIN");
       try {
         for (const w of writes)
@@ -82,10 +83,18 @@ function auditRows(db: DatabaseSync): {
   actor: string;
   action: string;
   key_label: string;
+  key_id: number | null;
 }[] {
   return db
-    .prepare("SELECT actor, action, key_label FROM admin_audit ORDER BY id")
-    .all() as { actor: string; action: string; key_label: string }[];
+    .prepare(
+      "SELECT actor, action, key_label, key_id FROM admin_audit ORDER BY id"
+    )
+    .all() as {
+    actor: string;
+    action: string;
+    key_label: string;
+    key_id: number | null;
+  }[];
 }
 
 describe("admin store against the real migrations (S2)", () => {
@@ -105,6 +114,7 @@ describe("admin store against the real migrations (S2)", () => {
 
     // The stored envelope opens with the data key to the exact token —
     // sealing happened against THIS request, not a fixture.
+    // Atomic batch binds the subselected id: the audit row names the key it created.
     const stored = db
       .prepare("SELECT envelope FROM credential_versions")
       .get() as { envelope: string };
@@ -112,7 +122,12 @@ describe("admin store against the real migrations (S2)", () => {
 
     expect(versionOf(db)).toBe(2);
     expect(auditRows(db)).toEqual([
-      { actor: "admin-api", action: "add", key_label: "page-key-1" },
+      {
+        actor: "admin-api",
+        action: "add",
+        key_label: "page-key-1",
+        key_id: summary.id,
+      },
     ]);
   });
 

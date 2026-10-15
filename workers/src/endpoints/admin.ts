@@ -118,22 +118,38 @@ function badRequest(message: string): Response {
   );
 }
 
+function internalError(message = "Internal server error"): Response {
+  return json(
+    {
+      error: {
+        message,
+        type: "api_error",
+        code: null,
+      },
+    },
+    500
+  );
+}
+
 function storeError(error: unknown): Response {
   if (error instanceof AdminStoreError) {
-    const status = error.status === 500 ? 500 : error.status;
-    const body =
-      status === 500
-        ? { error: "Internal server error", message: "key write failed" }
-        : {
-            error: {
-              message: error.message,
-              type: "invalid_request_error",
-              code: null,
-            },
-          };
-    return json(body, status);
+    if (error.status === 500) {
+      return internalError("key write failed");
+    }
+    return json(
+      {
+        error: {
+          message: error.message,
+          type: "invalid_request_error",
+          code: null,
+        },
+      },
+      error.status
+    );
   }
-  throw error;
+  // Sanitize unexpected DB or runtime errors: do not leak raw error.message to caller
+  console.error("Admin store error:", error);
+  return internalError("Internal server error");
 }
 
 async function requestJson(request: Request): Promise<Record<string, unknown>> {
@@ -238,38 +254,38 @@ export async function handleAdmin(
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
   if (!checkAdminKey(request, env)) return forbidden();
-  const store = deps?.adminStore;
-  if (request.method === "GET" && path === "/api/admin/health") {
-    return handleAdminHealth(request, env);
-  }
-  const db = env.PROVIDER_DB;
-  if (!db)
+  try {
+    const store = deps?.adminStore;
+    if (request.method === "GET" && path === "/api/admin/health") {
+      return await handleAdminHealth(request, env);
+    }
+    const db = env.PROVIDER_DB;
+    if (!db) return internalError("no provider store bound");
+    const active = store ?? d1AdminStore(db);
+    if (request.method === "POST" && path === "/api/admin/keys") {
+      return await handleAddKey(request, env, active);
+    }
+    const rotate = path.match(/^\/api\/admin\/keys\/(\d+)\/rotate$/);
+    if (request.method === "POST" && rotate) {
+      return await handleRotateKey(request, env, active, Number(rotate[1]));
+    }
+    const disable = path.match(/^\/api\/admin\/keys\/(\d+)\/disable$/);
+    if (request.method === "POST" && disable) {
+      return await handleDisableKey(request, env, active, Number(disable[1]));
+    }
     return json(
-      { error: "Internal server error", message: "no provider store bound" },
-      500
-    );
-  const active = store ?? d1AdminStore(db);
-  if (request.method === "POST" && path === "/api/admin/keys") {
-    return handleAddKey(request, env, active);
-  }
-  const rotate = path.match(/^\/api\/admin\/keys\/(\d+)\/rotate$/);
-  if (request.method === "POST" && rotate) {
-    return handleRotateKey(request, env, active, Number(rotate[1]));
-  }
-  const disable = path.match(/^\/api\/admin\/keys\/(\d+)\/disable$/);
-  if (request.method === "POST" && disable) {
-    return handleDisableKey(request, env, active, Number(disable[1]));
-  }
-  return json(
-    {
-      error: {
-        message: "Not found",
-        type: "invalid_request_error",
-        code: null,
+      {
+        error: {
+          message: "Not found",
+          type: "invalid_request_error",
+          code: null,
+        },
       },
-    },
-    404
-  );
+      404
+    );
+  } catch (error) {
+    return storeError(error);
+  }
 }
 
 /**
@@ -300,10 +316,7 @@ async function handleAddKey(
   }
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
-    return json(
-      { error: "Internal server error", message: "no sealing key configured" },
-      500
-    );
+    return internalError("no sealing key configured");
   }
   try {
     const summary = await addProviderKey(store, (t) => sealToken(t, dataKey), {
@@ -335,10 +348,7 @@ async function handleRotateKey(
   }
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
-    return json(
-      { error: "Internal server error", message: "no sealing key configured" },
-      500
-    );
+    return internalError("no sealing key configured");
   }
   if (typeof body["apiToken"] !== "string" || body["apiToken"].trim() === "") {
     return badRequest("apiToken is required");

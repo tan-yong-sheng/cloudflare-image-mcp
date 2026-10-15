@@ -341,8 +341,8 @@ export function getFrontendHTML(): string {
 
             <!-- Credentials + Result column -->
             <div class="w-full lg:w-3/5 space-y-6">
-            <!-- Panel: Provider Credentials (admin) -->
-                <div class="card h-full p-4 space-y-4 fade-in">
+                <!-- Panel: Provider Credentials (admin) -->
+                <div class="card p-4 space-y-4 fade-in">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold flex items-center">
                             <i class="fa-solid fa-key mr-2 text-primary"></i>Provider Credentials
@@ -370,11 +370,9 @@ export function getFrontendHTML(): string {
                         <p id="adminNotice" class="text-sm hidden" role="status"></p>
                     </div>
                 </div>
-            </div>
 
-            <!-- Panel: Result -->
-            <div class="w-full">
-                <div class="card h-full p-4 space-y-4 fade-in">
+                <!-- Panel: Result -->
+                <div class="card p-4 space-y-4 fade-in">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold flex items-center">
                             <i class="fa-solid fa-image mr-2 text-primary"></i>Result
@@ -883,7 +881,7 @@ export function getFrontendHTML(): string {
             adminNotice.classList.remove('hidden');
         }
 
-        function lockAdmin() {
+        function lockAdmin(keepError = false) {
             adminKey = '';
             if (adminKeyInput) adminKeyInput.value = '';
             adminPanel.classList.add('hidden');
@@ -891,7 +889,7 @@ export function getFrontendHTML(): string {
             adminUnlock.classList.remove('hidden');
             adminHealthState.textContent = '';
             adminKeys.innerHTML = '';
-            clearAdminError();
+            if (!keepError) clearAdminError();
         }
 
         function renderKeys(keys) {
@@ -923,20 +921,24 @@ export function getFrontendHTML(): string {
         }
 
         async function refreshAdmin() {
-            const response = await fetch('/api/admin/health', { headers: adminHeaders() });
-            if (response.status === 401) { showAdminError('API key rejected — log in again.'); lockAdmin(); return; }
-            if (response.status === 403) { showAdminError('Wrong management key.'); lockAdmin(); return; }
-            if (!response.ok) { showAdminError('Health check failed: ' + response.status); return; }
-            const health = await response.json();
-            adminHealthState.textContent = 'config v' + health.configVersion + ' · ' + health.keys.length + ' key(s)';
-            newKeyProvider.innerHTML = '';
-            for (const p of health.providers) {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.displayName || p.id;
-                newKeyProvider.appendChild(opt);
+            try {
+                const response = await fetch('/api/admin/health', { headers: adminHeaders() });
+                if (response.status === 401) { lockAdmin(true); showAdminError('API key rejected — log in again.'); return; }
+                if (response.status === 403) { lockAdmin(true); showAdminError('Wrong management key.'); return; }
+                if (!response.ok) { showAdminError('Health check failed: ' + response.status); return; }
+                const health = await response.json();
+                adminHealthState.textContent = 'config v' + health.configVersion + ' · ' + health.keys.length + ' key(s)';
+                newKeyProvider.innerHTML = '';
+                for (const p of health.providers) {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.displayName || p.id;
+                    newKeyProvider.appendChild(opt);
+                }
+                renderKeys(health.keys);
+            } catch (err) {
+                showAdminError('Network error loading admin health: ' + (err.message || 'unknown error'));
             }
-            renderKeys(health.keys);
         }
 
         async function unlockAdmin() {
@@ -957,44 +959,61 @@ export function getFrontendHTML(): string {
             const token = newKeyToken.value;
             const providerId = newKeyProvider.value;
             if (!label || !token) { showAdminError('Label and API token are required.'); return; }
-            const response = await fetch('/api/admin/keys', {
-                method: 'POST',
-                headers: adminHeaders(),
-                body: JSON.stringify({ providerId, label, apiToken: token }),
-            });
-            newKeyToken.value = '';
-            if (response.status === 409) { showAdminError('That label already exists.'); return; }
-            if (!response.ok) { showAdminError('Add failed: ' + response.status); return; }
-            const created = await response.json();
-            newKeyLabel.value = '';
-            showAdminNotice('Added ' + created.label + ' (v' + created.activeVersion + ').');
-            await refreshAdmin();
+            try {
+                const response = await fetch('/api/admin/keys', {
+                    method: 'POST',
+                    headers: adminHeaders(),
+                    body: JSON.stringify({ providerId, label, apiToken: token }),
+                });
+                if (response.status === 409) { showAdminError('That label already exists.'); return; }
+                if (!response.ok) { showAdminError('Add failed: ' + response.status); return; }
+                const created = await response.json();
+                newKeyLabel.value = '';
+                showAdminNotice('Added ' + created.label + ' (v' + created.activeVersion + ').');
+                await refreshAdmin();
+            } catch (err) {
+                showAdminError('Network error adding key: ' + (err.message || 'unknown error'));
+            } finally {
+                newKeyToken.value = '';
+            }
         }
 
         async function rotateKey(id) {
             const token = window.prompt('New API token for key ' + id + ':');
             if (!token) return;
-            const response = await fetch('/api/admin/keys/' + id + '/rotate', {
-                method: 'POST',
-                headers: adminHeaders(),
-                body: JSON.stringify({ apiToken: token }),
-            });
-            if (response.status === 404) { showAdminError('Key not found.'); return; }
-            if (!response.ok) { showAdminError('Rotate failed: ' + response.status); return; }
-            const rotated = await response.json();
-            showAdminNotice('Rotated to v' + rotated.activeVersion + '.');
-            await refreshAdmin();
+            clearAdminError();
+            adminNotice.classList.add('hidden');
+            try {
+                const response = await fetch('/api/admin/keys/' + id + '/rotate', {
+                    method: 'POST',
+                    headers: adminHeaders(),
+                    body: JSON.stringify({ apiToken: token }),
+                });
+                if (response.status === 404) { showAdminError('Key not found.'); return; }
+                if (!response.ok) { showAdminError('Rotate failed: ' + response.status); return; }
+                const rotated = await response.json();
+                showAdminNotice('Rotated to v' + rotated.activeVersion + '.');
+                await refreshAdmin();
+            } catch (err) {
+                showAdminError('Network error rotating key: ' + (err.message || 'unknown error'));
+            }
         }
 
         async function disableKey(id) {
             if (!window.confirm('Disable key ' + id + '? It stays stored but is no longer served.')) return;
-            const response = await fetch('/api/admin/keys/' + id + '/disable', {
-                method: 'POST',
-                headers: adminHeaders(),
-            });
-            if (!response.ok) { showAdminError('Disable failed: ' + response.status); return; }
-            showAdminNotice('Key disabled.');
-            await refreshAdmin();
+            clearAdminError();
+            adminNotice.classList.add('hidden');
+            try {
+                const response = await fetch('/api/admin/keys/' + id + '/disable', {
+                    method: 'POST',
+                    headers: adminHeaders(),
+                });
+                if (!response.ok) { showAdminError('Disable failed: ' + response.status); return; }
+                showAdminNotice('Key disabled.');
+                await refreshAdmin();
+            } catch (err) {
+                showAdminError('Network error disabling key: ' + (err.message || 'unknown error'));
+            }
         }
 
         adminUnlock.addEventListener('click', unlockAdmin);

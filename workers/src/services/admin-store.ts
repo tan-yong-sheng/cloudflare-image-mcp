@@ -102,6 +102,20 @@ function auditWrite(
   keyId: number | null,
   label: string
 ): AdminWrite {
+  if (action === "add") {
+    // Single-commit atomicity: the audit row resolves the fresh key id
+    // through the UNIQUE label inside the SAME batch (subselect idiom),
+    // eliminating any crash window between key creation and audit.
+    return write(
+      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label) " +
+        "VALUES (?, ?, ?, (SELECT id FROM provider_keys WHERE label = ?), ?)",
+      ADMIN_ACTOR,
+      action,
+      providerId,
+      label,
+      label
+    );
+  }
   return write(
     "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label) " +
       "VALUES (?, ?, ?, ?, ?)",
@@ -147,6 +161,9 @@ export async function addProviderKey(
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
   const envelope = await seal(apiToken);
+  // Atomic single-commit: all 4 statements (key, credential version,
+  // config bump, audit log) execute together in one batch. A duplicate
+  // label rolls the entire batch back (no partial writes, no audit, no bump).
   const writes: AdminWrite[] = [
     write(
       "INSERT INTO provider_keys (provider_id, label) VALUES (?, ?)",
@@ -161,12 +178,10 @@ export async function addProviderKey(
       ADMIN_ACTOR
     ),
     bumpWrite(),
+    auditWrite("add", providerId, null, label),
   ];
   try {
-    // The key id for the audit row comes from INSIDE the same commit:
-    // insert first (no audit yet), read the id, then commit audit+bump
-    // with it. A duplicate label fails here, before any audit row.
-    await db.commit(writes.slice(0, 2));
+    await db.commit(writes);
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AdminStoreError(409, `label '${label}' already exists`);
@@ -180,7 +195,6 @@ export async function addProviderKey(
       .first<{ id: number }>()
   )?.id;
   if (id === undefined) throw new AdminStoreError(500, "key write failed");
-  await db.commit([bumpWrite(), auditWrite("add", providerId, id, label)]);
   return { id, label, providerId, activeVersion: 1 };
 }
 
