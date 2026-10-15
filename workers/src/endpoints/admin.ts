@@ -65,17 +65,25 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
+const MAX_ADMIN_KEY_LENGTH = 512;
+
 /** Second gate for admin routes; call after the bearer gate passed.
  * Fail-closed: an unconfigured management key (or an empty presented
- * key) never authenticates — empty-equals-empty must not open the gate. */
+ * key) never authenticates — empty-equals-empty must not open the gate.
+ * Inputs exceeding MAX_ADMIN_KEY_LENGTH fail closed before hashing to
+ * prevent unbounded work or memory allocation. */
 export async function checkAdminKey(
   request: Request,
   env: Env
 ): Promise<boolean> {
   const configured = env.ADMIN_API_KEY ?? "";
-  if (configured.length === 0) return false;
+  if (configured.length === 0 || configured.length > MAX_ADMIN_KEY_LENGTH) {
+    return false;
+  }
   const presented = request.headers.get("X-Admin-Key") ?? "";
-  if (presented.length === 0) return false;
+  if (presented.length === 0 || presented.length > MAX_ADMIN_KEY_LENGTH) {
+    return false;
+  }
   return timingSafeEqual(presented, configured);
 }
 

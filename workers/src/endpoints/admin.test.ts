@@ -79,6 +79,17 @@ describe("admin health (R2)", () => {
     expect(response.status).toBe(403);
   });
 
+  test("oversized admin key fails closed with 403 before hashing", async () => {
+    const response = await worker.fetch(
+      get(
+        "/api/admin/health",
+        bearer("user-key", { "X-Admin-Key": "a".repeat(1024) })
+      ),
+      env()
+    );
+    expect(response.status).toBe(403);
+  });
+
   test("right bearer and right admin key reach the health payload", async () => {
     const response = await worker.fetch(
       get(
