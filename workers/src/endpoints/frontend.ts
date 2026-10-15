@@ -885,6 +885,7 @@ export function getFrontendHTML(): string {
         function lockAdmin(keepError = false) {
             adminKey = '';
             if (adminKeyInput) adminKeyInput.value = '';
+            if (newKeyToken) newKeyToken.value = '';
             adminPanel.classList.add('hidden');
             adminLock.classList.add('hidden');
             adminUnlock.classList.remove('hidden');
@@ -958,7 +959,7 @@ export function getFrontendHTML(): string {
             clearAdminError();
             adminNotice.classList.add('hidden');
             const label = newKeyLabel.value.trim();
-            const token = newKeyToken.value;
+            let token = newKeyToken.value;
             const providerId = newKeyProvider.value;
             if (!label || !token) { showAdminError('Label and API token are required.'); return; }
             try {
@@ -972,6 +973,8 @@ export function getFrontendHTML(): string {
                 if (response.status === 409) { showAdminError('That label already exists.'); return; }
                 if (!response.ok) { showAdminError('Add failed: ' + response.status); return; }
                 const created = await response.json();
+                token = '';
+                newKeyToken.value = '';
                 newKeyLabel.value = '';
                 showAdminNotice('Added ' + created.label + ' (v' + created.activeVersion + ').');
                 await refreshAdmin();
@@ -999,6 +1002,7 @@ export function getFrontendHTML(): string {
                 if (response.status === 404) { showAdminError('Key not found.'); return; }
                 if (!response.ok) { showAdminError('Rotate failed: ' + response.status); return; }
                 const rotated = await response.json();
+                token = null;
                 showAdminNotice('Rotated to v' + rotated.activeVersion + '.');
                 await refreshAdmin();
             } catch (err) {

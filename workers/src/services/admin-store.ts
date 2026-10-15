@@ -63,7 +63,7 @@ export interface AdminExposureSummary {
   enabled: boolean;
   alias: string | null;
   isDefault: boolean;
-  scope: string | null;
+  scopes: string[];
 }
 
 export interface AdminHealthSummary {
@@ -164,13 +164,26 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
       )
       .all()
   );
-  const exposure: AdminExposureSummary[] = exposureRows.map((r) => ({
-    modelId: String(r["modelId"]),
-    enabled: num(r["enabled"]) === 1,
-    alias: r["alias"] === null ? null : String(r["alias"]),
-    isDefault: num(r["isDefault"]) === 1,
-    scope: r["scope"] === null ? null : String(r["scope"]),
-  }));
+  const exposureMap = new Map<string, AdminExposureSummary>();
+  for (const r of exposureRows) {
+    const modelId = String(r["modelId"]);
+    let entry = exposureMap.get(modelId);
+    if (!entry) {
+      entry = {
+        modelId,
+        enabled: num(r["enabled"]) === 1,
+        alias: r["alias"] === null ? null : String(r["alias"]),
+        isDefault: num(r["isDefault"]) === 1,
+        scopes: [],
+      };
+      exposureMap.set(modelId, entry);
+    }
+    const scope = r["scope"] === null ? null : String(r["scope"]);
+    if (scope !== null) {
+      entry.scopes.push(scope);
+    }
+  }
+  const exposure: AdminExposureSummary[] = Array.from(exposureMap.values());
 
   return {
     providers,

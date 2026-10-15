@@ -30,10 +30,16 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-/** 403 twin of the middleware 401: same envelope, different status. */
+/** 403 response: standard OpenAI error envelope with invalid_request_error. */
 function forbidden(): Response {
   return new Response(
-    JSON.stringify({ error: "Forbidden", message: "Invalid admin key" }),
+    JSON.stringify({
+      error: {
+        message: "Invalid admin key",
+        type: "invalid_request_error",
+        code: null,
+      },
+    }),
     { status: 403, headers: { "Content-Type": "application/json" } }
   );
 }

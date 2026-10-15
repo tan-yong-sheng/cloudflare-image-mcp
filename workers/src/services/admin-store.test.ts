@@ -256,7 +256,7 @@ describe("admin health exposure rows (S2)", () => {
       enabled: false,
       alias: "short-a",
       isDefault: true,
-      scope: "s1",
+      scopes: ["s1"],
     });
   });
 
