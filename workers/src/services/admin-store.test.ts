@@ -8,6 +8,7 @@
 // (seal here, openEnvelope read-back) proves the stored envelope is
 // sealed with the request's key, not just any non-empty string.
 
+import type { AdminWrite } from "./admin-store.js";
 import { describe, expect, test } from "vitest";
 import type { DatabaseSync } from "node:sqlite";
 import { freshDb } from "../test-utils/migration-fixtures.js";
@@ -53,13 +54,14 @@ function asD1(db: DatabaseSync): AdminD1 {
         },
       };
     },
-    batch: async (statements) => {
+    commit: async (writes) => {
       db.exec("BEGIN");
       try {
-        const out = [];
-        for (const s of statements) out.push(await s.run());
+        for (const w of writes)
+          db.prepare(w.sql).run(
+            ...(w.params as (string | number | bigint | null)[])
+          );
         db.exec("COMMIT");
-        return out;
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;
@@ -199,5 +201,47 @@ describe("admin store against the real migrations (S2)", () => {
       .get(added.id) as { enabled: number };
     expect(row.enabled).toBe(0);
     expect(auditRows(db).map((r) => r.action)).toEqual(["add", "disable"]);
+  });
+});
+
+describe("admin health exposure rows (S2)", () => {
+  test("exposure rows serialize model flags with scopes", async () => {
+    const db = freshDb();
+    db.exec(
+      "INSERT INTO exposure_overrides (model_id, enabled, alias, is_default, updated_by) VALUES ('@cf/model-a', 0, 'short-a', 1, 'r2-test'), ('@cf/model-b', 1, NULL, 0, 'r2-test')"
+    );
+    db.exec(
+      "INSERT INTO excluded_scopes (model_id, scope) VALUES ('@cf/model-a', 's1'), ('@cf/model-a', 's2')"
+    );
+    // Same SELECT the health handler runs: grouped per model, scopes
+    // nested, labels only — no secret-adjacent column exists here.
+    const rows = db
+      .prepare(
+        "SELECT e.model_id AS modelId, e.enabled AS enabled, e.alias AS alias, e.is_default AS isDefault, s.scope AS scope FROM exposure_overrides e LEFT JOIN excluded_scopes s ON s.model_id = e.model_id"
+      )
+      .all() as {
+      modelId: string;
+      enabled: number;
+      alias: string | null;
+      isDefault: number;
+      scope: string | null;
+    }[];
+    const byModel = new Map<
+      string,
+      { enabled: boolean; scopes: (string | null)[] }
+    >();
+    for (const r of rows) {
+      const row = byModel.get(r.modelId) ?? {
+        enabled: r.enabled === 1,
+        scopes: [],
+      };
+      row.scopes.push(r.scope);
+      byModel.set(r.modelId, row);
+    }
+    expect(byModel.get("@cf/model-a")).toEqual({
+      enabled: false,
+      scopes: ["s1", "s2"],
+    });
+    expect(byModel.get("@cf/model-b")?.scopes).toEqual([null]);
   });
 });

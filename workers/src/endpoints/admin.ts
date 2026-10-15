@@ -19,6 +19,7 @@ import {
   disableProviderKey,
   rotateProviderKey,
   type AdminD1,
+  type AdminWrite,
 } from "../services/admin-store.js";
 
 function json(data: unknown, status = 200): Response {
@@ -37,22 +38,19 @@ function forbidden(): Response {
 }
 
 /**
- * Constant-time comparison: both sides become equal-length buffers so a
- * wrong key cannot be distinguished by response time.
+ * Comparison with no early exit: iterate the full maximum length so
+ * neither the presence of a key nor its length is a timing oracle.
+ * Short/missing inputs pad to the loop length; any difference — in
+ * bytes or in length — fails closed at the single return.
  */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length === 0 || b.length === 0) return false;
   const ab = new TextEncoder().encode(a);
   const bb = new TextEncoder().encode(b);
-  if (ab.length !== bb.length) {
-    // Compare against self for the full length anyway, then fail.
-    let sink = 0;
-    for (const byte of bb) sink |= byte ^ byte;
-    void sink;
-    return false;
+  const n = Math.max(ab.length, bb.length, 1);
+  let diff = ab.length ^ bb.length;
+  for (let i = 0; i < n; i++) {
+    diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0);
   }
-  let diff = 0;
-  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
   return diff === 0;
 }
 
@@ -66,25 +64,6 @@ interface D1Row {
   [key: string]: unknown;
 }
 
-/**
- * Write seam (S2): retained for documentation of the store contract.
- * The live seam is AdminD1 in services/admin-store.ts — D1Database
- * satisfies it structurally (prepare/bind/first/all/run plus batch);
- * the harness adapts node:sqlite to the same calls. One interface, two
- * engines, same statements — the HTTP tests and the local-D1 tests
- * observe the same SQL.
- */
-export interface AdminDb {
-  prepare(sql: string): {
-    bind(...params: unknown[]): {
-      first<T>(): Promise<T | null>;
-      all<T>(): Promise<{ results?: T[] }>;
-      run(): Promise<unknown>;
-    };
-  };
-  batch<T>(statements: { run(): Promise<T> }[]): Promise<T[]>;
-}
-
 function rows(res: { results?: D1Row[] } | null | undefined): D1Row[] {
   return res?.results ?? [];
 }
@@ -94,12 +73,12 @@ function num(value: unknown): number {
 }
 
 /**
- * Production adapter: wrap the narrow D1 calls the store needs off the
- * Worker's D1Database binding. Statements built here are the same ones
- * the S2 harness executes — the store module owns them, this adapter
- * only bridges the engine shapes.
+ * Production adapter: a D1Database-shaped handle plus the atomic commit
+ * above. Statements are described by the store, executed nowhere until
+ * commit — the same write lists the S2 harness runs inside BEGIN/COMMIT.
  */
 function d1AdminStore(db: NonNullable<Env["PROVIDER_DB"]>): AdminD1 {
+  const commit = commitWithD1(db);
   const wrap = (stmt: {
     first<T>(): Promise<T | null>;
     all<T>(): Promise<{ results?: T[] }>;
@@ -110,6 +89,7 @@ function d1AdminStore(db: NonNullable<Env["PROVIDER_DB"]>): AdminD1 {
     run: () => stmt.run(),
   });
   return {
+    commit,
     prepare: (sql: string) => {
       const unbound = wrap(db.prepare(sql));
       return {
@@ -117,8 +97,6 @@ function d1AdminStore(db: NonNullable<Env["PROVIDER_DB"]>): AdminD1 {
         bind: (...params: unknown[]) => wrap(db.prepare(sql).bind(...params)),
       };
     },
-    batch: (statements) =>
-      db.batch(statements.map((s) => s.run()) as never) as never,
   };
 }
 
@@ -175,7 +153,8 @@ export async function handleAdminHealth(
   env: Env
 ): Promise<Response> {
   const db = env.PROVIDER_DB;
-  if (!db) return json({ providers: [], configVersion: null });
+  if (!db)
+    return json({ providers: [], keys: [], exposure: [], configVersion: null });
 
   const providers = rows(
     await db.prepare("SELECT id, display_name FROM providers").all()
@@ -211,9 +190,29 @@ export async function handleAdminHealth(
   const versionRow = await db
     .prepare("SELECT version FROM config_versions WHERE id = 1")
     .first<{ version: number }>();
+  const exposure = rows(
+    await db
+      .prepare(
+        `SELECT e.model_id AS modelId,
+                e.enabled AS enabled,
+                e.alias AS alias,
+                e.is_default AS isDefault,
+                s.scope AS scope
+           FROM exposure_overrides e
+           LEFT JOIN excluded_scopes s ON s.model_id = e.model_id`
+      )
+      .all()
+  ).map((r) => ({
+    modelId: String(r["modelId"]),
+    enabled: num(r["enabled"]) === 1,
+    alias: r["alias"] === null ? null : String(r["alias"]),
+    isDefault: num(r["isDefault"]) === 1,
+    scope: r["scope"] === null ? null : String(r["scope"]),
+  }));
   return json({
     providers,
     keys,
+    exposure,
     configVersion: versionRow?.version ?? null,
   });
 }
@@ -266,6 +265,20 @@ export async function handleAdmin(
     },
     404
   );
+}
+
+/**
+ * Production commit: D1 batch of BOUND, UNEXECUTED prepared statements.
+ * The statements must reach db.batch without running first — mapping
+ * over runners (s.run()) would execute each write in its own auto-commit
+ * and hand promises to batch, breaking atomicity and the call itself.
+ */
+export function commitWithD1(
+  db: NonNullable<Env["PROVIDER_DB"]>
+): AdminD1["commit"] {
+  return async (writes: readonly AdminWrite[]): Promise<void> => {
+    await db.batch(writes.map((w) => db.prepare(w.sql).bind(...w.params)));
+  };
 }
 
 /** POST /api/admin/keys — add a key. Seals server-side; echoes identity only. */

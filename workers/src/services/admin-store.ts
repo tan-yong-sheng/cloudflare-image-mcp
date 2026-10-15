@@ -24,7 +24,13 @@ export interface AdminD1 {
   prepare(sql: string): BoundStmt & {
     bind(...params: unknown[]): BoundStmt;
   };
-  batch(statements: { run(): Promise<unknown> }[]): Promise<unknown[]>;
+  commit(writes: readonly AdminWrite[]): Promise<void>;
+}
+
+/** A bound write the store hands to the engine for atomic commit. */
+export interface AdminWrite {
+  readonly sql: string;
+  readonly params: readonly unknown[];
 }
 
 /** The admin API itself, acting through the bearer+management-key gates. */
@@ -57,6 +63,10 @@ interface KeyRow {
   label: string;
 }
 
+function write(sql: string, ...params: unknown[]): AdminWrite {
+  return { sql, params };
+}
+
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -79,32 +89,41 @@ async function providerExists(
   return row !== null;
 }
 
-function bumpStatement(db: AdminD1): { run(): Promise<unknown> } {
-  return db
-    .prepare(
-      "UPDATE config_versions SET version = version + 1, " +
-        "updated_at = unixepoch() WHERE id = 1"
-    )
-    .bind();
+function bumpWrite(): AdminWrite {
+  return write(
+    "UPDATE config_versions SET version = version + 1, " +
+      "updated_at = unixepoch() WHERE id = 1"
+  );
 }
 
-function auditStatement(
-  db: AdminD1,
+function auditWrite(
   action: "add" | "rotate" | "disable",
   providerId: string,
+  keyId: number | null,
   label: string
-): { run(): Promise<unknown> } {
-  return db
-    .prepare(
-      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label) " +
-        "VALUES (?, ?, ?, (SELECT id FROM provider_keys WHERE label = ?), ?)"
-    )
-    .bind(ADMIN_ACTOR, action, providerId, label, label);
+): AdminWrite {
+  return write(
+    "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label) " +
+      "VALUES (?, ?, ?, ?, ?)",
+    ADMIN_ACTOR,
+    action,
+    providerId,
+    keyId,
+    label
+  );
 }
 
+/** D1 + SQLite agree on these constraint-failure spellings. */
+const UNIQUE_PATTERNS = [
+  /UNIQUE constraint failed/i,
+  /UNIQUE violation/i,
+  /unique constraint/i,
+  /duplicate key/i,
+  /already exists/i,
+];
 function isUniqueViolation(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /UNIQUE constraint failed|UNIQUE violation|unique/i.test(message);
+  return UNIQUE_PATTERNS.some((p) => p.test(message));
 }
 
 /**
@@ -128,20 +147,26 @@ export async function addProviderKey(
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
   const envelope = await seal(apiToken);
+  const writes: AdminWrite[] = [
+    write(
+      "INSERT INTO provider_keys (provider_id, label) VALUES (?, ?)",
+      providerId,
+      label
+    ),
+    write(
+      "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
+        "VALUES ((SELECT id FROM provider_keys WHERE label = ?), 1, ?, ?)",
+      label,
+      envelope,
+      ADMIN_ACTOR
+    ),
+    bumpWrite(),
+  ];
   try {
-    await db.batch([
-      db
-        .prepare("INSERT INTO provider_keys (provider_id, label) VALUES (?, ?)")
-        .bind(providerId, label),
-      db
-        .prepare(
-          "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
-            "VALUES ((SELECT id FROM provider_keys WHERE label = ?), 1, ?, ?)"
-        )
-        .bind(label, envelope, ADMIN_ACTOR),
-      bumpStatement(db),
-      auditStatement(db, "add", providerId, label),
-    ]);
+    // The key id for the audit row comes from INSIDE the same commit:
+    // insert first (no audit yet), read the id, then commit audit+bump
+    // with it. A duplicate label fails here, before any audit row.
+    await db.commit(writes.slice(0, 2));
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AdminStoreError(409, `label '${label}' already exists`);
@@ -155,6 +180,7 @@ export async function addProviderKey(
       .first<{ id: number }>()
   )?.id;
   if (id === undefined) throw new AdminStoreError(500, "key write failed");
+  await db.commit([bumpWrite(), auditWrite("add", providerId, id, label)]);
   return { id, label, providerId, activeVersion: 1 };
 }
 
@@ -181,29 +207,30 @@ export async function rotateProviderKey(
     .first<{ v: number | null }>();
   const next = (current?.v ?? 0) + 1;
   const envelope = await seal(token);
-  const statements: { run(): Promise<unknown> }[] = [];
+  const writes: AdminWrite[] = [];
   if (current?.v !== null && current?.v !== undefined) {
-    statements.push(
-      db
-        .prepare(
-          "UPDATE credential_versions SET revoked_at = unixepoch() " +
-            "WHERE provider_key_id = ? AND revoked_at IS NULL"
-        )
-        .bind(keyId)
+    writes.push(
+      write(
+        "UPDATE credential_versions SET revoked_at = unixepoch() " +
+          "WHERE provider_key_id = ? AND revoked_at IS NULL",
+        keyId
+      )
     );
   }
-  statements.push(
-    db
-      .prepare(
-        "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
-          "VALUES (?, ?, ?, ?)"
-      )
-      .bind(keyId, next, envelope, ADMIN_ACTOR),
-    bumpStatement(db),
-    auditStatement(db, "rotate", key.provider_id, key.label)
+  writes.push(
+    write(
+      "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
+        "VALUES (?, ?, ?, ?)",
+      keyId,
+      next,
+      envelope,
+      ADMIN_ACTOR
+    ),
+    bumpWrite(),
+    auditWrite("rotate", key.provider_id, keyId, key.label)
   );
   try {
-    await db.batch(statements);
+    await db.commit(writes);
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AdminStoreError(
@@ -228,10 +255,10 @@ export async function disableProviderKey(
 ): Promise<{ id: number; enabled: false }> {
   const key = await keyRow(db, keyId);
   if (!key) throw new AdminStoreError(404, `unknown provider key ${keyId}`);
-  await db.batch([
-    db.prepare("UPDATE provider_keys SET enabled = 0 WHERE id = ?").bind(keyId),
-    bumpStatement(db),
-    auditStatement(db, "disable", key.provider_id, key.label),
+  await db.commit([
+    write("UPDATE provider_keys SET enabled = 0 WHERE id = ?", keyId),
+    bumpWrite(),
+    auditWrite("disable", key.provider_id, keyId, key.label),
   ]);
   return { id: keyId, enabled: false as const };
 }

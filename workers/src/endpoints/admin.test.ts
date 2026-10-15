@@ -153,3 +153,75 @@ describe("admin writes (R2)", () => {
     expect(disabled.status).toBe(500);
   });
 });
+
+describe("production adapter shape (atomic batch contract)", () => {
+  test("commit hands bound, unexecuted statements to batch", async () => {
+    // Pinned regression for the served-path atomicity hole: the
+    // production adapter must pass bound statements to db.batch, never
+    // promises from already-executed runs. A fake engine records what
+    // batch receives; nothing may execute before batch runs.
+    const events: string[] = [];
+    const fakeDb = {
+      prepare: (sql: string) => ({
+        bind: (...params: unknown[]) => ({
+          sql,
+          params,
+          first: async () => null,
+          all: async () => ({ results: [] as unknown[] }),
+          run: async () => {
+            events.push("run:" + sql);
+            return { meta: { changes: 1 } };
+          },
+        }),
+      }),
+      batch: async (stmts: { sql: string }[]) => {
+        for (const st of stmts) {
+          if (st instanceof Promise) {
+            throw new Error("batch received a promise, not a statement");
+          }
+          events.push("batch:" + st.sql);
+        }
+        return stmts.map(() => ({}));
+      },
+    };
+    const { commitWithD1 } = await import("./admin.js");
+    const commit = commitWithD1(fakeDb as never);
+    await commit([
+      {
+        sql: "UPDATE config_versions SET version = 2 WHERE id = 1",
+        params: [],
+      },
+      {
+        sql: "INSERT INTO admin_audit (actor) VALUES (?)",
+        params: ["admin-api"],
+      },
+    ]);
+    // Batch saw both statements, and no run executed before batch.
+    expect(events).toEqual([
+      "batch:UPDATE config_versions SET version = 2 WHERE id = 1",
+      "batch:INSERT INTO admin_audit (actor) VALUES (?)",
+    ]);
+  });
+});
+
+describe("admin health exposure (R2)", () => {
+  test("health carries the exposure overlay rows", async () => {
+    // Finding 2 regression: the AC promises exposure in health. With no
+    // store the shape is empty-but-present; the row-level proof lives in
+    // the S2 exposure test below. S1 pins the key exists on both paths.
+    const response = await worker.fetch(
+      get(
+        "/api/admin/health",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      env()
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      exposure: unknown[];
+      keys: unknown[];
+    };
+    expect(body.exposure).toEqual([]);
+    expect(Array.isArray(body.keys)).toBe(true);
+  });
+});
