@@ -10,6 +10,9 @@
 import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
+import type { ProviderPool } from "./provider-pool.js";
+import { overlayRegistry } from "../config/exposure-overlay.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RestAITransport,
   type AITransport,
@@ -143,9 +146,40 @@ export class ImageGeneratorService {
 
   constructor(
     env: Env,
-    deps?: { transport?: AITransport; store?: ImageStore }
+    deps?: {
+      transport?: AITransport;
+      store?: ImageStore;
+      pool?: ProviderPool;
+      exposureOverlay?: ExposureOverlay;
+    }
   ) {
-    this.models = new Map(Object.entries(MODEL_CONFIGS));
+    this.models = new Map(
+      Object.entries(
+        overlayRegistry(MODEL_CONFIGS, deps?.exposureOverlay ?? null)
+      )
+    );
+
+    // Dual-read (R1b, #72): a servable pool wins; the env paths below
+    // remain the fallback, so a half-migrated store never takes inference
+    // down. The log and transport tag carry the pool's REAL source — the
+    // loader falls back to env credentials, so a hardcoded "d1" would make
+    // the runbook's verification signal lie. Labels and counts only, never
+    // secret values.
+    const pool = deps?.pool;
+    const poolEntries = pool?.entries() ?? [];
+    if (pool && poolEntries.length > 0) {
+      const poolAccounts = poolEntries.map((e) => ({
+        account_id: e.accountId,
+        api_token: e.apiToken,
+      }));
+      console.warn(
+        `AI inference path: ${pool.source} with ${poolAccounts.length} account(s)`
+      );
+      this.transport =
+        deps?.transport ?? new RestAITransport(poolAccounts, pool.source, pool);
+      this.store = deps?.store ?? new R2StorageService(env);
+      return;
+    }
 
     // Build AI accounts list:
     // 1. AI_ACCOUNTS (JSON array) if set and valid
@@ -217,7 +251,10 @@ export class ImageGeneratorService {
    * models resolve to null so every generation path rejects them (R0).
    */
   getModelConfig(modelId: string): ModelConfig | null {
-    const config = this.models.get(resolveModelId(modelId)) || null;
+    const config =
+      this.models.get(
+        resolveModelId(modelId, Object.fromEntries(this.models))
+      ) || null;
     if (config && !isModelExposed(config)) return null;
     return config;
   }
@@ -565,7 +602,8 @@ export class ImageGeneratorService {
    * Get list of all available models
    */
   // Projection of the config registry (C3): the registry owns model
-  // knowledge; this keeps the OpenAI/MCP caller shape byte-identical.
+  // knowledge (its listModels applies the exposure filter); this map
+  // keeps the OpenAI/MCP caller shape byte-identical.
   listModels(): Array<{
     id: string;
     name: string;
@@ -575,15 +613,17 @@ export class ImageGeneratorService {
     taskTypes: string[];
     editCapabilities?: ModelConfig["editCapabilities"];
   }> {
-    return listRegistryModels().map((config) => ({
-      id: config.id,
-      name: config.name,
-      description: config.description,
-      provider: config.provider,
-      supportedSizes: config.supportedSizes,
-      taskTypes: config.taskTypes,
-      editCapabilities: config.editCapabilities,
-    }));
+    return listRegistryModels(Object.fromEntries(this.models)).map(
+      (config) => ({
+        id: config.id,
+        name: config.name,
+        description: config.description,
+        provider: config.provider,
+        supportedSizes: config.supportedSizes,
+        taskTypes: config.taskTypes,
+        editCapabilities: config.editCapabilities,
+      })
+    );
   }
 
   /**

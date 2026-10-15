@@ -8,6 +8,7 @@
 // service; the transport only executes calls with the accounts it is given.
 
 import type { AIAccount, ModelConfig } from "../types.js";
+import type { ProviderPool } from "./provider-pool.js";
 import { base64ToUint8Array, cleanBase64 } from "../utils/encoding.js";
 
 /**
@@ -45,14 +46,17 @@ export interface ImageStore {
  */
 export class RestAITransport implements AITransport {
   private aiAccounts: AIAccount[];
-  private credentialSource: "AI_ACCOUNTS" | "fallback";
+  private credentialSource: "AI_ACCOUNTS" | "fallback" | "d1";
+  private pool?: ProviderPool;
 
   constructor(
     accounts: AIAccount[],
-    credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback"
+    credentialSource: "AI_ACCOUNTS" | "fallback" | "d1" = "fallback",
+    pool?: ProviderPool
   ) {
     this.aiAccounts = accounts;
     this.credentialSource = credentialSource;
+    this.pool = pool;
   }
 
   async run(
@@ -61,6 +65,11 @@ export class RestAITransport implements AITransport {
     model: ModelConfig,
     images?: string[]
   ): Promise<unknown> {
+    const { pool } = this;
+    if (pool) {
+      return await this.runPooled(pool, modelId, payload, model, images);
+    }
+
     // Failover: try each configured account in turn (starting at a random
     // offset for load distribution); only the last failure is thrown.
     const start = Math.floor(Math.random() * this.aiAccounts.length);
@@ -73,7 +82,9 @@ export class RestAITransport implements AITransport {
       const credentialTag =
         this.credentialSource === "AI_ACCOUNTS"
           ? `AI_ACCOUNTS[${index}]`
-          : "fallback deploy credential";
+          : this.credentialSource === "d1"
+            ? `D1[${index}]`
+            : "fallback deploy credential";
       const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
 
       try {
@@ -94,6 +105,74 @@ export class RestAITransport implements AITransport {
     }
 
     throw lastError;
+  }
+
+  /**
+   * Pool-driven attempts (#72): the weighted pick chooses every attempt's
+   * credential, and each failure parks that key on the shared, isolate-
+   * cached pool so later requests start elsewhere. pick() returns null
+   * once every key is cooled down, which bounds the loop; only the last
+   * failure is thrown.
+   */
+  private async runPooled(
+    pool: ProviderPool,
+    modelId: string,
+    payload: Record<string, any>,
+    model: ModelConfig,
+    images?: string[]
+  ): Promise<unknown> {
+    let lastError: unknown = null;
+    // Safety bound: a pick always parks its key on failure, so pick()
+    // goes null within labels().length attempts in practice.
+    const maxAttempts = pool.labels().length + 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const pick = pool.pick();
+      if (!pick) break;
+      const url = `https://api.cloudflare.com/client/v4/accounts/${pick.accountId}/ai/run/${modelId}`;
+      try {
+        return await this.runWithAccount(
+          url,
+          { account_id: pick.accountId, api_token: pick.apiToken },
+          // The label is the only observability tag: account ids and
+          // tokens never reach the logs.
+          pick.label,
+          payload,
+          model,
+          images
+        );
+      } catch (error) {
+        lastError = error;
+        pool.reportFailure(pick.label, Date.now());
+        console.warn(
+          `AI request failed [credential: ${pick.label}], parking key and trying another`
+        );
+      }
+    }
+
+    throw lastError ?? new Error("provider pool: no servable credential");
+  }
+
+  /**
+   * Strip credential values this transport was constructed with from
+   * upstream text before it enters an Error: operational failures travel
+   * verbatim into the service envelope (and from there into endpoint
+   * responses and logs), so a token echoed by an upstream body must die
+   * here. Shape is unchanged when no secret is embedded (pinned by
+   * contract tests). Empty values are skipped — splitting on "" would
+   * shred the string.
+   */
+  private scrubSecrets(text: string): string {
+    let out = text;
+    for (const account of this.aiAccounts) {
+      if (account.api_token) {
+        out = out.split(account.api_token).join("[redacted]");
+      }
+      if (account.account_id) {
+        out = out.split(account.account_id).join("[redacted]");
+      }
+    }
+    return out;
   }
 
   private async runWithAccount(
@@ -161,7 +240,7 @@ export class RestAITransport implements AITransport {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${errorText}`
+        `Cloudflare AI API error (${response.status}) [credential: ${credentialTag}]: ${this.scrubSecrets(errorText)}`
       );
     }
 
@@ -179,7 +258,7 @@ export class RestAITransport implements AITransport {
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `Cloudflare AI API returned unparseable JSON [credential: ${credentialTag}]: ${detail}`
+          `Cloudflare AI API returned unparseable JSON [credential: ${credentialTag}]: ${this.scrubSecrets(detail)}`
         );
       }
       // Cloudflare REST API wraps result in { result: ... }

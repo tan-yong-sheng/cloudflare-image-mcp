@@ -9,7 +9,9 @@ import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { serveFrontend } from "./endpoints/frontend.js";
-import { listModels } from "./config/models.js";
+import { getProviderPool, getExposureOverlay } from "./services/pool-cache.js";
+import { overlayRegistry } from "./config/exposure-overlay.js";
+import { listModels, MODEL_CONFIGS } from "./config/models.js";
 import {
   authenticateRequest,
   requiresAuth,
@@ -116,7 +118,10 @@ export default {
 
       // Route: OpenAI-compatible API
       if (path.startsWith("/v1/")) {
-        const openai = new OpenAIEndpoint(env);
+        const openai = new OpenAIEndpoint(env, {
+          pool: await getProviderPool(env),
+          exposureOverlay: await getExposureOverlay(env),
+        });
         return openai.handle(request);
       }
 
@@ -139,13 +144,17 @@ export default {
             baseUrl: url.protocol + "//" + url.host,
             mode,
             defaultModel,
+            pool: await getProviderPool(env),
+            exposureOverlay: await getExposureOverlay(env),
           })
         );
       }
 
       // Route: API endpoints
       if (path === "/api/internal/models") {
-        const models = listModels();
+        const models = listModels(
+          overlayRegistry(MODEL_CONFIGS, await getExposureOverlay(env))
+        );
         return new Response(JSON.stringify(models), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

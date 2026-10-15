@@ -40,12 +40,12 @@ Create a token with these **Account-scoped** permissions:
 
 ## Optional Secrets
 
-| Variable            | Description                                                                                                                              | Example                   |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                    | `mykey1,mykey2`           |
-| `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                      | See below                 |
-| `TZ`                | Timezone for logging                                                                                                                     | `America/New_York`        |
-| `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Nothing reads it until R1b; set it before R1b ships. | `openssl rand -base64 32` |
+| Variable            | Description                                                                                                                                                                        | Example                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                                                              | `mykey1,mykey2`           |
+| `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                                                                | See below                 |
+| `TZ`                | Timezone for logging                                                                                                                                                               | `America/New_York`        |
+| `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Required for the R1b D1 provider store; set it before running the one-shot import (see below). | `openssl rand -base64 32` |
 
 ### `AI_ACCOUNTS` Format
 
@@ -61,6 +61,98 @@ By default, the worker uses `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` f
 Each entry needs an API token with **Workers AI Read + Edit** permissions for that account. The worker picks a random account per request for load distribution.
 
 If `AI_ACCOUNTS` is **not set**, the worker falls back to `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` for AI inference.
+
+### Migrating `AI_ACCOUNTS` to D1 (one-shot import)
+
+Since R1b, the provider store lives in D1: tokens are stored as AES-GCM
+envelopes (encrypted with the `PROVIDER_DATA_KEY` Worker secret), and D1 wins
+over `AI_ACCOUNTS` whenever rows exist. `AI_ACCOUNTS` keeps working as a
+fallback with a deprecation warning, so there is **no flag day** — import at
+your own pace, then unset the blob in a later deploy.
+
+**Preferred path — import from CI.** `AI_ACCOUNTS` is a write-only GitHub
+secret: no shell can read it back, so the local steps below cannot even
+fetch it unaided. The deploy workflow carries an opt-in `import_credentials`
+input that runs the import inside CI, where the blob and the sealing key
+already live (staging first):
+
+```bash
+gh workflow run deploy-workers.yml \
+  --ref <branch being deployed> \
+  -f environment=staging -f import_credentials=true
+```
+
+(Or from the Actions tab: **Deploy to Cloudflare Workers → Run workflow →
+environment: staging → import_credentials: ✅**.) The job applies the schema
+first, seals each token with the same `PROVIDER_DATA_KEY` it pushes to the
+Worker in the same run — so the sealing and opening keys cannot drift — and
+prints the imported rows (`SELECT label, enabled`) as run-log evidence. The
+blob never touches a local disk.
+
+**Manual fallback — import from a local shell.** For environments CI cannot
+reach. One-time steps, per environment (staging first):
+
+1. **Set the data key** (once, before the Worker ever needs to open D1
+   envelopes):
+
+   ```bash
+   cd workers
+   npx wrangler secret put PROVIDER_DATA_KEY   # value: openssl rand -base64 32
+   ```
+
+2. **Generate the import SQL.** Take the JSON array from your `AI_ACCOUNTS`
+   secret and pipe it through the import script. The output is envelope SQL
+   only — plaintext tokens never appear in it. The script never prompts for
+   the key — pass it in the environment, and it must match the Worker
+   secret:
+
+   ```bash
+   PROVIDER_DATA_KEY=<same value as the Worker secret> \
+     node scripts/import-ai-accounts.mjs < ai-accounts.json > import.sql
+   ```
+
+3. **Review, then apply** through the D1 CLI (nothing in the Worker changes;
+   the script emits SQL only):
+
+   ```bash
+   cd workers
+   npx wrangler d1 execute cloudflare-image-mcp-providers-staging \
+     --remote --file ../import.sql
+   ```
+
+4. **Verify:**
+
+   ```bash
+   npx wrangler d1 execute cloudflare-image-mcp-providers-staging --remote \
+     --command "SELECT label, external_account_id, enabled FROM provider_keys"
+   ```
+
+   Then hit any inference endpoint and check the logs for
+   `AI inference path: d1 with N account(s)` (labels and counts only — the
+   logs never contain tokens or account ids).
+
+**Rollback** — two independent options, both immediate:
+
+- **Empty the tables** (Worker falls back to `AI_ACCOUNTS` / deploy
+  credentials on the next version-poll, ≤ 5 s — keep the version bump, or a
+  warm isolate keeps serving the deleted rows until its next deploy):
+
+  ```sql
+  DELETE FROM credential_versions;
+  DELETE FROM provider_keys;
+  UPDATE config_versions SET version = version + 1, updated_at = unixepoch() WHERE id = 1;
+  ```
+
+- **D1 Time Travel** restores the whole database to any point in the last 30
+  days (use for a bad rotation or partial import).
+
+**Re-running the import** fails loudly on the UNIQUE guards (one row per
+label; one active version per key) — it never double-imports. To rotate a
+token afterwards, use the ledger path (revoke + insert in one transaction),
+not a second import run.
+
+Treat `import.sql` as sensitive-but-not-secret (envelopes only): do not
+commit it, and delete it after applying.
 
 ---
 

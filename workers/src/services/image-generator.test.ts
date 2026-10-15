@@ -6,12 +6,18 @@
 // records uploads; assertions cover observable image output and error
 // envelopes for text-to-image, image-to-image, and masked edits.
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   ImageGeneratorService,
   type GenerationRequest,
 } from "./image-generator.js";
-import type { AITransport, ImageStore } from "./generation-adapters.js";
+import { ProviderPool, type PoolKey } from "./provider-pool.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
+import {
+  RestAITransport,
+  type AITransport,
+  type ImageStore,
+} from "./generation-adapters.js";
 import type { Env, ModelConfig } from "../types.js";
 
 const TEXT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
@@ -536,5 +542,236 @@ describe("runMany", () => {
 
     expect(result.success).toBe(true);
     expect(result.images).toHaveLength(2);
+  });
+});
+
+describe("dual-read credential wiring (S4)", () => {
+  const envWithAIAccounts = {
+    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
+    CLOUDFLARE_API_TOKEN: "deploy-token",
+    AI_ACCOUNTS: JSON.stringify([
+      { account_id: "env-account", api_token: "env-token" },
+    ]),
+    IMAGE_EXPIRY_HOURS: "24",
+    IMAGE_BUCKET: {},
+  } as unknown as Env;
+
+  function constructWith(pool: ProviderPool | undefined): string {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      new ImageGeneratorService(envWithAIAccounts, {
+        transport: new MemoryTransport(),
+        store: new MemoryStore(),
+        pool,
+      });
+      return warn.mock.calls.map((c) => String(c[0])).join("\n");
+    } finally {
+      warn.mockRestore();
+    }
+  }
+
+  const d1Keys: PoolKey[] = [
+    {
+      label: "k1",
+      accountId: "d1-a1",
+      apiToken: "d1-t1",
+      weight: 1,
+      enabled: true,
+    },
+    {
+      label: "k2",
+      accountId: "d1-a2",
+      apiToken: "d1-t2",
+      weight: 1,
+      enabled: true,
+    },
+  ];
+
+  test("a servable D1 pool wins over env AI_ACCOUNTS, labels only in logs", () => {
+    const said = constructWith(new ProviderPool(d1Keys));
+    expect(said).toContain("AI inference path: d1 with 2 account(s)");
+    expect(said).not.toContain("d1-t1");
+    expect(said).not.toContain("d1-a1");
+    expect(said).not.toContain("env-token");
+  });
+
+  test("a pool with no servable keys falls through to env dual-read", () => {
+    const disabled = d1Keys.map((k) => ({ ...k, enabled: false }));
+    const said = constructWith(new ProviderPool(disabled));
+    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
+  });
+
+  test("no pool keeps the env path exactly as before", () => {
+    const said = constructWith(undefined);
+    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
+  });
+
+  // Spec-review fix (#72): index.ts always passes a pool, and the loader
+  // falls back to env credentials when D1 is empty — so the log must carry
+  // the pool's REAL source, or the runbook's verification signal would say
+  // "d1" even while serving AI_ACCOUNTS (false staging evidence).
+  test("a pool whose source is AI_ACCOUNTS logs AI_ACCOUNTS, not d1", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      new ImageGeneratorService(envWithAIAccounts, {
+        transport: new MemoryTransport(),
+        store: new MemoryStore(),
+        pool: new ProviderPool(
+          [
+            {
+              label: "AI_ACCOUNTS[0]",
+              accountId: "env-account",
+              apiToken: "env-token",
+              weight: 1,
+              enabled: true,
+            },
+          ],
+          { source: "AI_ACCOUNTS" }
+        ),
+      });
+      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toContain(
+        "AI inference path: AI_ACCOUNTS with 1 account(s)"
+      );
+      expect(said).not.toContain("d1");
+      expect(said).not.toContain("env-token");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  // AC5-response fix (#72): "zero-secret-character assertions on logs AND
+  // responses" — the log half was pinned, but no test scanned what the
+  // service returns to callers. This drives runOnce + runMany through the
+  // D1-pool path with credential-shaped secrets in every slot and scans
+  // every returned envelope: base64 payloads, image URLs/ids, and error
+  // strings.
+  test("D1-pool responses carry zero secret characters", async () => {
+    const transport = new MemoryTransport();
+    transport.enqueue({ image: HELLO_B64 });
+    const store = new MemoryStore();
+    const svc = new ImageGeneratorService(envWithAIAccounts, {
+      transport,
+      store,
+      pool: new ProviderPool(
+        [
+          {
+            label: "k1",
+            accountId: "a1",
+            apiToken: "SECRET-TOKEN-K1",
+            weight: 1,
+            enabled: true,
+          },
+        ],
+        { source: "d1" }
+      ),
+    });
+
+    const one = await svc.runOnce({
+      modelId: TEXT_MODEL,
+      prompt: "a cat",
+      returnBase64: true,
+    });
+    expect(one.success).toBe(true);
+    expect(JSON.stringify(one)).not.toContain("SECRET-TOKEN-K1");
+    expect(JSON.stringify(one)).not.toContain("env-token");
+    expect(JSON.stringify(one)).not.toContain("deploy-token");
+
+    transport.enqueue({ image: HELLO_B64 });
+    const many = await svc.runMany({ modelId: TEXT_MODEL, prompt: "a cat" }, 1);
+    expect(many.success).toBe(true);
+    expect(JSON.stringify(many)).not.toContain("SECRET-TOKEN-K1");
+
+    // Error path, production-shaped: a real pooled transport whose
+    // upstream echoes the token must still yield a clean envelope —
+    // scrubbing lives in the transport, the only module holding secrets.
+    const realTransport = new RestAITransport(
+      [{ account_id: "a1", api_token: "SECRET-TOKEN-K1" }],
+      "d1",
+      new ProviderPool(
+        [
+          {
+            label: "k1",
+            accountId: "a1",
+            apiToken: "SECRET-TOKEN-K1",
+            weight: 1,
+            enabled: true,
+          },
+        ],
+        { source: "d1" }
+      )
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("boom SECRET-TOKEN-K1", {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        })
+      )
+    );
+    const failing = new ImageGeneratorService(envWithAIAccounts, {
+      transport: realTransport,
+      store: new MemoryStore(),
+    });
+    const err = await failing.runOnce({
+      modelId: TEXT_MODEL,
+      prompt: "a cat",
+    });
+    expect(err.success).toBe(false);
+    expect(String(err.error)).not.toContain("SECRET-TOKEN-K1");
+    expect(String(err.error)).toContain("Cloudflare AI API error (500)");
+  });
+});
+
+describe("exposure overlay wiring (S6)", () => {
+  const env = {
+    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
+    CLOUDFLARE_API_TOKEN: "deploy-token",
+    IMAGE_EXPIRY_HOURS: "24",
+    IMAGE_BUCKET: {},
+  } as unknown as Env;
+
+  function generatorWith(
+    exposureOverlay: ExposureOverlay | undefined
+  ): ImageGeneratorService {
+    return new ImageGeneratorService(env, {
+      transport: new MemoryTransport(),
+      store: new MemoryStore(),
+      exposureOverlay,
+    });
+  }
+
+  test("a D1-enabled=false row hides the model from the service", () => {
+    const generator = generatorWith(
+      new Map([
+        [
+          IMG2IMG_MODEL,
+          { enabled: false, alias: null, isDefault: false, excludedScopes: [] },
+        ],
+      ])
+    );
+    expect(generator.getModelConfig(IMG2IMG_MODEL)).toBeNull();
+    expect(generator.listModels().map((m) => m.id)).not.toContain(
+      IMG2IMG_MODEL
+    );
+    expect(generator.getModelConfig(TEXT_MODEL)?.id).toBe(TEXT_MODEL);
+  });
+
+  test("a D1 alias resolves through the service", () => {
+    const generator = generatorWith(
+      new Map([
+        [
+          TEXT_MODEL,
+          {
+            enabled: true,
+            alias: "d1-alias",
+            isDefault: false,
+            excludedScopes: [],
+          },
+        ],
+      ])
+    );
+    expect(generator.getModelConfig("d1-alias")?.id).toBe(TEXT_MODEL);
   });
 });
