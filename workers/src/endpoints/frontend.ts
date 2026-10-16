@@ -1136,24 +1136,6 @@ export function getFrontendHTML(): string {
                 render(res.data);
             }
 
-            async function disableKey(keyId) {
-                const generation = adminRequestGeneration;
-                try {
-                    const res = await api('POST', ADMIN_KEYS + '/' + keyId + '/disable');
-                    if (res.stale) return;
-                    if (!res.ok) {
-                        showError(errorLine, 'Delete failed: ' + errorMessage(res));
-                        return;
-                    }
-                    showNotice('Key #' + keyId + ' disabled — no longer serving requests');
-                    await loadHealth();
-                } catch (error) {
-                    if (generation === adminRequestGeneration) {
-                        showError(errorLine, error instanceof Error ? error.message : String(error));
-                    }
-                }
-            }
-
             function render(health) {
                 lastHealth = health;
                 const providers = health.providers;
@@ -1263,23 +1245,6 @@ export function getFrontendHTML(): string {
                 return edit;
             }
 
-            function deleteButton(k) {
-                const del = document.createElement('button');
-                del.type = 'button';
-                del.className = 'btn btn-secondary text-xs py-1 px-2 text-red-400 hover:text-red-300';
-                del.setAttribute('aria-label', 'Disable key #' + k.id);
-                del.title = 'Disable key #' + k.id;
-                const icon = document.createElement('i');
-                icon.className = 'fa-solid fa-ban';
-                del.appendChild(icon);
-                del.addEventListener('click', () => {
-                    if (confirm('Disable key #' + k.id + ' (' + (k.accountId || 'no account ID') + ')? The key will stop serving requests but remain in the database for audit.')) {
-                        disableKey(k.id);
-                    }
-                });
-                return del;
-            }
-
             function renderTable(providers, keys) {
                 const family = providers.find((p) => p.id === selected);
                 familyName.textContent = '';
@@ -1314,7 +1279,7 @@ export function getFrontendHTML(): string {
                     wrap.className = 'inline-flex gap-2 items-center';
                     wrap.appendChild(keyToggle(k));
                     wrap.appendChild(editButton(k));
-                    wrap.appendChild(deleteButton(k));
+                    // TODO: Add delete button once DELETE endpoint exists (see design-plans/007-delete-and-masked-keys.md)
                     actions.appendChild(wrap);
 
                     tr.appendChild(acctCell);
