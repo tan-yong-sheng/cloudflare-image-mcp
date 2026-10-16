@@ -41,7 +41,7 @@ describe("RestAITransport account failover", () => {
         { account_id: "first", api_token: "token-one" },
         { account_id: "second", api_token: "token-two" },
       ],
-      "AI_ACCOUNTS"
+      "d1"
     );
     const fetchMock = vi
       .fn()
@@ -72,7 +72,7 @@ describe("RestAITransport account failover", () => {
   test("all accounts failing surfaces the last error", async () => {
     const transport = new RestAITransport(
       [{ account_id: "only", api_token: "token" }],
-      "fallback"
+      "d1"
     );
     vi.stubGlobal(
       "fetch",
@@ -90,7 +90,7 @@ describe("RestAITransport account failover", () => {
     // stay plain Errors so they map to 500.
     const transport = new RestAITransport(
       [{ account_id: "only", api_token: "token" }],
-      "fallback"
+      "d1"
     );
     vi.stubGlobal(
       "fetch",
