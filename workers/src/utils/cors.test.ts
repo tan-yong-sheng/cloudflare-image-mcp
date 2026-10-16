@@ -26,6 +26,7 @@ describe("corsHeaders", () => {
     for (const header of [
       "Content-Type",
       "Authorization",
+      "X-Admin-Key",
       "Mcp-Session-Id",
       "Mcp-Protocol-Version",
       "Last-Event-ID",

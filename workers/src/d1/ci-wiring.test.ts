@@ -93,6 +93,7 @@ describe("migrations run before deploy (R1a)", () => {
       "API_KEYS_VALUE",
       "AI_ACCOUNTS_VALUE",
       "PROVIDER_DATA_KEY_VALUE",
+      "ADMIN_API_KEY_VALUE",
       "TZ_VALUE",
     ]) {
       expect(WORKFLOW).toContain(key);

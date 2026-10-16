@@ -105,6 +105,7 @@ export interface Env {
   API_KEYS?: string; // Comma-separated list of valid API keys
   AI_ACCOUNTS?: string; // JSON array of {account_id, api_token} for multi-account AI inference
   PROVIDER_DATA_KEY?: string; // AES-GCM data key sealing provider tokens in D1 (R1b); Worker secret
+  ADMIN_API_KEY?: string; // Management key gating the /api/admin/* routes (R2); Worker secret, never the bearer gate
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
   TZ?: string; // Timezone for logging and folder creation (default: UTC)

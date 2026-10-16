@@ -275,6 +275,10 @@ jobs:
           # default = contract (0 live calls). Grep+timeout come from
           # e2e/lib/tiers.ts.
           E2E_TIER: ${{ inputs.test_pattern != '' && 'slow' || github.event_name == 'schedule' && 'canary' || github.event_name == 'pull_request' && 'smoke' || inputs.full_matrix && 'slow' || 'contract' }}
+          # Scoped to this step, never the job: a credential must not sit in
+          # every step's environment. Unset is deliberate until staging is
+          # provisioned — the admin e2e then fails loudly, never fakes green.
+          ADMIN_API_KEY_E2E: ${{ secrets.ADMIN_API_KEY }}
           E2E_SLOW: ${{ inputs.full_matrix && '1' || '' }}
           E2E_SMOKE: ${{ (github.event_name == 'pull_request' || github.event_name == 'schedule') && '1' || '' }}
           E2E_DRIFT: ${{ github.event_name == 'schedule' && '1' || '' }}

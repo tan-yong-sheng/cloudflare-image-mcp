@@ -12,6 +12,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanForSecrets } from "../test-utils/plaintext-scan.js";
+import {
+  migrationFiles,
+  migrationSql,
+} from "../test-utils/migration-fixtures.js";
 
 const CF_TOKEN = "v1.0-abcdef0123456789abcdef0123456789";
 
@@ -112,4 +116,42 @@ test("the repo's own config stays clean (scanner calibration)", () => {
     const text = readFileSync(join(repoRoot, rel), "utf8");
     expect(scanForSecrets(text), `unexpected finding in ${rel}`).toEqual([]);
   }
+});
+
+describe("admin responses carry no secret material (R2, S3)", () => {
+  test("health fixture: labels and counts pass the scanner", () => {
+    const body = JSON.stringify({
+      providers: [{ id: "cloudflare", displayName: "Cloudflare Workers AI" }],
+      keys: [
+        {
+          id: 3,
+          providerId: "cloudflare",
+          label: "imported-1",
+          weight: 1,
+          enabled: true,
+          activeVersion: 1,
+        },
+      ],
+      configVersion: 2,
+    });
+    expect(scanForSecrets(body)).toEqual([]);
+  });
+
+  test("write-summary fixture echoes identity only", () => {
+    const body = JSON.stringify({
+      id: 4,
+      label: "page-key-1",
+      providerId: "cloudflare",
+      activeVersion: 1,
+    });
+    expect(scanForSecrets(body)).toEqual([]);
+  });
+
+  test("the admin audit migration carries no secret-shaped literal", () => {
+    for (const file of migrationFiles()) {
+      expect(scanForSecrets(migrationSql(file)), `secret in ${file}`).toEqual(
+        []
+      );
+    }
+  });
 });

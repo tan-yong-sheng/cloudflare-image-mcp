@@ -7,6 +7,7 @@ import type { Env } from "./types.js";
 import { WORKER_VERSION } from "./version.js";
 import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
+import { handleAdmin } from "./endpoints/admin.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { serveFrontend } from "./endpoints/frontend.js";
 import { getProviderPool, getExposureOverlay } from "./services/pool-cache.js";
@@ -148,6 +149,14 @@ export default {
             exposureOverlay: await getExposureOverlay(env),
           })
         );
+      }
+
+      // Route: Admin API (R2, #74) — the bearer gate above already ran;
+      // handleAdmin owns the X-Admin-Key gate and returns null for
+      // non-admin paths.
+      if (path.startsWith("/api/admin/")) {
+        const adminResponse = await handleAdmin(request, path, env);
+        if (adminResponse) return withCors(adminResponse);
       }
 
       // Route: API endpoints
