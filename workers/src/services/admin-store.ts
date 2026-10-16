@@ -91,6 +91,13 @@ export interface AdminHealthSummary {
   keys: AdminKeySummary[];
   exposure: AdminExposureSummary[];
   configVersion: number | null;
+  /**
+   * Injected by the endpoint from the provider pool: the same "servable"
+   * predicate inference picks with (enabled, weight > 0, envelope opens).
+   * The key list beside it cannot answer this — a key can be listed,
+   * enabled, and weighted yet still be parked by an unopenable envelope.
+   */
+  hasServableCredential: boolean;
 }
 
 export interface AddKeyInput {
@@ -163,7 +170,10 @@ function num(value: unknown): number {
  * the config cache version. Reads live in the store so endpoints contain
  * zero SQL.
  */
-export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
+export async function getAdminHealth(
+  db: AdminD1,
+  hasServableCredential: boolean
+): Promise<AdminHealthSummary> {
   const providerRows = rows<Record<string, unknown>>(
     await db.prepare("SELECT id, display_name FROM providers").all()
   );
@@ -242,6 +252,7 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
     keys,
     exposure,
     configVersion: versionRow?.version ?? null,
+    hasServableCredential,
   };
 }
 

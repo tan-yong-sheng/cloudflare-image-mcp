@@ -13,6 +13,7 @@
 
 import type { Env } from "../types.js";
 import { sealToken } from "../services/provider-crypto.js";
+import { getProviderPool } from "../services/pool-cache.js";
 import {
   addProviderKey,
   AdminStoreError,
@@ -221,12 +222,19 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
  * their flag so an operator can see what is parked.
  */
 export async function handleAdminHealth(
-  store: AdminD1 | null
+  store: AdminD1 | null,
+  hasServableCredential: boolean
 ): Promise<Response> {
   if (!store) {
-    return json({ providers: [], keys: [], exposure: [], configVersion: null });
+    return json({
+      providers: [],
+      keys: [],
+      exposure: [],
+      configVersion: null,
+      hasServableCredential,
+    });
   }
-  return json(await getAdminHealth(store));
+  return json(await getAdminHealth(store, hasServableCredential));
 }
 
 /**
@@ -257,7 +265,12 @@ export async function handleAdmin(
     const db = env.PROVIDER_DB;
     const active = store ?? (db ? d1AdminStore(db) : null);
     if (request.method === "GET" && path === ADMIN_HEALTH_PATH) {
-      return await handleAdminHealth(active);
+      // Readiness comes from the pool — the same predicate inference picks
+      // with — not from the key list, which cannot see an unopenable
+      // envelope. The generator's "no credentials" warning reads this, so
+      // it can never disagree with generation.
+      const pool = await getProviderPool(env);
+      return await handleAdminHealth(active, pool.entries().length > 0);
     }
     if (!active) return internalError("no provider store bound");
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {

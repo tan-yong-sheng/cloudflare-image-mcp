@@ -1183,12 +1183,10 @@ export function getFrontendHTML(options?: {
                 lastHealth = health;
                 const providers = health.providers;
                 const keys = health.keys;
-                // Authenticated truth: a key counts only when it is enabled,
-                // positively weighted, and has a live credential version —
-                // the same set the pool loader joins (revoked_at IS NULL).
-                setCredentialsConfigured(
-                    keys.some((k) => k.enabled && k.weight > 0 && k.activeVersion !== null)
-                );
+                // Authenticated truth from the server: the same servable
+                // predicate the pool uses (enabled, weighted, envelope
+                // opens), so the warning cannot disagree with generation.
+                setCredentialsConfigured(health.hasServableCredential === true);
                 if (!selected || !providers.some((p) => p.id === selected)) {
                     selected = providers.length ? providers[0].id : '';
                 }

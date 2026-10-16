@@ -7,10 +7,12 @@
 // management key second (403). Health carries labels and counts only — the
 // S3 tripwire asserts no secret character reaches any admin response.
 
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import worker from "../index.js";
 import { handleAdmin } from "./admin.js";
 import type { AdminD1 } from "../services/admin-store.js";
+import { resetPoolCache } from "../services/pool-cache.js";
+import { sealToken } from "../services/provider-crypto.js";
 import type { Env } from "../types.js";
 
 function env(): Env {
@@ -626,5 +628,99 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
     expect(
       sqls.some((s) => s.includes("INSERT INTO credential_versions"))
     ).toBe(true);
+  });
+});
+
+describe("admin health readiness (ADR-001)", () => {
+  // Readiness must be the pool's servable predicate (enabled, weighted,
+  // envelope opens), not re-derived from the key list. A key can be listed,
+  // enabled, and weighted while its envelope is unopenable and the pool has
+  // parked it — if health reported "configured" there, the generator's
+  // warning would disagree with what generation actually picks.
+  beforeEach(() => resetPoolCache());
+
+  function envWithOneKey(opts: {
+    envelope: string;
+    enabled: number;
+    weight: number;
+  }): Env {
+    const poolRow = {
+      label: "parked",
+      accountId: "acct-1",
+      envelope: opts.envelope,
+      weight: opts.weight,
+      enabled: opts.enabled,
+    };
+    const db = {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () =>
+            sql.includes("config_versions") ? { version: 4 } : null,
+          all: async () => {
+            if (sql.includes("v.envelope")) return { results: [poolRow] };
+            if (sql.includes("MAX(v.version)")) {
+              return {
+                results: [
+                  {
+                    id: 1,
+                    providerId: "cloudflare",
+                    label: "parked",
+                    weight: opts.weight,
+                    enabled: opts.enabled,
+                    accountId: "acct-1",
+                    activeVersion: 1,
+                  },
+                ],
+              };
+            }
+            if (sql.includes("FROM providers")) {
+              return {
+                results: [{ id: "cloudflare", display_name: "Cloudflare" }],
+              };
+            }
+            return { results: [] };
+          },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return { ...stmt, bind: (..._p: unknown[]) => ({ ...stmt }) };
+      },
+      batch: async () => [],
+    };
+    return { ...env(), PROVIDER_DB: db } as unknown as Env;
+  }
+
+  async function healthOf(envWithDb: Env): Promise<{
+    keys: unknown[];
+    hasServableCredential: boolean;
+  }> {
+    const response = await handleAdmin(
+      get(
+        "/api/admin/health",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      "/api/admin/health",
+      envWithDb
+    );
+    expect(response?.status).toBe(200);
+    return (await response!.json()) as {
+      keys: unknown[];
+      hasServableCredential: boolean;
+    };
+  }
+
+  test("an enabled, weighted key with an unopenable envelope is not servable", async () => {
+    const body = await healthOf(
+      envWithOneKey({ envelope: "not-a-v1-envelope", enabled: 1, weight: 1 })
+    );
+    expect(body.keys).toHaveLength(1);
+    expect(body.hasServableCredential).toBe(false);
+  });
+
+  test("an enabled, weighted key whose envelope opens is servable", async () => {
+    const envelope = await sealToken("cf-token", "r2-test-sealing-key");
+    const body = await healthOf(
+      envWithOneKey({ envelope, enabled: 1, weight: 1 })
+    );
+    expect(body.hasServableCredential).toBe(true);
   });
 });
