@@ -1141,6 +1141,12 @@ export function getFrontendHTML(): string {
                 box.checked = k.enabled;
                 box.addEventListener('change', async () => {
                     box.setAttribute('aria-checked', String(box.checked));
+                    // Serialize per row: two toggles racing means the commits can
+                    // land in either order, leaving the stored enabled state
+                    // disagreeing with the switch that shows the user's choice.
+                    // The restore below stays correct too: with one request in
+                    // flight, k.enabled is still the last rendered value.
+                    box.disabled = true;
                     try {
                         const res = await api('PATCH', ADMIN_KEYS + '/' + k.id, { enabled: box.checked });
                         if (res.stale) return;
@@ -1156,6 +1162,8 @@ export function getFrontendHTML(): string {
                         showError(errorLine, error instanceof Error ? error.message : String(error));
                         box.checked = k.enabled;
                         box.setAttribute('aria-checked', String(k.enabled));
+                    } finally {
+                        box.disabled = false;
                     }
                 });
                 const track = document.createElement('span');
