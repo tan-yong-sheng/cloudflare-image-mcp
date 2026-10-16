@@ -967,6 +967,7 @@ export function getFrontendHTML(): string {
             // The management key lives in memory only: never persisted,
             // never logged. Cleared on lock, modal close, and logout.
             let adminKey = '';
+            let adminRequestGeneration = 0;
             let selected = '';
             let sheetKeyId = null;
             let lastHealth = null;
@@ -987,11 +988,18 @@ export function getFrontendHTML(): string {
             }
 
             async function api(method, path, body) {
+                const generation = adminRequestGeneration;
                 const response = await fetch(path, {
                     method: method,
                     headers: headers(),
                     body: body === undefined ? undefined : JSON.stringify(body)
                 });
+                if (generation !== adminRequestGeneration) {
+                    // Locked or logged out while this was in flight: it may
+                    // already have reached the server, but its result must not
+                    // drive the UI after the management key was cleared.
+                    return { ok: false, status: 0, data: null, stale: true };
+                }
                 const text = await response.text();
                 let data = null;
                 try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
@@ -1004,6 +1012,7 @@ export function getFrontendHTML(): string {
             }
 
             function lock() {
+                adminRequestGeneration += 1;
                 adminKey = '';
                 keyInput.value = '';
                 unlockBtn.classList.remove('hidden');
@@ -1028,6 +1037,7 @@ export function getFrontendHTML(): string {
                 let res;
                 try {
                     res = await api('GET', '/api/admin/health');
+                    if (res.stale) return;
                 } catch (error) {
                     showError(errorLine, error instanceof Error ? error.message : String(error));
                     return;
@@ -1110,6 +1120,7 @@ export function getFrontendHTML(): string {
                     box.setAttribute('aria-checked', String(box.checked));
                     try {
                         const res = await api('PATCH', '/api/admin/keys/' + k.id, { enabled: box.checked });
+                        if (res.stale) return;
                         if (!res.ok) {
                             showError(errorLine, errorMessage(res));
                             box.checked = k.enabled;
@@ -1277,6 +1288,7 @@ export function getFrontendHTML(): string {
                         };
                         if (token) body.apiToken = token;
                         const res = await api('PATCH', '/api/admin/keys/' + sheetKeyId, body);
+                        if (res.stale) return;
                         if (!res.ok) {
                             showError(sheetError, errorMessage(res));
                             return;
@@ -1296,6 +1308,7 @@ export function getFrontendHTML(): string {
                             weight: weight,
                             enabled: sheetEnabled.checked
                         });
+                        if (res.stale) return;
                         if (!res.ok) {
                             showError(sheetError, errorMessage(res));
                             // Re-read the pool, then re-derive: a retry must not
