@@ -613,15 +613,22 @@ export function getFrontendHTML(options?: {
         const advancedIcon = document.getElementById('advancedIcon');
         const submitButton = document.getElementById('submitButton');
         const noKeysWarning = document.getElementById('noKeysWarning');
+        const modelSelect = document.getElementById('model');
 
         let credentialsConfigured = HAS_CREDENTIALS;
         function applyCredentialWarning() {
             noKeysWarning.classList.toggle('hidden', credentialsConfigured);
             submitButton.disabled = !credentialsConfigured;
+            // Grey the model picker too: an unconfigured pool must not offer
+            // a model the user then cannot generate with.
+            modelSelect.disabled = !credentialsConfigured;
+            modelSelect.classList.toggle('opacity-60', !credentialsConfigured);
             if (credentialsConfigured) {
                 submitButton.removeAttribute('title');
+                modelSelect.removeAttribute('title');
             } else {
                 submitButton.title = 'No API keys configured';
+                modelSelect.title = 'No API keys configured';
             }
         }
         function setCredentialsConfigured(hasCredentials) {
@@ -677,7 +684,6 @@ export function getFrontendHTML(options?: {
         // dropdown and drives per-model control visibility + slider bounds
         // so the UI can never offer a param the model drops (#50).
         let modelRegistry = [];
-        const modelSelect = document.getElementById('model');
         const modelError = document.getElementById('modelError');
         const generateError = document.getElementById('generateError');
 

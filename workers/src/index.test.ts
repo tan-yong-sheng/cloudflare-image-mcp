@@ -100,6 +100,9 @@ describe("router public paths", () => {
     // No PROVIDER_DB bound in this env -> no servable pool -> false.
     expect(html).toContain("const HAS_CREDENTIALS = false;");
     expect(html).toContain("applyCredentialWarning");
+    // The model picker greys out with the same flag, so an unconfigured
+    // pool never offers a model the user then cannot generate with.
+    expect(html).toContain("modelSelect.disabled = !credentialsConfigured;");
     expect(html).not.toContain("fetch(API_BASE + '/admin/health'");
   });
 
