@@ -1303,8 +1303,12 @@ export function getFrontendHTML(): string {
                     sheetToken.focus();
                     return;
                 }
-                if (!Number.isInteger(weight) || weight < 0 || weight > 1000000) {
-                    showError(sheetError, 'Weight must be an integer between 0 and 1000000.');
+                // The bound is the input's own max attribute, which the workbench
+                // contract test pins to the server's MAX_WEIGHT — so the UI cannot
+                // drift from the API's ceiling.
+                const maxWeight = Number(sheetWeight.max);
+                if (!Number.isInteger(weight) || weight < 0 || weight > maxWeight) {
+                    showError(sheetError, 'Weight must be an integer between 0 and ' + maxWeight + '.');
                     sheetWeight.focus();
                     return;
                 }
@@ -1363,10 +1367,17 @@ export function getFrontendHTML(): string {
                         showError(sheetError, error instanceof Error ? error.message : String(error));
                     }
                 } finally {
-                    // Only the live request may reset the button: one that keeps
-                    // running past lock/logout must not touch the sheet, and
-                    // openSheet owns the state for the next open.
-                    if (generation === adminRequestGeneration) sheetSave.disabled = false;
+                    // Only the sheet's own live request may reset the button: one
+                    // that outlived a lock/logout, or that belongs to a sheet since
+                    // dismissed and reopened, must not re-enable the button while a
+                    // newer save is still in flight. openSheet owns the state for
+                    // the next open.
+                    if (
+                        generation === adminRequestGeneration &&
+                        sheetScope === sheetGeneration
+                    ) {
+                        sheetSave.disabled = false;
+                    }
                 }
             });
 
