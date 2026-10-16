@@ -75,7 +75,7 @@ export interface AdminKeySummary {
   weight: number;
   enabled: boolean;
   activeVersion: number | null;
-  externalAccountId: string | null;
+  accountId: string | null;
 }
 
 export interface AdminExposureSummary {
@@ -97,27 +97,17 @@ export interface AddKeyInput {
   providerId: string;
   label: string;
   apiToken: string;
-  externalAccountId?: string;
+  accountId?: string;
   weight?: number;
   enabled?: boolean;
 }
 
 export interface UpdateKeyInput {
   keyId: number;
-  externalAccountId?: string | null;
+  accountId?: string | null;
   weight?: number;
   enabled?: boolean;
   apiToken?: string;
-}
-
-export interface UpdateKeySummary {
-  id: number;
-  label: string;
-  providerId: string;
-  activeVersion: number | null;
-  weight: number;
-  enabled: boolean;
-  externalAccountId: string | null;
 }
 
 export interface KeySummary {
@@ -171,7 +161,7 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
                 k.label AS label,
                 k.weight AS weight,
                 k.enabled AS enabled,
-                k.external_account_id AS externalAccountId,
+                k.external_account_id AS accountId,
                 MAX(v.version) AS activeVersion
            FROM provider_keys k
            LEFT JOIN credential_versions v
@@ -187,8 +177,7 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
     weight: num(k["weight"]),
     enabled: num(k["enabled"]) === 1,
     activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
-    externalAccountId:
-      k["externalAccountId"] === null ? null : String(k["externalAccountId"]),
+    accountId: k["accountId"] === null ? null : String(k["accountId"]),
   }));
 
   const versionRow = await db
@@ -329,13 +318,9 @@ export async function addProviderKey(
   if (!(await providerExists(db, providerId))) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
-  const accountId =
-    input.externalAccountId !== undefined ? clean(input.externalAccountId) : "";
+  const accountId = input.accountId !== undefined ? clean(input.accountId) : "";
   if (providerId === "cloudflare" && accountId.length === 0) {
-    throw new AdminStoreError(
-      400,
-      "externalAccountId is required for cloudflare keys"
-    );
+    throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
   const weight = input.weight !== undefined ? num(input.weight) : 1;
   const enabled = input.enabled !== undefined ? input.enabled === true : true;
@@ -534,20 +519,17 @@ export async function updateProviderKey(
   db: AdminD1,
   seal: (token: string) => Promise<string>,
   input: UpdateKeyInput
-): Promise<UpdateKeySummary> {
+): Promise<AdminKeySummary> {
   const key = await keyRowFull(db, input.keyId);
   if (!key)
     throw new AdminStoreError(404, `unknown provider key ${input.keyId}`);
 
   const accountId =
-    input.externalAccountId !== undefined
-      ? clean(input.externalAccountId)
+    input.accountId !== undefined
+      ? clean(input.accountId)
       : (key.external_account_id ?? "");
   if (key.provider_id === "cloudflare" && accountId.length === 0) {
-    throw new AdminStoreError(
-      400,
-      "externalAccountId is required for cloudflare keys"
-    );
+    throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
   const storedAccountId = accountId.length > 0 ? accountId : null;
 
@@ -562,14 +544,14 @@ export async function updateProviderKey(
   if (
     input.weight === undefined &&
     input.enabled === undefined &&
-    input.externalAccountId === undefined &&
+    input.accountId === undefined &&
     token.length === 0
   ) {
     throw new AdminStoreError(400, "no fields to update");
   }
 
   const writes: AdminWrite[] = [];
-  if (input.externalAccountId !== undefined) {
+  if (input.accountId !== undefined) {
     writes.push(
       write(
         "UPDATE provider_keys SET external_account_id = ? WHERE id = ?",
@@ -633,6 +615,6 @@ export async function updateProviderKey(
     activeVersion,
     weight,
     enabled,
-    externalAccountId: storedAccountId,
+    accountId: storedAccountId,
   };
 }

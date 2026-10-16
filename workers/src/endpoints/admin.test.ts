@@ -550,7 +550,7 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
       activeVersion: 1,
       weight: 5,
       enabled: false,
-      externalAccountId: "acct-2",
+      accountId: "acct-2",
     });
     const sqls = commits.map((w) => w.sql);
     expect(sqls[0]).toContain("UPDATE provider_keys");

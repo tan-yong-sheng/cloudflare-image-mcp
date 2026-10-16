@@ -113,7 +113,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "page-key-1",
       apiToken: "cf-token-aaa",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     expect(summary).toEqual({
       id: expect.any(Number),
@@ -180,14 +180,14 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "dup",
       apiToken: "t1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     await expect(
       addProviderKey(d1, seal, {
         providerId: "cloudflare",
         label: "dup",
         apiToken: "t2",
-        externalAccountId: "acct-1",
+        accountId: "acct-1",
       })
     ).rejects.toMatchObject({ status: 409 });
     expect(versionOf(db)).toBe(2);
@@ -200,7 +200,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "rot",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     const rotated = await rotateProviderKey(d1, seal, added.id, "token-v2");
     expect(rotated.activeVersion).toBe(2);
@@ -253,7 +253,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "off",
       apiToken: "t",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     const out = await disableProviderKey(d1, added.id);
     expect(out).toEqual({ id: added.id, enabled: false });
@@ -272,12 +272,12 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "edit",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     const before = versionOf(db);
     const out = await updateProviderKey(d1, seal, {
       keyId: added.id,
-      externalAccountId: "acct-2",
+      accountId: "acct-2",
       weight: 5,
       enabled: false,
     });
@@ -288,7 +288,7 @@ describe("admin store against the real migrations (S2)", () => {
       activeVersion: 1,
       weight: 5,
       enabled: false,
-      externalAccountId: "acct-2",
+      accountId: "acct-2",
     });
     const row = db
       .prepare(
@@ -320,11 +320,11 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "rot-on-save",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     const out = await updateProviderKey(d1, seal, {
       keyId: added.id,
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
       weight: 2,
       apiToken: "token-v2",
     });
@@ -362,13 +362,13 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "acct-guard",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     const before = versionOf(db);
     await expect(
       updateProviderKey(d1, seal, {
         keyId: added.id,
-        externalAccountId: "",
+        accountId: "",
       })
     ).rejects.toMatchObject({ status: 400 });
     expect(versionOf(db)).toBe(before);
@@ -381,7 +381,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "noop",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     await expect(
       updateProviderKey(d1, seal, { keyId: added.id })
@@ -395,7 +395,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "oversize",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     const before = versionOf(db);
     await expect(
@@ -422,7 +422,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "partial",
       apiToken: "token-v1",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
     await updateProviderKey(recording, seal, {
       keyId: added.id,
@@ -454,7 +454,7 @@ describe("admin health exposure rows (S2)", () => {
       providerId: "cloudflare",
       label: "health-key",
       apiToken: "cf-token-123",
-      externalAccountId: "acct-1",
+      accountId: "acct-1",
     });
 
     const health = await getAdminHealth(d1);
@@ -469,7 +469,7 @@ describe("admin health exposure rows (S2)", () => {
         weight: 1,
         enabled: true,
         activeVersion: 1,
-        externalAccountId: "acct-1",
+        accountId: "acct-1",
       },
     ]);
     expect(health.configVersion).toBe(2);

@@ -317,7 +317,7 @@ async function handleAddKey(
         typeof body["providerId"] === "string" ? body["providerId"] : "",
       label: typeof body["label"] === "string" ? body["label"] : "",
       apiToken: fields.apiToken ?? "",
-      externalAccountId: fields.externalAccountId,
+      accountId: fields.accountId,
       weight: fields.weight,
       enabled: fields.enabled,
     });
@@ -379,7 +379,7 @@ async function handleDisableKey(
 const MAX_WEIGHT = 1_000_000;
 
 interface KeyFields {
-  externalAccountId?: string;
+  accountId?: string;
   weight?: number;
   enabled?: boolean;
   apiToken?: string;
@@ -395,7 +395,7 @@ function parseKeyFields(
     if (typeof body["accountId"] !== "string") {
       throw new AdminStoreError(400, "accountId must be a string");
     }
-    fields.externalAccountId = body["accountId"];
+    fields.accountId = body["accountId"];
   }
   if (body["weight"] !== undefined) {
     const weight = body["weight"];
@@ -407,7 +407,7 @@ function parseKeyFields(
     ) {
       throw new AdminStoreError(
         400,
-        "weight must be an integer between 0 and 1000000"
+        "weight must be an integer between 0 and " + MAX_WEIGHT
       );
     }
     fields.weight = weight;
@@ -464,7 +464,7 @@ async function handleUpdateKey(
       (t) => sealToken(t, dataKey ?? ""),
       {
         keyId,
-        externalAccountId: fields.externalAccountId,
+        accountId: fields.accountId,
         weight: fields.weight,
         enabled: fields.enabled,
         apiToken: fields.apiToken ? fields.apiToken : undefined,

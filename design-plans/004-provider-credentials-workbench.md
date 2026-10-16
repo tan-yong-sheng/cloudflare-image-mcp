@@ -29,7 +29,7 @@ when `authToken` is present) opening a workbench modal that mirrors variant A:
    - Add: eyebrow `NEW`; Cloudflare account ID (required — validated **before** the token; hint: inference calls `/accounts/{account_id}/ai/run/…`, stored alongside the key, not sealed); API token (eye toggle, `autocomplete="new-password"`, `data-1p-ignore`); scheduling weight + Disable checkbox (hint: default 1, ≤ 0 excluded, max 1,000,000); footer Cancel + Add key. Validation order: accountId → token present → length ≥ 8 → weight ≥ 0.
    - Edit: eyebrow `EDIT`; title `Edit key — <label> (cloudflare · currently vN)`; note "Leave the token blank to keep the current version. Filling it rotates as part of save."; same fields; footer Cancel + Save.
    - Success: "✓ `<label>` added (v1, untested)" + "Token sealed server-side; re-test recommended." + Add another / Done.
-6. **Backend `PATCH /api/admin/keys/:id`** — body `{ accountId?, weight?, enabled?, apiToken? }`; a present token triggers the rotate path inside the same transaction; response echoes identity only (id, label, providerId, activeVersion, weight, enabled, externalAccountId). Extends the audit action vocabulary with `"update"` (token present also records rotation — same row, action `"update"` plus the new version). 404 unknown key, 400 validation (mirror add-path rules; cloudflare requires non-empty accountId), 409 rotate-without-active-version.
+6. **Backend `PATCH /api/admin/keys/:id`** — body `{ accountId?, weight?, enabled?, apiToken? }`; a present token triggers the rotate path inside the same transaction; response echoes identity only (id, label, providerId, activeVersion, weight, enabled, accountId). Extends the audit action vocabulary with `"update"` (token present also records rotation — same row, action `"update"` plus the new version). 404 unknown key, 400 validation (mirror add-path rules; cloudflare requires non-empty accountId), 409 rotate-without-active-version.
 
 ### Deferred from the prototype (recorded decisions, follow-up issue)
 
@@ -102,7 +102,7 @@ when `authToken` is present) opening a workbench modal that mirrors variant A:
   implementation labels the control **Enabled** (checked = served,
   uncheck = parked); row switch and edit checkbox share that semantics.
 - **Health read extended**: `getAdminHealth` keys now carry
-  `externalAccountId` (the table's Account ID column reads it).
+  `accountId` (the table's Account ID column reads it).
 - **Selective deferral**: Base URL / per-key Custom models /
   connectivity Test are absent from the shipped UI this slice (no
   schema home / no test endpoint) — see "Deferred" above; the sheet ends
