@@ -1145,7 +1145,7 @@ export function getFrontendHTML(): string {
                         showError(errorLine, 'Delete failed: ' + errorMessage(res));
                         return;
                     }
-                    showNotice('Key #' + keyId + ' deleted');
+                    showNotice('Key #' + keyId + ' disabled — no longer serving requests');
                     await loadHealth();
                 } catch (error) {
                     if (generation === adminRequestGeneration) {
@@ -1267,13 +1267,13 @@ export function getFrontendHTML(): string {
                 const del = document.createElement('button');
                 del.type = 'button';
                 del.className = 'btn btn-secondary text-xs py-1 px-2 text-red-400 hover:text-red-300';
-                del.setAttribute('aria-label', 'Delete key #' + k.id);
-                del.title = 'Delete key #' + k.id;
+                del.setAttribute('aria-label', 'Disable key #' + k.id);
+                del.title = 'Disable key #' + k.id;
                 const icon = document.createElement('i');
-                icon.className = 'fa-solid fa-trash';
+                icon.className = 'fa-solid fa-ban';
                 del.appendChild(icon);
                 del.addEventListener('click', () => {
-                    if (confirm('Delete key #' + k.id + ' (' + (k.accountId || 'no account ID') + ')? This cannot be undone.')) {
+                    if (confirm('Disable key #' + k.id + ' (' + (k.accountId || 'no account ID') + ')? The key will stop serving requests but remain in the database for audit.')) {
                         disableKey(k.id);
                     }
                 });
