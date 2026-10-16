@@ -1212,7 +1212,7 @@ export function getFrontendHTML(): string {
                             box.setAttribute('aria-checked', String(k.enabled));
                             return;
                         }
-                        showNotice(k.label + (box.checked ? ' enabled' : ' parked'));
+                        // Toggle switch provides immediate visual feedback, no notification needed
                         loadHealth();
                     } catch (error) {
                         showError(errorLine, error instanceof Error ? error.message : String(error));
