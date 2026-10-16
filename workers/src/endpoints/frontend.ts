@@ -114,6 +114,9 @@ export function getFrontendHTML(): string {
             border: 1px solid var(--border);
             border-radius: 0.375rem;
             padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+            line-height: 1.5;
+            min-height: 2.5rem;
             transition: all 0.3s ease;
             width: 100%;
         }
@@ -240,16 +243,10 @@ export function getFrontendHTML(): string {
                 <button id="adminBackBtn" class="btn btn-secondary p-2 h-10 flex items-center justify-center rounded" aria-label="Back to Image Generator">
                     <i class="fa-solid fa-arrow-left mr-2"></i>Back
                 </button>
-                <h1 id="adminViewTitle" class="text-2xl md:text-3xl font-bold flex items-center">
-                    <i class="fa-solid fa-server mr-2 text-primary"></i>AI Providers
-                </h1>
             </div>
             <div class="flex items-center space-x-2">
                 <span id="adminChipsActive" class="chip chip-ok hidden"></span>
                 <span id="adminChipsFamilies" class="chip hidden"></span>
-                <button id="adminAddKey" class="btn btn-primary text-sm py-1.5 px-4 hidden" aria-label="Add new provider key">
-                    <i class="fa-solid fa-plus mr-1"></i>New key
-                </button>
                 <button id="adminLock" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Lock provider credentials">
                     <i class="fa-solid fa-lock mr-2"></i>Lock
                 </button>
@@ -288,10 +285,18 @@ export function getFrontendHTML(): string {
         <!-- Operational Panel (shown when unlocked) -->
         <div id="adminPanel" class="hidden space-y-4">
             <div class="flex flex-col md:flex-row gap-6">
-                <aside id="adminRail" class="card p-2 md:w-64 space-y-1 flex-shrink-0" aria-label="Provider families"></aside>
+                <aside class="card p-4 md:w-64 flex-shrink-0" aria-label="Provider families">
+                    <h1 id="adminViewTitle" class="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700">
+                        <i class="fa-solid fa-server mr-2 text-primary"></i>AI Providers
+                    </h1>
+                    <div id="adminRail" class="space-y-1"></div>
+                </aside>
                 <section class="card p-6 flex-1 min-w-0">
-                    <div class="mb-4 pb-3 border-b border-gray-700">
+                    <div class="mb-4 pb-3 border-b border-gray-700 flex items-center justify-between">
                         <h3 id="adminFamilyName" class="font-semibold text-lg flex items-center"></h3>
+                        <button id="adminAddKey" class="btn btn-primary text-sm py-1.5 px-4 hidden" aria-label="Add new provider key">
+                            <i class="fa-solid fa-plus mr-1"></i>New key
+                        </button>
                     </div>
                     <table class="w-full text-sm">
                         <thead>
@@ -459,6 +464,10 @@ export function getFrontendHTML(): string {
                     </div>
                 </div>
 
+                <p id="noKeysWarning" class="text-sm p-3 mb-3 rounded bg-yellow-900/30 text-yellow-300 border border-yellow-700 hidden" role="alert">
+                    <i class="fa-solid fa-triangle-exclamation mr-2"></i>No API keys configured. <a href="#admin" class="underline hover:text-yellow-200">Set up credentials</a> in the admin panel first.
+                </p>
+
                 <button id="submitButton" class="btn btn-primary w-full py-3 flex items-center justify-center">
                     <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Generate Image
                 </button>
@@ -594,6 +603,7 @@ export function getFrontendHTML(): string {
         const advancedOptions = document.getElementById('advancedOptions');
         const advancedIcon = document.getElementById('advancedIcon');
         const submitButton = document.getElementById('submitButton');
+        const noKeysWarning = document.getElementById('noKeysWarning');
         const loadingOverlay = document.getElementById('loadingOverlay');
         const initialPrompt = document.getElementById('initialPrompt');
         const aiImage = document.getElementById('aiImage');
@@ -739,6 +749,36 @@ export function getFrontendHTML(): string {
 
         modelSelect.addEventListener('change', applyModelControls);
         loadModels();
+
+        // Check for API keys and show warning if none configured
+        async function checkCredentials() {
+            try {
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = 'Bearer ' + authToken;
+                }
+                const response = await fetch(API_BASE + '/admin/health', {
+                    method: 'GET',
+                    headers: headers,
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const hasActiveKeys = data.keys && data.keys.some((k) => k.enabled);
+                    if (!hasActiveKeys) {
+                        noKeysWarning.classList.remove('hidden');
+                        submitButton.disabled = true;
+                        submitButton.title = 'No API keys configured';
+                    } else {
+                        noKeysWarning.classList.add('hidden');
+                        // Don't enable button - let existing logic handle that
+                    }
+                }
+            } catch (error) {
+                // If health check fails, don't show warning - might be permission issue
+                console.warn('Could not check credentials:', error);
+            }
+        }
+        checkCredentials();
 
         // Generate image
         submitButton.addEventListener('click', async () => {
