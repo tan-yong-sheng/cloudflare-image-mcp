@@ -1244,7 +1244,7 @@ export function getFrontendHTML(): string {
                 const accountId = sheetAcct.value.trim();
                 const token = sheetToken.value.trim();
                 const weightRaw = sheetWeight.value.trim();
-                const weight = weightRaw === '' ? 1 : parseInt(weightRaw, 10);
+                const weight = weightRaw === '' ? 1 : Number(weightRaw);
                 if (selected === 'cloudflare' && !accountId) {
                     showError(sheetError, 'Cloudflare account ID is required.');
                     sheetAcct.focus();

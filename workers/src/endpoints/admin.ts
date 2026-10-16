@@ -422,6 +422,11 @@ function parseKeyFields(
     if (typeof body["apiToken"] !== "string") {
       throw new AdminStoreError(400, "apiToken must be a string");
     }
+    // An explicit "" is a caller mistake, not "keep the version": the edit
+    // sheet omits the field to keep it, and rotate/add reject empty outright.
+    if (body["apiToken"].length === 0) {
+      throw new AdminStoreError(400, "apiToken is required");
+    }
     fields.apiToken = body["apiToken"];
   }
   if (options.requireToken && !fields.apiToken) {

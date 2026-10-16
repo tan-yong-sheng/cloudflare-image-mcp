@@ -532,6 +532,16 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
     }
   });
 
+  test("PATCH rejects an explicitly empty token instead of skipping the rotate", async () => {
+    const { store, commits } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", { weight: 5, apiToken: "" }),
+      store
+    );
+    expect(response.status).toBe(400);
+    expect(commits).toEqual([]);
+  });
+
   test("PATCH edits fields: update + bump + audit in one commit, no new version", async () => {
     const { store, commits } = stubStore();
     const response = await handle(
