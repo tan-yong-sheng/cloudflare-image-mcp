@@ -9,7 +9,7 @@
 -- as 0001/0002: undo is D1 Time Travel, never a runner).
 --
 -- Nothing references admin_audit, so the rename is safe; rows and the
--- autoincrement high-water mark carry over through the explicit-id copy.
+-- autoincrement high-water mark carry over.
 ALTER TABLE admin_audit RENAME TO admin_audit_previous;
 
 CREATE TABLE admin_audit (
@@ -25,6 +25,21 @@ CREATE TABLE admin_audit (
 INSERT INTO admin_audit (id, actor, action, provider_id, key_id, key_label, created_at)
   SELECT id, actor, action, provider_id, key_id, key_label, created_at
     FROM admin_audit_previous;
+
+-- The explicit-id copy only advances the new table's AUTOINCREMENT sequence to
+-- the highest id still present, so an id deleted above that would be reused.
+-- Carry the old table's high-water mark over before it is dropped (its
+-- sqlite_sequence row goes away with it). The UPDATE covers the copied rows,
+-- the INSERT the never-inserted case where the rebuilt table has no row yet.
+UPDATE sqlite_sequence
+   SET seq = (SELECT seq FROM sqlite_sequence WHERE name = 'admin_audit_previous')
+ WHERE name = 'admin_audit'
+   AND EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'admin_audit_previous');
+
+INSERT INTO sqlite_sequence (name, seq)
+  SELECT 'admin_audit', seq FROM sqlite_sequence
+   WHERE name = 'admin_audit_previous'
+     AND NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'admin_audit');
 
 DROP TABLE admin_audit_previous;
 
