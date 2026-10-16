@@ -1007,7 +1007,14 @@ export function getFrontendHTML(): string {
                     throw error;
                 }
                 if (generation !== adminRequestGeneration) return stale;
-                const text = await response.text();
+                let text;
+                try {
+                    text = await response.text();
+                } catch (error) {
+                    // A body read that fails after lock/logout is stale too.
+                    if (generation !== adminRequestGeneration) return stale;
+                    throw error;
+                }
                 let data = null;
                 try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
                 // Reading the body is asynchronous too, so a lock can land
