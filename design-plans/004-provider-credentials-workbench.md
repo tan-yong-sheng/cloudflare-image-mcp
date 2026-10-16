@@ -109,6 +109,24 @@ when `authToken` is present) opening a workbench modal that mirrors variant A:
   field had already committed by then, and echoing the snapshot reported
   that field as unchanged. `activeVersionOf` is the single home for the
   version query, which also simplified `appendRotateWrites`.
+- **Concurrency semantics, stated rather than implied**: version
+  allocation is guarded by the schema, not by read-modify-write.
+  `UNIQUE (provider_key_id, version)` plus the partial unique index that
+  admits one unrevoked row per key make a racing rotate or rotate-on-save
+  fail loudly (409 "changed concurrently; retry the save") instead of
+  forking versions — including two racers that both observe no active
+  version, where the `UNIQUE` constraint is what blocks the second insert.
+  Field-only edits are last-writer-wins per column: an omitted field is
+  never written (the pass-1 fix) and the response is the stored row read
+  back, so a concurrent edit to another column cannot be reported as
+  unchanged. There is deliberately **no** compare-and-set precondition on
+  `weight`/`enabled`; adding one (ETag or version precondition) is a
+  follow-up for when more than one operator writes at once.
+- **Weight ceiling lives in the store**: `MAX_WEIGHT` is exported from
+  `admin-store.ts` and enforced there for both write paths, with the route
+  importing it rather than redeclaring it. The served UI cannot import a
+  TS constant, so `index.test.ts` pins the HTML's `max` attribute to the
+  same constant — the drift the endpoint-local copy allowed.
 - **Selective deferral**: Base URL / per-key Custom models /
   connectivity Test are absent from the shipped UI this slice (no
   schema home / no test endpoint) — see "Deferred" above; the sheet ends
