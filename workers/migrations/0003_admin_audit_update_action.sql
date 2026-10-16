@@ -27,3 +27,8 @@ INSERT INTO admin_audit (id, actor, action, provider_id, key_id, key_label, crea
     FROM admin_audit_previous;
 
 DROP TABLE admin_audit_previous;
+
+-- The rebuild takes the old table's indexes with it; 0002 created this one,
+-- so an upgraded database must get it back (queries filter audit rows by
+-- key_id).
+CREATE INDEX idx_admin_audit_key ON admin_audit (key_id);

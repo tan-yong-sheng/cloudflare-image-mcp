@@ -28,6 +28,17 @@ function userTables(db: DatabaseSync): string[] {
   ).map((r) => r.name);
 }
 
+function indexesOf(db: DatabaseSync, table: string): string[] {
+  return (
+    db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?" +
+          " AND name NOT LIKE 'sqlite_%' ORDER BY name"
+      )
+      .all(table) as { name: string }[]
+  ).map((r) => r.name);
+}
+
 describe("provider schema migrations (R1a)", () => {
   test("at least one forward-only migration exists", () => {
     expect(migrationFiles().length).toBeGreaterThan(0);
@@ -62,6 +73,14 @@ describe("provider schema migrations (R1a)", () => {
       "key_label",
       "created_at",
     ]);
+  });
+
+  test("0003's rebuild keeps the audit key index (R2 follow-up)", () => {
+    // 0003 rebuilds admin_audit to widen the action CHECK; the rebuilt table
+    // must not silently lose the index 0002 created on it.
+    expect(indexesOf(freshDb(), "admin_audit")).toContain(
+      "idx_admin_audit_key"
+    );
   });
 
   test("provider catalog is seeded with Cloudflare only", () => {
