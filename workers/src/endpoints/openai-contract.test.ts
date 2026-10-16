@@ -13,6 +13,7 @@ import { OpenAIEndpoint } from "./openai-endpoint.js";
 import {
   FIXTURE_PNG_B64,
   fakeEnv,
+  fakePool,
   stubInference,
 } from "../test-utils/fixtures.js";
 
@@ -37,7 +38,7 @@ function post(path: string, body: unknown): Request {
 describe("POST /v1/images/generations contract", () => {
   test("minimal params returns created + data with /images/ url", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", { prompt: "a beach", model: SCHNELL })
@@ -55,7 +56,7 @@ describe("POST /v1/images/generations contract", () => {
 
   test("url format returns only url field, never b64_json", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", {
@@ -81,7 +82,7 @@ describe("POST /v1/images/generations contract", () => {
 
   test("b64_json format returns only b64_json field", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", {
@@ -99,7 +100,7 @@ describe("POST /v1/images/generations contract", () => {
   });
 
   test("missing prompt returns 400 naming prompt", async () => {
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", { model: SCHNELL })
@@ -112,7 +113,7 @@ describe("POST /v1/images/generations contract", () => {
 
   test("unknown model returns 400 invalid_request_error", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", {
@@ -130,7 +131,7 @@ describe("POST /v1/images/generations contract", () => {
 
   test("n above 8 is capped at 8", async () => {
     const fetchMock = stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", {
@@ -148,7 +149,7 @@ describe("POST /v1/images/generations contract", () => {
 
   test("guidance + negative prompt flow through to a url", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", {
@@ -166,7 +167,7 @@ describe("POST /v1/images/generations contract", () => {
 
   test("CORS header present on generation response", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", { prompt: "a beach", model: SCHNELL })
@@ -179,7 +180,7 @@ describe("POST /v1/images/generations contract", () => {
 describe("POST /v1/images/edits contract", () => {
   test("JSON image-to-image returns url", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/edits", {
@@ -196,7 +197,7 @@ describe("POST /v1/images/edits contract", () => {
 
   test("multipart image-to-image returns url", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
     const form = new FormData();
     form.append("prompt", "make it sunny");
     form.append("model", SDXL);
@@ -217,7 +218,7 @@ describe("POST /v1/images/edits contract", () => {
 
   test("multipart FLUX-2 klein edit returns url", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
     const form = new FormData();
     form.append("prompt", "make it green");
     form.append("model", KLEIN);
@@ -238,7 +239,7 @@ describe("POST /v1/images/edits contract", () => {
 
   test("mask-required model without mask returns 400 naming mask", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/edits", {
@@ -257,7 +258,7 @@ describe("POST /v1/images/edits contract", () => {
 
   test("masked inpainting returns url", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/edits", {
@@ -275,7 +276,7 @@ describe("POST /v1/images/edits contract", () => {
 
   test("size parameter flows through to a url", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     for (const size of ["512x512", "1024x1024"]) {
       const res = await endpoint.handle(
@@ -294,7 +295,7 @@ describe("POST /v1/images/edits contract", () => {
   });
 
   test("missing image returns 400", async () => {
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/edits", { prompt: "make it sunny", model: SDXL })
@@ -307,7 +308,7 @@ describe("POST /v1/images/edits contract", () => {
 describe("POST /v1/images/variations contract", () => {
   test("JSON variation returns url", async () => {
     stubInference("binary");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/variations", {
@@ -322,7 +323,7 @@ describe("POST /v1/images/variations contract", () => {
   });
 
   test("missing image returns 400", async () => {
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(
       post("/v1/images/variations", { model: SDXL })
@@ -334,7 +335,7 @@ describe("POST /v1/images/variations contract", () => {
 
 describe("GET /v1/models contract", () => {
   test("list returns OpenAI list envelope", async () => {
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
 
     const res = await endpoint.handle(new Request(`${ORIGIN}/v1/models`));
 
@@ -349,7 +350,7 @@ describe("GET /v1/models contract", () => {
   // #62: deprecated img2img model is delisted (provider 403/5018 +
   // docs-delisted); inpainting sibling untouched.
   test("list excludes the removed img2img model but keeps inpainting", async () => {
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
     const res = await endpoint.handle(new Request(`${ORIGIN}/v1/models`));
     const body = (await res.json()) as any;
     const ids = body.data.map((m: any) => m.id);
@@ -358,7 +359,7 @@ describe("GET /v1/models contract", () => {
   });
 
   test("describe for the removed img2img id reports unknown model", async () => {
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
     const res = await endpoint.handle(
       new Request(
         `${ORIGIN}/v1/models/@cf/runwayml/stable-diffusion-v1-5-img2img`
@@ -370,7 +371,7 @@ describe("GET /v1/models contract", () => {
 
   test("edits against the removed img2img id is rejected", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv());
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pool: fakePool() });
     const res = await endpoint.handle(
       post("/v1/images/edits", {
         prompt: "x",
@@ -389,6 +390,7 @@ describe("D1 default-model overlay (S6)", () => {
   test("a hidden default model breaks model-less requests instead of serving it", async () => {
     stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv(), {
+      pool: fakePool(),
       exposureOverlay: new Map([
         [
           SCHNELL,
@@ -407,6 +409,7 @@ describe("D1 default-model overlay (S6)", () => {
   test("is_default rewrites the model-less default", async () => {
     stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv(), {
+      pool: fakePool(),
       exposureOverlay: new Map([
         [
           SCHNELL,

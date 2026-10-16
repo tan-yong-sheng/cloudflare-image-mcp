@@ -618,7 +618,7 @@ describe("database-only credential wiring (ADR-001)", () => {
     const transport = new MemoryTransport();
     transport.enqueue({ image: HELLO_B64 });
     const store = new MemoryStore();
-    const svc = new ImageGeneratorService(envWithAIAccounts, {
+    const svc = new ImageGeneratorService(minimalEnv, {
       transport,
       store,
       pool: new ProviderPool(
@@ -678,7 +678,7 @@ describe("database-only credential wiring (ADR-001)", () => {
         })
       )
     );
-    const failing = new ImageGeneratorService(envWithAIAccounts, {
+    const failing = new ImageGeneratorService(minimalEnv, {
       transport: realTransport,
       store: new MemoryStore(),
     });
