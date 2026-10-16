@@ -1,15 +1,10 @@
 // ============================================================================
-// Provider pool loader - D1 rows into a servable pool (R1b, #72)
+// Provider pool loader - D1 rows into a servable pool (ADR-001)
 // ============================================================================
 // Async because envelope opening is async. D1 rows open with PROVIDER_DATA_KEY
-// into pool credentials; anything else falls through to the env paths from
-// pool-source (AI_ACCOUNTS with warning, bootstrap fallback). A missing key,
-// an unopenable envelope, or zero servable rows degrades to the env path —
-// never throws, so a half-migrated store cannot take inference down (no flag
-// day). Every returned pool carries the source that ACTUALLY serves it:
-// index.ts always passes a pool downstream, so a pool that silently fell
-// back must not later be reported as "d1". Labels only in logs; envelopes
-// and tokens never logged.
+// into pool credentials. Database-only: no environment variable fallback.
+// A missing key or unopenable envelope returns an empty pool (clear error path).
+// Labels only in logs; envelopes and tokens never logged.
 
 import type { Env } from "../types.js";
 import { ProviderPool, type PoolKey } from "./provider-pool.js";
@@ -22,7 +17,8 @@ export interface PoolLoaderDeps {
 
 /**
  * Load the servable provider pool from D1 rows (envelopes opened with the
- * data key), degrading to env credentials on any gap — never throws.
+ * Database-only credential loading (ADR-001). Opens D1 envelopes with the
+ * data key. Returns empty pool on any error (D1 outage, no data key).
  */
 export async function loadProviderPool(
   env: Env,
@@ -32,23 +28,22 @@ export async function loadProviderPool(
   try {
     rows = await deps.readRows();
   } catch {
-    // An unreadable store (D1 outage, missing table) must degrade to env
-    // credentials like every other gap here, never fail the request.
-    console.warn(
-      "provider pool: D1 read failed, falling back to env credentials"
-    );
-    return envPool(env);
+    console.error("provider pool: D1 read failed. Cannot load credentials.");
+    return new ProviderPool([], { source: "d1" });
   }
   if (rows.length === 0) {
-    return envPool(env);
+    console.warn(
+      "provider pool: no credentials in database. Add via admin UI at /#admin"
+    );
+    return new ProviderPool([], { source: "d1" });
   }
 
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
-    console.warn(
-      "D1 provider rows exist but PROVIDER_DATA_KEY is not set; falling back to env credentials"
+    console.error(
+      "D1 provider rows exist but PROVIDER_DATA_KEY is not set. Cannot decrypt credentials."
     );
-    return envPool(env);
+    return new ProviderPool([], { source: "d1" });
   }
 
   const keys: PoolKey[] = [];
@@ -80,25 +75,8 @@ export async function loadProviderPool(
   const servable = keys.filter((k) => k.enabled && k.weight > 0);
   if (servable.length === 0) {
     console.warn(
-      `provider pool: ${rows.length} D1 row(s) present, none servable; ` +
-        "falling back to env credentials"
+      `provider pool: ${rows.length} D1 row(s) present, none servable. Add credentials via admin UI.`
     );
-    return envPool(env);
   }
   return new ProviderPool(keys, { source: "d1" });
-}
-
-/** The env side of the dual-read: AI_ACCOUNTS (warned) or bootstrap. */
-function envPool(env: Env): ProviderPool {
-  const src = resolvePoolSource(env, () => []);
-  return new ProviderPool(
-    src.keys.map((k) => ({
-      label: k.label,
-      accountId: k.accountId,
-      apiToken: k.apiToken ?? "",
-      weight: k.weight,
-      enabled: k.enabled,
-    })),
-    { source: src.source }
-  );
 }

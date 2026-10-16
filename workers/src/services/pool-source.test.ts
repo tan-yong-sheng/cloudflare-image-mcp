@@ -1,9 +1,8 @@
 // ============================================================================
-// Dual-read pool resolution tests - R1b (#72), seam S1
+// Database-only pool resolution tests - ADR-001
 // ============================================================================
-// Seam: resolvePoolSource(env, db?) — pure precedence, no transport, no
-// crypto. D1 wins when rows exist; AI_ACCOUNTS still works but warns
-// (deprecation); bootstrap deploy credentials are the last fallback.
+// Seam: resolvePoolSource(env, db?) — database-only, no fallback.
+// D1 rows are the single source of truth. Empty D1 returns empty pool.
 // The db parameter is structural (rows in, no D1 wire): production passes
 // a D1 reader, tests pass an in-memory double.
 
@@ -11,10 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 import { resolvePoolSource } from "./pool-source.js";
 import type { PoolRow } from "./pool-source.js";
 
-const FALLBACK_ENV = {
-  CLOUDFLARE_ACCOUNT_ID: "deploy-account",
-  CLOUDFLARE_API_TOKEN: "deploy-token",
-} as any;
+const MINIMAL_ENV = {} as any;
 
 const D1_ROWS: PoolRow[] = [
   {
@@ -26,9 +22,9 @@ const D1_ROWS: PoolRow[] = [
   },
 ];
 
-describe("pool source precedence (S1)", () => {
-  test("D1 rows win when present", () => {
-    const src = resolvePoolSource(FALLBACK_ENV, () => D1_ROWS);
+describe("database-only pool resolution (ADR-001)", () => {
+  test("D1 rows return pool with source 'd1'", () => {
+    const src = resolvePoolSource(MINIMAL_ENV, () => D1_ROWS);
     expect(src.source).toBe("d1");
     expect(src.keys).toEqual([
       {
@@ -41,60 +37,51 @@ describe("pool source precedence (S1)", () => {
     ]);
   });
 
-  test("empty D1 falls through to AI_ACCOUNTS with a deprecation warning", () => {
+  test("empty D1 returns empty pool with warning", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const src = resolvePoolSource(
-        {
-          ...FALLBACK_ENV,
-          AI_ACCOUNTS: JSON.stringify([
-            { account_id: "blob-account", api_token: "blob-token" },
-          ]),
-        },
-        () => []
-      );
-      expect(src.source).toBe("AI_ACCOUNTS");
-      expect(src.keys).toEqual([
-        {
-          label: "AI_ACCOUNTS[0]",
-          accountId: "blob-account",
-          apiToken: "blob-token",
-          weight: 1,
-          enabled: true,
-        },
-      ]);
+      const src = resolvePoolSource(MINIMAL_ENV, () => []);
+      expect(src.source).toBe("d1");
+      expect(src.keys).toEqual([]);
       const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
-      expect(said).toMatch(/deprecat/i);
-      expect(said).not.toContain("blob-token");
+      expect(said).toMatch(/no credentials configured/i);
+      expect(said).toMatch(/admin UI/i);
     } finally {
       warn.mockRestore();
     }
   });
 
-  test("no D1 and no blob falls back to deploy credentials", () => {
-    const src = resolvePoolSource(FALLBACK_ENV, () => []);
-    expect(src.source).toBe("fallback");
-    expect(src.keys).toEqual([
-      {
-        label: "fallback deploy credential",
-        accountId: "deploy-account",
-        apiToken: "deploy-token",
-        weight: 1,
-        enabled: true,
-      },
-    ]);
-  });
-
-  test("no db reader behaves like empty D1", () => {
-    const src = resolvePoolSource(FALLBACK_ENV);
-    expect(src.source).toBe("fallback");
+  test("no db reader returns empty pool with warning", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const src = resolvePoolSource(MINIMAL_ENV);
+      expect(src.source).toBe("d1");
+      expect(src.keys).toEqual([]);
+      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toMatch(/no credentials configured/i);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   test("disabled D1 rows are carried, not dropped", () => {
-    const src = resolvePoolSource(FALLBACK_ENV, () => [
+    const src = resolvePoolSource(MINIMAL_ENV, () => [
       { ...D1_ROWS[0], enabled: false },
     ]);
     expect(src.source).toBe("d1");
     expect(src.keys[0].enabled).toBe(false);
+  });
+
+  test("environment variables have no effect (ADR-001)", () => {
+    const envWithLegacyVars = {
+      CLOUDFLARE_ACCOUNT_ID: "ignored-account",
+      CLOUDFLARE_API_TOKEN: "ignored-token",
+      AI_ACCOUNTS: JSON.stringify([
+        { account_id: "ignored", api_token: "ignored" },
+      ]),
+    } as any;
+    const src = resolvePoolSource(envWithLegacyVars, () => []);
+    expect(src.source).toBe("d1");
+    expect(src.keys).toEqual([]);
   });
 });

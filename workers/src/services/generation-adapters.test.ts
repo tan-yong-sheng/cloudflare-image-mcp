@@ -214,7 +214,7 @@ describe("transport error scrubbing", () => {
   test("an upstream body echoing the token is redacted, shape intact", async () => {
     const transport = new RestAITransport(
       [{ account_id: "heavy-acc", api_token: "t-heavy" }],
-      "AI_ACCOUNTS"
+      "d1"
     );
     vi.stubGlobal(
       "fetch",
@@ -229,7 +229,7 @@ describe("transport error scrubbing", () => {
     expect(failure).toBeInstanceOf(Error);
     const message = (failure as Error).message;
     expect(message).toContain("Cloudflare AI API error (500)");
-    expect(message).toContain("AI_ACCOUNTS[0]");
+    expect(message).toContain("D1[");
     expect(message).not.toContain("t-heavy");
     expect(message).not.toContain("heavy-acc");
     expect(message).toContain("[redacted]");

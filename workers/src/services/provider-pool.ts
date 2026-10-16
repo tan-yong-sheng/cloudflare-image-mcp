@@ -18,11 +18,10 @@ export interface PoolKey {
 }
 
 /**
- * Where the pool's keys came from — observability metadata only, never a
- * secret value. Carried on the pool because index.ts always passes one: a
- * hardcoded source tag would report "d1" even when the loader fell back.
+ * Credential source is always "d1" (ADR-001: database-only).
+ * Observability metadata only, never a secret value.
  */
-export type CredentialSource = "d1" | "AI_ACCOUNTS" | "fallback";
+export type CredentialSource = "d1";
 
 /** The credential handed to the transport for one attempt. */
 export interface PoolPick {

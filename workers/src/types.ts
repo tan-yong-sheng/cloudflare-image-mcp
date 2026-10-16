@@ -98,14 +98,13 @@ export interface AIAccount {
 // Environment interface
 export interface Env {
   IMAGE_BUCKET: R2Bucket;
-  PROVIDER_DB?: D1Database; // D1 provider store binding (R1a); read by the R1b pool cache
-  CLOUDFLARE_API_TOKEN: string;
-  CLOUDFLARE_ACCOUNT_ID: string;
+  PROVIDER_DB?: D1Database; // D1 provider store binding (R1a); credentials managed via admin UI (ADR-001)
+  CLOUDFLARE_API_TOKEN: string; // Deprecated: was fallback credential (ADR-001)
+  CLOUDFLARE_ACCOUNT_ID: string; // Deprecated: was fallback account (ADR-001)
   IMAGE_EXPIRY_HOURS: string;
   API_KEYS?: string; // Comma-separated list of valid API keys
-  AI_ACCOUNTS?: string; // JSON array of {account_id, api_token} for multi-account AI inference
-  PROVIDER_DATA_KEY?: string; // AES-GCM data key sealing provider tokens in D1 (R1b); Worker secret
-  ADMIN_API_KEY?: string; // Management key gating the /api/admin/* routes (R2); Worker secret, never the bearer gate
+  PROVIDER_DATA_KEY?: string; // AES-GCM data key sealing provider tokens in D1; Worker secret
+  ADMIN_API_KEY?: string; // Management key gating the /api/admin/* routes; Worker secret, never the bearer gate
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
   TZ?: string; // Timezone for logging and folder creation (default: UTC)
