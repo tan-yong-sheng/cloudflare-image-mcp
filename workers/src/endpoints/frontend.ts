@@ -966,8 +966,14 @@ export function getFrontendHTML(): string {
 
             // The management key lives in memory only: never persisted,
             // never logged. Cleared on lock, modal close, and logout.
+            // Admin routes the worker serves. index.test.ts pins these to the
+            // server's constants, so a rename on either side fails a test.
+            const ADMIN_HEALTH = '/api/admin/health';
+            const ADMIN_KEYS = '/api/admin/keys';
+
             let adminKey = '';
             let adminRequestGeneration = 0;
+            let sheetGeneration = 0;
             let selected = '';
             let sheetKeyId = null;
             let lastHealth = null;
@@ -1053,7 +1059,7 @@ export function getFrontendHTML(): string {
             async function loadHealth() {
                 let res;
                 try {
-                    res = await api('GET', '/api/admin/health');
+                    res = await api('GET', ADMIN_HEALTH);
                     if (res.stale) return;
                 } catch (error) {
                     showError(errorLine, error instanceof Error ? error.message : String(error));
@@ -1136,7 +1142,7 @@ export function getFrontendHTML(): string {
                 box.addEventListener('change', async () => {
                     box.setAttribute('aria-checked', String(box.checked));
                     try {
-                        const res = await api('PATCH', '/api/admin/keys/' + k.id, { enabled: box.checked });
+                        const res = await api('PATCH', ADMIN_KEYS + '/' + k.id, { enabled: box.checked });
                         if (res.stale) return;
                         if (!res.ok) {
                             showError(errorLine, errorMessage(res));
@@ -1228,6 +1234,9 @@ export function getFrontendHTML(): string {
             }
 
             function openSheet(mode, key) {
+                // A new open replaces whatever the sheet showed, so any request
+                // still in flight for the previous sheet may no longer touch it.
+                sheetGeneration += 1;
                 const isEdit = mode === 'edit' && !!key;
                 sheetKeyId = isEdit ? key.id : null;
                 sheetEyebrow.textContent = isEdit ? 'EDIT' : 'NEW';
@@ -1253,6 +1262,9 @@ export function getFrontendHTML(): string {
             }
 
             function closeSheet() {
+                // Dismissal (Cancel, backdrop, Escape) invalidates in-flight
+                // sheet requests for the same reason openSheet does.
+                sheetGeneration += 1;
                 sheet.classList.add('hidden');
                 sheetKeyId = null;
                 sheetToken.value = '';
@@ -1298,6 +1310,7 @@ export function getFrontendHTML(): string {
                 }
                 sheetSave.disabled = true;
                 const generation = adminRequestGeneration;
+                const sheetScope = sheetGeneration;
                 try {
                     if (isEdit) {
                         const body = {
@@ -1306,8 +1319,11 @@ export function getFrontendHTML(): string {
                             enabled: sheetEnabled.checked
                         };
                         if (token) body.apiToken = token;
-                        const res = await api('PATCH', '/api/admin/keys/' + sheetKeyId, body);
+                        const res = await api('PATCH', ADMIN_KEYS + '/' + sheetKeyId, body);
                         if (res.stale) return;
+                        // The sheet may have been dismissed or replaced while this
+                        // request was in flight; it belongs to sheetScope alone.
+                        if (sheetScope !== sheetGeneration) return;
                         if (!res.ok) {
                             showError(sheetError, errorMessage(res));
                             return;
@@ -1319,7 +1335,7 @@ export function getFrontendHTML(): string {
                         loadHealth();
                     } else {
                         const label = nextLabel();
-                        const res = await api('POST', '/api/admin/keys', {
+                        const res = await api('POST', ADMIN_KEYS, {
                             providerId: selected,
                             label: label,
                             apiToken: token,
@@ -1328,11 +1344,13 @@ export function getFrontendHTML(): string {
                             enabled: sheetEnabled.checked
                         });
                         if (res.stale) return;
+                        if (sheetScope !== sheetGeneration) return;
                         if (!res.ok) {
                             showError(sheetError, errorMessage(res));
                             // Re-read the pool, then re-derive: a retry must not
                             // repeat the same colliding label from a stale read.
                             await loadHealth();
+                            if (sheetScope !== sheetGeneration) return;
                             sheetTitle.textContent = 'New key (' + selected + ') — will be saved as ' + nextLabel();
                             return;
                         }
@@ -1341,7 +1359,9 @@ export function getFrontendHTML(): string {
                         loadHealth();
                     }
                 } catch (error) {
-                    showError(sheetError, error instanceof Error ? error.message : String(error));
+                    if (sheetScope === sheetGeneration) {
+                        showError(sheetError, error instanceof Error ? error.message : String(error));
+                    }
                 } finally {
                     // Only the live request may reset the button: one that keeps
                     // running past lock/logout must not touch the sheet, and
