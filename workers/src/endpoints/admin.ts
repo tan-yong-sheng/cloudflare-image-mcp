@@ -18,6 +18,7 @@ import {
   AdminStoreError,
   disableProviderKey,
   getAdminHealth,
+  MAX_WEIGHT,
   rotateProviderKey,
   updateProviderKey,
   type AdminCommitResult,
@@ -375,8 +376,6 @@ async function handleDisableKey(
     return storeError(error);
   }
 }
-
-const MAX_WEIGHT = 1_000_000;
 
 interface KeyFields {
   accountId?: string;

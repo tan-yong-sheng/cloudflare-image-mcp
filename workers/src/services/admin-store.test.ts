@@ -17,6 +17,7 @@ import {
   AdminStoreError,
   disableProviderKey,
   getAdminHealth,
+  MAX_WEIGHT,
   rotateProviderKey,
   updateProviderKey,
   type AdminD1,
@@ -373,6 +374,43 @@ describe("admin store against the real migrations (S2)", () => {
       .get() as { envelope: string };
     expect(await openEnvelope(live.envelope, DATA_KEY)).toBe("token-v2");
     expect(auditRows(db).map((r) => r.action)).toEqual(["add", "update"]);
+  });
+
+  test("weight is bounded by the store, not only by the route", async () => {
+    // The ceiling lives with the domain: a store caller that skips the
+    // route's validation must not be able to write a weight the UI cannot
+    // represent, and the UI reads the same bound.
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "bounded",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const before = versionOf(db);
+    await expect(
+      addProviderKey(d1, seal, {
+        providerId: "cloudflare",
+        label: "bounded-2",
+        apiToken: "token-v1",
+        accountId: "acct-1",
+        weight: MAX_WEIGHT + 1,
+      })
+    ).rejects.toThrow(/weight must be an integer/);
+    for (const weight of [MAX_WEIGHT + 1, 1.5, -1, "2"] as unknown[]) {
+      await expect(
+        updateProviderKey(d1, seal, {
+          keyId: added.id,
+          weight: weight as number,
+        })
+      ).rejects.toThrow(/weight must be an integer/);
+    }
+    expect(versionOf(db)).toBe(before);
+    const row = db
+      .prepare("SELECT weight FROM provider_keys WHERE id = ?")
+      .get(added.id) as { weight: number };
+    expect(row.weight).toBe(1);
   });
 
   test("update of an unknown key is a 404 with no writes", async () => {

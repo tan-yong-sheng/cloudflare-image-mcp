@@ -135,6 +135,25 @@ function rows<T>(res: { results?: T[] } | null | undefined): T[] {
   return res?.results ?? [];
 }
 
+/** Upper bound on a key's scheduling weight; the served UI mirrors it. */
+export const MAX_WEIGHT = 1_000_000;
+
+/** Validated integer weight, or a 400 when it is not one in range. */
+function assertWeight(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_WEIGHT
+  ) {
+    throw new AdminStoreError(
+      400,
+      `weight must be an integer between 0 and ${MAX_WEIGHT}`
+    );
+  }
+  return value;
+}
+
 function num(value: unknown): number {
   return typeof value === "number" ? value : 0;
 }
@@ -322,7 +341,7 @@ export async function addProviderKey(
   if (providerId === "cloudflare" && accountId.length === 0) {
     throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
-  const weight = input.weight !== undefined ? num(input.weight) : 1;
+  const weight = input.weight !== undefined ? assertWeight(input.weight) : 1;
   const enabled = input.enabled !== undefined ? input.enabled === true : true;
   const envelope = await seal(apiToken);
   // Atomic single-commit: all 4 statements (key, credential version,
@@ -543,7 +562,7 @@ export async function updateProviderKey(
   const storedAccountId = accountId.length > 0 ? accountId : null;
 
   const weight =
-    input.weight !== undefined ? num(input.weight) : num(key.weight);
+    input.weight !== undefined ? assertWeight(input.weight) : num(key.weight);
   const enabled =
     input.enabled !== undefined
       ? input.enabled === true
@@ -588,13 +607,10 @@ export async function updateProviderKey(
     );
   }
 
-  let activeVersion: number | null;
   const current = await activeVersionOf(db, input.keyId);
   if (token) {
     const envelope = await seal(token);
-    activeVersion = appendRotateWrites(writes, input.keyId, envelope, current);
-  } else {
-    activeVersion = current;
+    appendRotateWrites(writes, input.keyId, envelope, current);
   }
 
   writes.push(
@@ -624,9 +640,11 @@ export async function updateProviderKey(
       `key ${input.keyId} is missing after update`
     );
   }
-  const echoedVersion = token
-    ? activeVersion
-    : await activeVersionOf(db, input.keyId);
+  // Always re-read after the commit: a rotation committing after this batch
+  // would make the version this request inserted the superseded one, so only
+  // the ledger's current answer is safe to echo. (rotateProviderKey reports its
+  // own insert instead — there the created version is the point of the call.)
+  const echoedVersion = await activeVersionOf(db, input.keyId);
   return {
     id: input.keyId,
     label: after.label,

@@ -8,6 +8,7 @@
 
 import { describe, expect, test } from "vitest";
 import worker from "./index.js";
+import { MAX_WEIGHT } from "./services/admin-store.js";
 import type { Env } from "./types.js";
 
 function env(): Env {
@@ -160,5 +161,8 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
       "adminRequestGeneration += 1"
     );
     expect(html).toContain("if (generation !== adminRequestGeneration)");
+    // The served UI mirrors the store's weight ceiling: it cannot import the
+    // constant, so this pins the two together.
+    expect(html).toContain('max="' + MAX_WEIGHT + '"');
   });
 });

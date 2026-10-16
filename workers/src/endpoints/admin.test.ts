@@ -459,15 +459,16 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
   /** Recording stub: the S2 seam owns SQL truth; this pins wiring. */
   function stubStore(activeVersion: number | null = 1) {
     const commits: { sql: string; params: readonly unknown[] }[] = [];
-    // The update path reads the row back after committing, so the stub applies
-    // the column writes it records; reading at prepare time is what lets that
-    // post-commit read see them. S2 still owns SQL truth.
+    // The write paths read back what they committed, so the stub applies the
+    // column writes and ledger inserts it records; reading at prepare time is
+    // what lets those post-commit reads see them. S2 still owns SQL truth.
     const row: Record<string, unknown> = { ...keyRow };
+    let currentVersion = activeVersion;
     const stmt = (sql: string) => {
       const value = sql.includes("MAX(version)")
-        ? activeVersion === null
+        ? currentVersion === null
           ? null
-          : { v: activeVersion }
+          : { v: currentVersion }
         : { ...row };
       const bound = {
         first: async () => value,
@@ -486,11 +487,13 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
         ) => {
           commits.push(...writes);
           for (const w of writes) {
+            const sql = w.sql.trim();
             const update =
-              /^UPDATE provider_keys SET (\w+) = \? WHERE id = \?$/.exec(
-                w.sql.trim()
-              );
+              /^UPDATE provider_keys SET (\w+) = \? WHERE id = \?$/.exec(sql);
             if (update) row[update[1]] = w.params[0];
+            if (sql.startsWith("INSERT INTO credential_versions")) {
+              currentVersion = Number(w.params[1]);
+            }
           }
         },
       },
