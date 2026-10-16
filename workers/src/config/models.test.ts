@@ -153,6 +153,22 @@ describe("models.json mirror", () => {
     expect(Object.keys(MODEL_CONFIGS).sort()).toEqual(jsonIds);
   });
 
+  test("every entry declares the transport that serves it (C4)", () => {
+    // The registry key is config-driven (models.json drives models.ts), so
+    // the mirror must cover it too: a missing or drifting inferenceProvider
+    // silently routes a model to the wrong transport, which no other test
+    // observes. Load-time validation (services/transports.ts) rejects a key
+    // that is not in the registry; this pins the mirror itself.
+    const json = modelsJson as {
+      models: Record<string, { inferenceProvider?: string }>;
+    };
+    for (const [id, jcfg] of Object.entries(json.models)) {
+      expect(typeof jcfg.inferenceProvider).toBe("string");
+      expect(jcfg.inferenceProvider).not.toBe("");
+      expect(MODEL_CONFIGS[id].inferenceProvider).toBe(jcfg.inferenceProvider);
+    }
+  });
+
   test("parameter metadata mirrors the JSON source of truth (#53)", () => {
     // listModels() exposes the parameter table to drive UI controls,
     // so descriptions, defaults, and key names must match the JSON:

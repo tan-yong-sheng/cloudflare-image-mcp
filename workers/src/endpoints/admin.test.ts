@@ -645,6 +645,8 @@ describe("admin health readiness (ADR-001)", () => {
     weight: number;
   }): Env {
     const poolRow = {
+      providerId: "cloudflare",
+      transport: "cloudflare-rest",
       label: "parked",
       accountId: "acct-1",
       envelope: opts.envelope,
@@ -692,6 +694,7 @@ describe("admin health readiness (ADR-001)", () => {
   async function healthOf(envWithDb: Env): Promise<{
     keys: unknown[];
     hasServableCredential: boolean;
+    hasServableCredentialByProvider: Record<string, boolean>;
   }> {
     const response = await handleAdmin(
       get(
@@ -705,6 +708,7 @@ describe("admin health readiness (ADR-001)", () => {
     return (await response!.json()) as {
       keys: unknown[];
       hasServableCredential: boolean;
+      hasServableCredentialByProvider: Record<string, boolean>;
     };
   }
 
@@ -714,6 +718,9 @@ describe("admin health readiness (ADR-001)", () => {
     );
     expect(body.keys).toHaveLength(1);
     expect(body.hasServableCredential).toBe(false);
+    expect(body.hasServableCredentialByProvider).toEqual({
+      cloudflare: false,
+    });
   });
 
   test("an enabled, weighted key whose envelope opens is servable", async () => {
@@ -722,5 +729,8 @@ describe("admin health readiness (ADR-001)", () => {
       envWithOneKey({ envelope, enabled: 1, weight: 1 })
     );
     expect(body.hasServableCredential).toBe(true);
+    // The per-provider map is what routing splits on (C4): same predicate,
+    // so the global flag and the provider's entry must agree.
+    expect(body.hasServableCredentialByProvider).toEqual({ cloudflare: true });
   });
 });

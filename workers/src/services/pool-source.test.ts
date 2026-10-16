@@ -14,6 +14,8 @@ const MINIMAL_ENV = {} as any;
 
 const D1_ROWS: PoolRow[] = [
   {
+    providerId: "cloudflare",
+    transport: "cloudflare-rest",
     label: "d1-key",
     accountId: "d1-account",
     envelope: "sealed-envelope",
@@ -28,6 +30,8 @@ describe("database-only pool resolution (ADR-001)", () => {
     expect(src.source).toBe("d1");
     expect(src.keys).toEqual([
       {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
         label: "d1-key",
         accountId: "d1-account",
         envelope: "sealed-envelope",

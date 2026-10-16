@@ -523,7 +523,10 @@ describe("admin health exposure rows (S2)", () => {
       accountId: "acct-1",
     });
 
-    const health = await getAdminHealth(d1, true);
+    const health = await getAdminHealth(d1, {
+      any: true,
+      byProvider: { cloudflare: true },
+    });
     expect(health.providers).toEqual([
       { id: "cloudflare", displayName: "Cloudflare Workers AI" },
     ]);
@@ -540,6 +543,9 @@ describe("admin health exposure rows (S2)", () => {
     ]);
     expect(health.configVersion).toBe(2);
     expect(health.hasServableCredential).toBe(true);
+    expect(health.hasServableCredentialByProvider).toEqual({
+      cloudflare: true,
+    });
     expect(health.exposure).toContainEqual({
       modelId: "@cf/model-a",
       enabled: false,

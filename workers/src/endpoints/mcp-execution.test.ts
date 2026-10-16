@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { handleRunModel, type ToolsContext } from "./mcp-tools.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
-import { fakeEnv, fakePool, stubInference } from "../test-utils/fixtures.js";
+import { fakeEnv, fakePools, stubInference } from "../test-utils/fixtures.js";
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
 const BASE_URL = "https://worker.test";
@@ -23,7 +23,7 @@ function liveContext(): ToolsContext {
   stubInference("json");
   return {
     generator: new ImageGeneratorService(fakeEnv(), {
-      pool: fakePool(),
+      pools: fakePools(),
     }) as unknown as ToolsContext["generator"],
     baseUrl: BASE_URL,
   };

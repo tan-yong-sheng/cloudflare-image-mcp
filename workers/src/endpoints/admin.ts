@@ -13,7 +13,7 @@
 
 import type { Env } from "../types.js";
 import { sealToken } from "../services/provider-crypto.js";
-import { getProviderPool } from "../services/pool-cache.js";
+import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
   AdminStoreError,
@@ -25,6 +25,7 @@ import {
   type AdminCommitResult,
   type AdminD1,
   type AdminWrite,
+  type CredentialReadiness,
 } from "../services/admin-store.js";
 
 /** Routes the served frontend also calls; index.test.ts pins them to the UI. */
@@ -223,7 +224,7 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
  */
 export async function handleAdminHealth(
   store: AdminD1 | null,
-  hasServableCredential: boolean
+  readiness: CredentialReadiness
 ): Promise<Response> {
   if (!store) {
     return json({
@@ -231,10 +232,11 @@ export async function handleAdminHealth(
       keys: [],
       exposure: [],
       configVersion: null,
-      hasServableCredential,
+      hasServableCredential: readiness.any,
+      hasServableCredentialByProvider: readiness.byProvider,
     });
   }
-  return json(await getAdminHealth(store, hasServableCredential));
+  return json(await getAdminHealth(store, readiness));
 }
 
 /**
@@ -265,12 +267,16 @@ export async function handleAdmin(
     const db = env.PROVIDER_DB;
     const active = store ?? (db ? d1AdminStore(db) : null);
     if (request.method === "GET" && path === ADMIN_HEALTH_PATH) {
-      // Readiness comes from the pool — the same predicate inference picks
-      // with — not from the key list, which cannot see an unopenable
-      // envelope. The generator's "no credentials" warning reads this, so
-      // it can never disagree with generation.
-      const pool = await getProviderPool(env);
-      return await handleAdminHealth(active, pool.entries().length > 0);
+      // Readiness comes from the provider pools — the same predicate
+      // inference picks with — not from the key list, which cannot see an
+      // unopenable envelope. The generator's "no credentials" warning reads
+      // the global flag; the per-provider map is what routing splits on, so
+      // the two can never disagree.
+      const pools = await getProviderPools(env);
+      return await handleAdminHealth(active, {
+        any: pools.hasAnyServable(),
+        byProvider: pools.readiness(),
+      });
     }
     if (!active) return internalError("no provider store bound");
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {

@@ -10,6 +10,10 @@ import type { Env } from "../types.js";
 
 /** One D1 credential row as the resolver sees it (envelope still sealed). */
 export interface PoolRow {
+  /** Owning providers row; groups credentials into per-provider pools. */
+  providerId: string;
+  /** The owning provider's transport key (providers.transport). */
+  transport: string;
   label: string;
   accountId: string;
   envelope: string;
@@ -19,6 +23,8 @@ export interface PoolRow {
 
 /** One resolved credential from D1 (envelope still sealed). */
 export interface ResolvedKey {
+  providerId: string;
+  transport: string;
   label: string;
   accountId: string;
   /** Sealed credential envelope from D1. */
@@ -51,6 +57,8 @@ export function resolvePoolSource(
   return {
     source: "d1",
     keys: d1Rows.map((r) => ({
+      providerId: r.providerId,
+      transport: r.transport,
       label: r.label,
       accountId: r.accountId,
       envelope: r.envelope,

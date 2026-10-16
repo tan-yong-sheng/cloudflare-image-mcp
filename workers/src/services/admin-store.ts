@@ -92,12 +92,27 @@ export interface AdminHealthSummary {
   exposure: AdminExposureSummary[];
   configVersion: number | null;
   /**
-   * Injected by the endpoint from the provider pool: the same "servable"
+   * Injected by the endpoint from the provider pools: the same "servable"
    * predicate inference picks with (enabled, weight > 0, envelope opens).
    * The key list beside it cannot answer this — a key can be listed,
    * enabled, and weighted yet still be parked by an unopenable envelope.
+   * Global, because the frontend keeps one "no credentials" warning (C4).
    */
   hasServableCredential: boolean;
+  /**
+   * providerId -> servable, from the same per-provider pools the dispatcher
+   * routes with (C4). A provider absent from both this map and `providers`
+   * has no rows; one present with `false` has rows that cannot be used.
+   */
+  hasServableCredentialByProvider: Record<string, boolean>;
+}
+
+/** Credential readiness as the provider pools report it (C4). */
+export interface CredentialReadiness {
+  /** Any provider servable — the generator's global warning reads this. */
+  any: boolean;
+  /** providerId -> servable. Providers with no rows are absent. */
+  byProvider: Record<string, boolean>;
 }
 
 export interface AddKeyInput {
@@ -172,7 +187,7 @@ function num(value: unknown): number {
  */
 export async function getAdminHealth(
   db: AdminD1,
-  hasServableCredential: boolean
+  readiness: CredentialReadiness
 ): Promise<AdminHealthSummary> {
   const providerRows = rows<Record<string, unknown>>(
     await db.prepare("SELECT id, display_name FROM providers").all()
@@ -252,7 +267,8 @@ export async function getAdminHealth(
     keys,
     exposure,
     configVersion: versionRow?.version ?? null,
-    hasServableCredential,
+    hasServableCredential: readiness.any,
+    hasServableCredentialByProvider: readiness.byProvider,
   };
 }
 

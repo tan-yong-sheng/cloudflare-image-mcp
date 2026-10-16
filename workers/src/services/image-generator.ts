@@ -10,14 +10,15 @@
 import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
-import type { ProviderPool } from "./provider-pool.js";
+import type { ProviderPools } from "./provider-pools.js";
 import { overlayRegistry } from "../config/exposure-overlay.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
+import type { AITransport, ImageStore } from "./generation-adapters.js";
 import {
-  RestAITransport,
-  type AITransport,
-  type ImageStore,
-} from "./generation-adapters.js";
+  DispatchingAITransport,
+  TRANSPORT_FACTORIES,
+  type TransportFactory,
+} from "./transports.js";
 import type { GeneratedImage } from "../utils/image-request.js";
 import {
   MODEL_CONFIGS,
@@ -149,7 +150,10 @@ export class ImageGeneratorService {
     deps?: {
       transport?: AITransport;
       store?: ImageStore;
-      pool?: ProviderPool;
+      /** Per-provider credentials (C4); absent means none are configured. */
+      pools?: ProviderPools;
+      /** Transport registry override, so tests can add a fake transport. */
+      transportFactories?: Readonly<Record<string, TransportFactory>>;
       exposureOverlay?: ExposureOverlay;
     }
   ) {
@@ -158,32 +162,33 @@ export class ImageGeneratorService {
         overlayRegistry(MODEL_CONFIGS, deps?.exposureOverlay ?? null)
       )
     );
+    this.store = deps?.store ?? new R2StorageService(env);
+
+    // One dispatcher fronts every transport: run() reads the model's
+    // inferenceProvider and resolves the seam (services/transports.ts).
+    const dispatch = (pools?: ProviderPools) =>
+      new DispatchingAITransport({
+        factories: deps?.transportFactories ?? TRANSPORT_FACTORIES,
+        poolFor: (transport) => pools?.forTransport(transport),
+      });
 
     // Database-only credentials (ADR-001): a servable pool is required.
-    // When no pool is provided or pool is empty, error clearly.
-    const pool = deps?.pool;
-    const poolEntries = pool?.entries() ?? [];
-    if (pool && poolEntries.length > 0) {
-      const poolAccounts = poolEntries.map((e) => ({
-        account_id: e.accountId,
-        api_token: e.apiToken,
-      }));
+    const pools = deps?.pools;
+    if (pools && pools.hasAnyServable()) {
       console.warn(
-        `AI inference path: ${pool.source} with ${poolAccounts.length} account(s)`
+        `AI inference path: ${pools.source()} with ${pools.servableCount()} account(s)`
       );
-      this.transport =
-        deps?.transport ?? new RestAITransport(poolAccounts, pool.source, pool);
-      this.store = deps?.store ?? new R2StorageService(env);
+      this.transport = deps?.transport ?? dispatch(pools);
       return;
     }
 
-    // No servable credentials: error clearly (ADR-001)
+    // No servable credentials: error clearly (ADR-001). The dispatcher
+    // reports it per request, naming the transport that could not be
+    // served, instead of failing with a bare null.
     console.error(
       "No AI provider credentials configured. Add credentials via admin UI at /#admin"
     );
-    // Provide empty transport that will error on first use
-    this.transport = deps?.transport ?? new RestAITransport([], "d1");
-    this.store = deps?.store ?? new R2StorageService(env);
+    this.transport = deps?.transport ?? dispatch(pools);
   }
 
   /**

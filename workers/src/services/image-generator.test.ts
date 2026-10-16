@@ -12,6 +12,7 @@ import {
   type GenerationRequest,
 } from "./image-generator.js";
 import { ProviderPool, type PoolKey } from "./provider-pool.js";
+import { ProviderPools, type ProviderPoolEntry } from "./provider-pools.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RestAITransport,
@@ -546,6 +547,17 @@ describe("runMany", () => {
 });
 
 describe("database-only credential wiring (ADR-001)", () => {
+  /** One provider's pool, as the isolate cache would present it (C4). */
+  function poolsOf(pool: ProviderPool): ProviderPools {
+    return new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool,
+      } satisfies ProviderPoolEntry,
+    ]);
+  }
+
   const minimalEnv = {
     IMAGE_EXPIRY_HOURS: "24",
     IMAGE_BUCKET: {},
@@ -558,7 +570,7 @@ describe("database-only credential wiring (ADR-001)", () => {
       new ImageGeneratorService(minimalEnv, {
         transport: new MemoryTransport(),
         store: new MemoryStore(),
-        pool,
+        pools: pool ? poolsOf(pool) : undefined,
       });
       const allLogs = [
         ...warn.mock.calls.map((c) => String(c[0])),
@@ -614,7 +626,7 @@ describe("database-only credential wiring (ADR-001)", () => {
     // `throw lastError` produced { error: "null" } in the API envelope.
     const svc = new ImageGeneratorService(minimalEnv, {
       store: new MemoryStore(),
-      pool: new ProviderPool([], { source: "d1" }),
+      pools: poolsOf(new ProviderPool([], { source: "d1" })),
     });
 
     const result = await svc.runOnce({ modelId: TEXT_MODEL, prompt: "a cat" });
@@ -639,17 +651,19 @@ describe("database-only credential wiring (ADR-001)", () => {
     const svc = new ImageGeneratorService(minimalEnv, {
       transport,
       store,
-      pool: new ProviderPool(
-        [
-          {
-            label: "k1",
-            accountId: "a1",
-            apiToken: "SECRET-TOKEN-K1",
-            weight: 1,
-            enabled: true,
-          },
-        ],
-        { source: "d1" }
+      pools: poolsOf(
+        new ProviderPool(
+          [
+            {
+              label: "k1",
+              accountId: "a1",
+              apiToken: "SECRET-TOKEN-K1",
+              weight: 1,
+              enabled: true,
+            },
+          ],
+          { source: "d1" }
+        )
       ),
     });
 

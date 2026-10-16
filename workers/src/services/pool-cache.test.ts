@@ -1,7 +1,7 @@
 // ============================================================================
 // Provider pool cache tests - R1b (#72), seam S4 slice F2
 // ============================================================================
-// Seam: getProviderPool(env, deps) — the isolate-scoped cache so the hot
+// Seam: getProviderPools(env, deps) — the isolate-scoped cache so the hot
 // path stays off D1. Proves boot-load once, version-poll inside a TTL
 // window, reload only on config_versions change, stale-serving when the
 // version query or the reload fails (a D1 blip never takes inference
@@ -10,15 +10,21 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 import {
-  getProviderPool,
+  getProviderPools,
   getExposureOverlay,
   resetPoolCache,
   type PoolCacheDeps,
 } from "./pool-cache.js";
 import { ProviderPool } from "./provider-pool.js";
+import type { ProviderPools } from "./provider-pools.js";
 import type { Env } from "../types.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_API_TOKEN: "t" } as Env;
+
+/** The labels of the one provider the cache fakes carry. */
+function labelsOf(pools: ProviderPools): string[] {
+  return pools.forProvider("cloudflare")?.labels() ?? [];
+}
 
 function makeFakes(ttlMs = 1_000) {
   let version = 1;
@@ -26,12 +32,18 @@ function makeFakes(ttlMs = 1_000) {
   let reads = 0;
   let nowMs = 0;
   const deps: PoolCacheDeps = {
-    loadPool: async () => {
+    loadPools: async () => {
       loads++;
       const label = `v${version}`;
-      return new ProviderPool([
-        { label, accountId: "a", apiToken: "t", weight: 1, enabled: true },
-      ]);
+      return [
+        {
+          providerId: "cloudflare",
+          transport: "cloudflare-rest",
+          pool: new ProviderPool([
+            { label, accountId: "a", apiToken: "t", weight: 1, enabled: true },
+          ]),
+        },
+      ];
     },
     readVersion: async () => {
       reads++;
@@ -55,40 +67,40 @@ beforeEach(() => resetPoolCache());
 describe("pool cache (F2)", () => {
   test("boot-loads once and serves the cached pool inside the TTL window", async () => {
     const f = makeFakes();
-    const first = await getProviderPool(ENV, f.deps);
-    const second = await getProviderPool(ENV, f.deps);
+    const first = await getProviderPools(ENV, f.deps);
+    const second = await getProviderPools(ENV, f.deps);
     expect(f.counts()).toEqual({ loads: 1, reads: 1 });
     expect(second).toBe(first);
-    expect(first.labels()).toEqual(["v1"]);
+    expect(labelsOf(first)).toEqual(["v1"]);
   });
 
   test("after the TTL, an unchanged version keeps the cached pool", async () => {
     const f = makeFakes();
-    const first = await getProviderPool(ENV, f.deps);
+    const first = await getProviderPools(ENV, f.deps);
     f.advance(1_001);
-    const again = await getProviderPool(ENV, f.deps);
+    const again = await getProviderPools(ENV, f.deps);
     expect(f.counts()).toEqual({ loads: 1, reads: 2 });
     expect(again).toBe(first);
   });
 
   test("a version bump after the TTL reloads the pool", async () => {
     const f = makeFakes();
-    await getProviderPool(ENV, f.deps);
+    await getProviderPools(ENV, f.deps);
     f.bump();
     f.advance(1_001);
-    const reloaded = await getProviderPool(ENV, f.deps);
+    const reloaded = await getProviderPools(ENV, f.deps);
     expect(f.counts()).toEqual({ loads: 2, reads: 2 });
-    expect(reloaded.labels()).toEqual(["v2"]);
+    expect(labelsOf(reloaded)).toEqual(["v2"]);
   });
 
   test("a failing version query serves the stale pool, never throws", async () => {
     const f = makeFakes();
-    const first = await getProviderPool(ENV, f.deps);
+    const first = await getProviderPools(ENV, f.deps);
     f.advance(1_001);
     f.deps.readVersion = async () => {
       throw new Error("D1 unavailable");
     };
-    const stale = await getProviderPool(ENV, f.deps);
+    const stale = await getProviderPools(ENV, f.deps);
     expect(stale).toBe(first);
     expect(f.counts().loads).toBe(1);
   });
@@ -96,9 +108,9 @@ describe("pool cache (F2)", () => {
   test("with no version source, the pool reloads after each TTL window", async () => {
     const f = makeFakes();
     f.deps.readVersion = async () => null;
-    const first = await getProviderPool(ENV, f.deps);
+    const first = await getProviderPools(ENV, f.deps);
     f.advance(1_001);
-    const second = await getProviderPool(ENV, f.deps);
+    const second = await getProviderPools(ENV, f.deps);
     expect(f.counts().loads).toBe(2);
     expect(second).not.toBe(first);
   });
@@ -138,20 +150,20 @@ describe("pool cache (F2)", () => {
     f.deps.loadOverlay = async () => {
       throw new Error("D1 unavailable");
     };
-    const pool = await getProviderPool(ENV, f.deps);
-    expect(pool.labels()).toEqual(["v1"]);
+    const pool = await getProviderPools(ENV, f.deps);
+    expect(labelsOf(pool)).toEqual(["v1"]);
     expect((await getExposureOverlay(ENV, f.deps)).size).toBe(0);
   });
 
   test("a failed reload keeps serving the previous snapshot", async () => {
     const f = makeFakes();
-    const first = await getProviderPool(ENV, f.deps);
+    const first = await getProviderPools(ENV, f.deps);
     f.advance(1_001);
     f.bump();
-    f.deps.loadPool = async () => {
+    f.deps.loadPools = async () => {
       throw new Error("D1 unavailable");
     };
-    const stale = await getProviderPool(ENV, f.deps);
+    const stale = await getProviderPools(ENV, f.deps);
     expect(stale).toBe(first);
     expect(f.counts().loads).toBe(1);
   });

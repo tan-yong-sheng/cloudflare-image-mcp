@@ -17,7 +17,15 @@ export interface ModelConfig {
   id: string;
   name: string;
   description: string;
+  /** Model author (black-forest-labs, stabilityai, ...). Not a routing key. */
   provider: string;
+  /**
+   * Which transport serves this model: a key into the transport registry
+   * (services/transports.ts), matching the `transport` column of the
+   * provider row whose credentials it uses. Distinct from `provider`,
+   * which names the model author and is never used for routing.
+   */
+  inferenceProvider: string;
   apiVersion: number;
   inputFormat: "json" | "multipart";
   responseFormat: "base64" | "binary";

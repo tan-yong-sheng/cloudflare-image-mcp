@@ -12,6 +12,7 @@
 
 import { vi } from "vitest";
 import { ProviderPool } from "../services/provider-pool.js";
+import { ProviderPools } from "../services/provider-pools.js";
 
 /** 1x1 red PNG, base64 (no data-URI prefix). */
 export const FIXTURE_PNG_B64 =
@@ -137,22 +138,29 @@ export function fakeEnv(): Env {
 }
 
 /**
- * Test provider pool with fake credentials (ADR-001).
+ * Test provider credentials (ADR-001): one servable key under the seeded
+ * Cloudflare provider, as the isolate cache would hand it to the generator.
  * Tests should use this instead of relying on environment variables.
  */
-export function fakePool(): ProviderPool {
-  return new ProviderPool(
-    [
-      {
-        label: "test-key-1",
-        accountId: "test-account",
-        apiToken: "test-token",
-        weight: 1,
-        enabled: true,
-      },
-    ],
-    { source: "d1" }
-  );
+export function fakePools(): ProviderPools {
+  return new ProviderPools([
+    {
+      providerId: "cloudflare",
+      transport: "cloudflare-rest",
+      pool: new ProviderPool(
+        [
+          {
+            label: "test-key-1",
+            accountId: "test-account",
+            apiToken: "test-token",
+            weight: 1,
+            enabled: true,
+          },
+        ],
+        { source: "d1" }
+      ),
+    },
+  ]);
 }
 
 // Local type import (type-only, erased at runtime).

@@ -65,6 +65,7 @@ Add a new entry under the `"models"` object:
   "name": "Display Name",
   "description": "Brief description of the model",
   "provider": "provider-name",
+  "inferenceProvider": "cloudflare-rest",
   "apiVersion": 2,
   "inputFormat": "json" | "multipart",
   "responseFormat": "base64" | "binary",
@@ -106,6 +107,12 @@ Add a new entry under the `"models"` object:
 
 **Key Fields:**
 
+- `inferenceProvider`: **required** — the transport that serves this model
+  (`workers/src/services/transports.ts` registry). Use `"cloudflare-rest"` for
+  Cloudflare Workers AI models. It must equal the `transport` column of the
+  provider row holding the credentials, and the name is validated at Worker
+  startup, so a wrong value stops the deploy rather than one request. Distinct
+  from `provider`, which is the model author and is never used for routing.
 - `inputFormat`: `"json"` (most models) or `"multipart"` (for image-to-image)
 - `responseFormat`: `"base64"` or `"binary"`
 - `supportedTasks`: `["text-to-image"]` or `["text-to-image", "image-to-image"]`
