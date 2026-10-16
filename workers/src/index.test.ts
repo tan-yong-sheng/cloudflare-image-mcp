@@ -8,6 +8,7 @@
 
 import { describe, expect, test } from "vitest";
 import worker from "./index.js";
+import { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH } from "./endpoints/admin.js";
 import { MAX_WEIGHT } from "./services/admin-store.js";
 import type { Env } from "./types.js";
 
@@ -145,8 +146,10 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
       expect(html).toContain('id="' + id + '"');
     }
     // The workbench talks to the admin API with the management-key header.
-    expect(html).toContain("/api/admin/health");
-    expect(html).toContain("/api/admin/keys");
+    // These are the server's own constants, so renaming a route on either side
+    // without the other fails here.
+    expect(html).toContain(ADMIN_HEALTH_PATH);
+    expect(html).toContain(ADMIN_KEYS_PATH);
     expect(html).toContain("X-Admin-Key");
     // The management key must remain memory-only: never persisted.
     expect(html).not.toMatch(/sessionStorage\.(set|get)Item\('admin/);

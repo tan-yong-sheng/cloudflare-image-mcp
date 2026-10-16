@@ -26,6 +26,20 @@ import {
   type AdminWrite,
 } from "../services/admin-store.js";
 
+/** Routes the served frontend also calls; index.test.ts pins them to the UI. */
+export const ADMIN_HEALTH_PATH = "/api/admin/health";
+export const ADMIN_KEYS_PATH = "/api/admin/keys";
+
+/**
+ * Ids arrive as path text. Anything past a safe integer cannot address a row
+ * and would reach D1 as a rounded float or Infinity, so it is rejected before
+ * the store sees it.
+ */
+function parseKeyId(value: string): number | null {
+  const id = Number(value);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -242,24 +256,30 @@ export async function handleAdmin(
     const store = deps?.adminStore;
     const db = env.PROVIDER_DB;
     const active = store ?? (db ? d1AdminStore(db) : null);
-    if (request.method === "GET" && path === "/api/admin/health") {
+    if (request.method === "GET" && path === ADMIN_HEALTH_PATH) {
       return await handleAdminHealth(active);
     }
     if (!active) return internalError("no provider store bound");
-    if (request.method === "POST" && path === "/api/admin/keys") {
+    if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
     const rotate = path.match(/^\/api\/admin\/keys\/(\d+)\/rotate$/);
     if (request.method === "POST" && rotate) {
-      return await handleRotateKey(request, env, active, Number(rotate[1]));
+      const id = parseKeyId(rotate[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleRotateKey(request, env, active, id);
     }
     const disable = path.match(/^\/api\/admin\/keys\/(\d+)\/disable$/);
     if (request.method === "POST" && disable) {
-      return await handleDisableKey(request, env, active, Number(disable[1]));
+      const id = parseKeyId(disable[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleDisableKey(request, env, active, id);
     }
     const update = path.match(/^\/api\/admin\/keys\/(\d+)$/);
     if (request.method === "PATCH" && update) {
-      return await handleUpdateKey(request, env, active, Number(update[1]));
+      const id = parseKeyId(update[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleUpdateKey(request, env, active, id);
     }
     return errorJson(404, "Not found");
   } catch (error) {

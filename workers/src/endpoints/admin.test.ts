@@ -518,6 +518,18 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
     expect(response.headers.get("Content-Type")).toContain("application/json");
   });
 
+  test("a key id beyond a safe integer is a 400, not a 500", async () => {
+    // The path regex is digit-only, so a huge id used to reach the store as a
+    // rounded float (or Infinity) and fail there as a server error.
+    const { store, commits } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/99999999999999999999", { weight: 2 }),
+      store
+    );
+    expect(response.status).toBe(400);
+    expect(commits).toEqual([]);
+  });
+
   test("PATCH on a non-numeric key path is a 404", async () => {
     const { store } = stubStore();
     const response = await handle(
