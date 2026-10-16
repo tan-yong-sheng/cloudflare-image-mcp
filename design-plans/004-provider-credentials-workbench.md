@@ -103,6 +103,12 @@ when `authToken` is present) opening a workbench modal that mirrors variant A:
   uncheck = parked); row switch and edit checkbox share that semantics.
 - **Health read extended**: `getAdminHealth` keys now carry
   `accountId` (the table's Account ID column reads it).
+- **Update echo re-read**: the `PATCH` response is the stored row read
+  _after_ the commit, and the active version too when no token is sent —
+  not the pre-commit snapshot. A concurrent save that changed another
+  field had already committed by then, and echoing the snapshot reported
+  that field as unchanged. `activeVersionOf` is the single home for the
+  version query, which also simplified `appendRotateWrites`.
 - **Selective deferral**: Base URL / per-key Custom models /
   connectivity Test are absent from the shipped UI this slice (no
   schema home / no test endpoint) — see "Deferred" above; the sheet ends

@@ -187,7 +187,9 @@ or logout — never persisted.
   `{ "accountId", "weight", "enabled", "apiToken" }`. A present
   token revokes the active version and inserts the next one in the same
   transaction as the field edits (rotate-on-save); an absent token keeps
-  the current version. Echoes identity plus the edited fields. This is
+  the current version. Echoes the stored row read back after the commit
+  (identity, account id, weight, enabled, active version), so a concurrent
+  save that changed another field is not reported as unchanged. This is
   the path the workbench's Edit sheet uses.
 - **Rotate** — `POST /api/admin/keys/:id/rotate` with
   `{ "apiToken" }`: revokes the active version and inserts the next one
