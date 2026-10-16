@@ -233,56 +233,77 @@ export function getFrontendHTML(): string {
         </div>
     </div>
 
-    <!-- Provider Credentials Workbench (variant A, #91) -->
-    <div id="adminWorkbench" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="adminWorkbenchTitle">
-        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between border-b border-gray-700 pb-3 mb-4">
-                <h2 id="adminWorkbenchTitle" class="text-xl font-bold flex items-center">
+    <!-- Provider Credentials Workbench (full-page view, #91) -->
+    <main id="adminView" class="container mx-auto px-4 py-4 max-w-6xl hidden" role="main" aria-labelledby="adminViewTitle">
+        <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-700">
+            <div class="flex items-center space-x-3">
+                <button id="adminBackBtn" class="btn btn-secondary p-2 h-10 flex items-center justify-center rounded" aria-label="Back to Image Generator">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>Back
+                </button>
+                <h1 id="adminViewTitle" class="text-2xl md:text-3xl font-bold flex items-center">
                     <i class="fa-solid fa-server mr-2 text-primary"></i>AI Providers
-                </h2>
-                <button id="adminWorkbenchClose" class="btn btn-secondary p-1 h-8 w-8 flex items-center justify-center rounded" aria-label="Close provider credentials">
-                    <i class="fa-solid fa-xmark"></i>
+                </h1>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span id="adminChipsActive" class="chip chip-ok hidden"></span>
+                <span id="adminChipsFamilies" class="chip hidden"></span>
+                <button id="adminAddKey" class="btn btn-primary text-sm py-1.5 px-4 hidden" aria-label="Add new provider key">
+                    <i class="fa-solid fa-plus mr-1"></i>New key
+                </button>
+                <button id="adminLock" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Lock provider credentials">
+                    <i class="fa-solid fa-lock mr-2"></i>Lock
+                </button>
+                <button id="themeToggleAdmin" class="btn btn-secondary p-2 h-10 w-10 flex items-center justify-center" aria-label="Toggle dark theme">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+                <button id="logoutButtonAdmin" class="btn btn-secondary p-2 h-10 flex items-center justify-center hidden" aria-label="Logout">
+                    <i class="fa-solid fa-sign-out-alt mr-2"></i>Logout
                 </button>
             </div>
+        </div>
 
-            <div class="mb-4 space-y-2">
-                <label for="adminKey" class="block text-sm font-medium mb-1">Management key</label>
-                <div class="flex gap-2">
+        <p id="adminNotice" class="text-sm p-3 mb-4 rounded bg-green-900/30 text-green-300 border border-green-700 hidden" role="status"></p>
+
+        <!-- Unlock Gate (shown when locked) -->
+        <div id="adminGate" class="max-w-md mx-auto my-12">
+            <div class="card p-6 space-y-4">
+                <div class="text-center space-y-1">
+                    <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-2">
+                        <i class="fa-solid fa-shield-halved text-xl"></i>
+                    </div>
+                    <h2 class="text-lg font-bold">Unlock Provider Administration</h2>
+                    <p class="text-xs opacity-60">Enter your management key to inspect and configure provider credentials.</p>
+                </div>
+                <div class="space-y-2">
+                    <label for="adminKey" class="block text-xs font-medium">Management key</label>
                     <input type="password" id="adminKey" class="w-full" placeholder="Management key (never stored)" autocomplete="off">
-                    <button id="adminUnlock" class="btn btn-secondary text-sm py-1 px-3 whitespace-nowrap">Unlock</button>
-                    <button id="adminLock" class="btn btn-secondary text-sm py-1 px-3 whitespace-nowrap hidden">Lock</button>
+                    <p id="adminError" class="text-xs text-red-500 hidden" role="alert"></p>
                 </div>
-                <p id="adminError" class="text-sm text-red-500 hidden" role="alert"></p>
-                <p id="adminNotice" class="text-sm hidden" role="status"></p>
+                <button id="adminUnlock" class="btn btn-primary w-full py-2 flex items-center justify-center">
+                    <i class="fa-solid fa-unlock mr-2"></i>Unlock
+                </button>
             </div>
+        </div>
 
-            <div id="adminPanel" class="hidden space-y-4">
-                <div class="flex gap-2">
-                    <span id="adminChipsActive" class="chip chip-ok"></span>
-                    <span id="adminChipsFamilies" class="chip"></span>
-                </div>
-                <div class="flex flex-col md:flex-row gap-4">
-                    <aside id="adminRail" class="card p-2 md:w-56 space-y-1" aria-label="Provider families"></aside>
-                    <section class="card p-4 flex-1 min-w-0">
-                        <div class="flex items-center justify-between mb-2">
-                            <h3 id="adminFamilyName" class="font-semibold flex items-center"></h3>
-                            <button id="adminAddKey" class="btn btn-primary text-sm py-1 px-3">
-                                <i class="fa-solid fa-plus mr-1"></i>New key
-                            </button>
-                        </div>
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="text-left opacity-60">
-                                    <th class="p-2 font-medium">Key</th>
-                                    <th class="p-2 font-medium">Account ID</th>
-                                    <th class="p-2 font-medium"><span class="sr-only">Actions</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="adminKeys"></tbody>
-                        </table>
-                        <p id="adminEmpty" class="text-sm opacity-60 text-center py-6 hidden">No keys yet.</p>
-                    </section>
-                </div>
+        <!-- Operational Panel (shown when unlocked) -->
+        <div id="adminPanel" class="hidden space-y-4">
+            <div class="flex flex-col md:flex-row gap-6">
+                <aside id="adminRail" class="card p-2 md:w-64 space-y-1 flex-shrink-0" aria-label="Provider families"></aside>
+                <section class="card p-6 flex-1 min-w-0">
+                    <div class="mb-4 pb-3 border-b border-gray-700">
+                        <h3 id="adminFamilyName" class="font-semibold text-lg flex items-center"></h3>
+                    </div>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left opacity-60 border-b border-gray-800">
+                                <th class="p-3 font-medium">Account ID</th>
+                                <th class="p-3 font-medium"><span class="sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminKeys"></tbody>
+                    </table>
+                    <p id="adminEmpty" class="text-sm opacity-60 text-center py-10 hidden">No keys yet.</p>
+                </section>
             </div>
         </div>
     </div>
@@ -321,9 +342,9 @@ export function getFrontendHTML(): string {
                 <button id="adminSheetSave" class="btn btn-primary text-sm py-1 px-3">Add key</button>
             </div>
         </div>
-    </div>
+    </main>
 
-    <div class="container mx-auto px-4 py-4 max-w-6xl">
+    <main id="generatorView" class="container mx-auto px-4 py-4 max-w-6xl">
         <div class="flex items-center justify-between mb-6">
             <h1 class="text-2xl md:text-3xl font-bold flex items-center">
                 <i class="fa-solid fa-image mr-2"></i>AI Image Generator
@@ -482,7 +503,7 @@ export function getFrontendHTML(): string {
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
         // Configuration
@@ -932,11 +953,13 @@ export function getFrontendHTML(): string {
                 showGenerateError('Download failed: ' + (error instanceof Error ? error.message : String(error)));
             }
         });
-        // Provider credentials workbench (variant A, #91)
+        // Provider credentials workbench (full-page SPA view, #91)
         (function () {
             const button = document.getElementById('adminWorkbenchButton');
-            const modal = document.getElementById('adminWorkbench');
-            const closeBtn = document.getElementById('adminWorkbenchClose');
+            const adminView = document.getElementById('adminView');
+            const backBtn = document.getElementById('adminBackBtn');
+            const generatorView = document.getElementById('generatorView');
+            const gate = document.getElementById('adminGate');
             const keyInput = document.getElementById('adminKey');
             const unlockBtn = document.getElementById('adminUnlock');
             const lockBtn = document.getElementById('adminLock');
@@ -963,6 +986,8 @@ export function getFrontendHTML(): string {
             const sheetError = document.getElementById('adminSheetError');
             const sheetCancel = document.getElementById('adminSheetCancel');
             const sheetSave = document.getElementById('adminSheetSave');
+            const themeToggleAdmin = document.getElementById('themeToggleAdmin');
+            const logoutButtonAdmin = document.getElementById('logoutButtonAdmin');
 
             // The management key lives in memory only: never persisted,
             // never logged. Cleared on lock, modal close, and logout.
@@ -1041,19 +1066,48 @@ export function getFrontendHTML(): string {
                 unlockBtn.classList.remove('hidden');
                 lockBtn.classList.add('hidden');
                 panel.classList.add('hidden');
+                chipsActive.classList.add('hidden');
+                chipsFamilies.classList.add('hidden');
+                if (gate) gate.classList.remove('hidden');
                 closeSheet();
                 hideError(errorLine);
             }
 
-            function openModal() {
-                modal.classList.remove('hidden');
+            function showAdminView() {
+                generatorView.classList.add('hidden');
+                adminView.classList.remove('hidden');
                 hideError(errorLine);
-                if (adminKey) loadHealth();
+                window.scrollTo({ top: 0, behavior: 'instant' });
+                
+                if (adminKey) {
+                    gate.classList.add('hidden');
+                    panel.classList.remove('hidden');
+                    lockBtn.classList.remove('hidden');
+                    chipsActive.classList.remove('hidden');
+                    chipsFamilies.classList.remove('hidden');
+                    loadHealth();
+                } else {
+                    gate.classList.remove('hidden');
+                    panel.classList.add('hidden');
+                    lockBtn.classList.add('hidden');
+                    chipsActive.classList.add('hidden');
+                    chipsFamilies.classList.add('hidden');
+                    keyInput.focus();
+                }
             }
 
-            function closeModal() {
-                modal.classList.add('hidden');
+            function showGeneratorView() {
+                adminView.classList.add('hidden');
+                generatorView.classList.remove('hidden');
                 lock();
+            }
+
+            function syncRoute() {
+                if (window.location.hash === '#admin') {
+                    showAdminView();
+                } else {
+                    showGeneratorView();
+                }
             }
 
             async function loadHealth() {
@@ -1082,6 +1136,24 @@ export function getFrontendHTML(): string {
                 render(res.data);
             }
 
+            async function disableKey(keyId) {
+                const generation = adminRequestGeneration;
+                try {
+                    const res = await api('POST', ADMIN_KEYS + '/' + keyId + '/disable');
+                    if (res.stale) return;
+                    if (!res.ok) {
+                        showError(errorLine, 'Delete failed: ' + errorMessage(res));
+                        return;
+                    }
+                    showNotice('Key #' + keyId + ' deleted');
+                    await loadHealth();
+                } catch (error) {
+                    if (generation === adminRequestGeneration) {
+                        showError(errorLine, error instanceof Error ? error.message : String(error));
+                    }
+                }
+            }
+
             function render(health) {
                 lastHealth = health;
                 const providers = health.providers;
@@ -1091,6 +1163,8 @@ export function getFrontendHTML(): string {
                 }
                 chipsActive.textContent = keys.filter((k) => k.enabled).length + '/' + keys.length + ' active keys';
                 chipsFamilies.textContent = providers.length + (providers.length === 1 ? ' provider family' : ' provider families');
+                // Show/hide the New key button based on whether a provider is selected
+                addKeyBtn.classList.toggle('hidden', !selected);
                 renderRail(providers, keys);
                 renderTable(providers, keys);
             }
@@ -1180,13 +1254,30 @@ export function getFrontendHTML(): string {
                 const edit = document.createElement('button');
                 edit.type = 'button';
                 edit.className = 'btn btn-secondary text-xs py-1 px-2';
-                edit.setAttribute('aria-label', 'Edit ' + k.label);
-                edit.title = 'Edit ' + k.label;
+                edit.setAttribute('aria-label', 'Edit key #' + k.id);
+                edit.title = 'Edit key #' + k.id;
                 const icon = document.createElement('i');
                 icon.className = 'fa-solid fa-pen';
                 edit.appendChild(icon);
                 edit.addEventListener('click', () => openSheet('edit', k));
                 return edit;
+            }
+
+            function deleteButton(k) {
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'btn btn-secondary text-xs py-1 px-2 text-red-400 hover:text-red-300';
+                del.setAttribute('aria-label', 'Delete key #' + k.id);
+                del.title = 'Delete key #' + k.id;
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-trash';
+                del.appendChild(icon);
+                del.addEventListener('click', () => {
+                    if (confirm('Delete key #' + k.id + ' (' + (k.accountId || 'no account ID') + ')? This cannot be undone.')) {
+                        disableKey(k.id);
+                    }
+                });
+                return del;
             }
 
             function renderTable(providers, keys) {
@@ -1207,38 +1298,30 @@ export function getFrontendHTML(): string {
                     const tr = document.createElement('tr');
                     if (!k.enabled) tr.style.opacity = '.55';
 
-                    const keyCell = document.createElement('td');
-                    keyCell.className = 'p-2';
-                    const label = document.createElement('span');
-                    label.className = 'font-medium';
-                    label.textContent = k.label;
-                    keyCell.appendChild(label);
+                    const acctCell = document.createElement('td');
+                    acctCell.className = 'p-3 font-mono text-sm';
+                    acctCell.textContent = k.accountId || '—';
                     if (k.activeVersion !== null && k.activeVersion !== undefined) {
                         const ver = document.createElement('span');
-                        ver.className = 'opacity-60 text-xs ml-1';
+                        ver.className = 'opacity-60 text-xs ml-2';
                         ver.textContent = 'v' + k.activeVersion;
-                        keyCell.appendChild(ver);
+                        acctCell.appendChild(ver);
                     }
 
-                    const acctCell = document.createElement('td');
-                    acctCell.className = 'p-2 text-xs opacity-70';
-                    acctCell.textContent = k.accountId || '—';
-
                     const actions = document.createElement('td');
-                    actions.className = 'p-2 whitespace-nowrap';
+                    actions.className = 'p-3 whitespace-nowrap text-right';
                     const wrap = document.createElement('span');
                     wrap.className = 'inline-flex gap-2 items-center';
                     wrap.appendChild(keyToggle(k));
                     wrap.appendChild(editButton(k));
+                    wrap.appendChild(deleteButton(k));
                     actions.appendChild(wrap);
 
-                    tr.appendChild(keyCell);
                     tr.appendChild(acctCell);
                     tr.appendChild(actions);
                     keysBody.appendChild(tr);
                 });
                 emptyLine.classList.toggle('hidden', rows.length > 0);
-                addKeyBtn.classList.toggle('hidden', !family);
             }
 
             function openSheet(mode, key) {
@@ -1249,11 +1332,11 @@ export function getFrontendHTML(): string {
                 sheetKeyId = isEdit ? key.id : null;
                 sheetEyebrow.textContent = isEdit ? 'EDIT' : 'NEW';
                 sheetTitle.textContent = isEdit
-                    ? 'Edit key — ' + key.label + ' (' + key.providerId + (key.activeVersion !== null && key.activeVersion !== undefined ? ' · currently v' + key.activeVersion : '') + ')'
-                    : 'New key (' + selected + ') — will be saved as ' + nextLabel();
+                    ? 'Edit Key #' + key.id + ' (' + key.providerId + (key.activeVersion !== null && key.activeVersion !== undefined ? ' · v' + key.activeVersion : '') + ')'
+                    : 'New Key (' + selected + ')';
                 sheetNote.textContent = isEdit
                     ? 'Leave the token blank to keep the current version. Filling it rotates as part of save.'
-                    : 'Label is auto-assigned. Keys are sealed server-side on save.';
+                    : 'The key will be sealed server-side on save.';
                 sheetAcct.value = isEdit ? (key.accountId || '') : '';
                 sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined ? '(blank = keep v' + key.activeVersion + ')' : '';
                 sheetToken.value = '';
@@ -1340,9 +1423,9 @@ export function getFrontendHTML(): string {
                             showError(sheetError, errorMessage(res));
                             return;
                         }
-                        const label = res.data && res.data.label ? res.data.label : 'key';
+                        const keyId = res.data && res.data.id ? res.data.id : 'key';
                         const version = res.data && res.data.activeVersion ? ' — v' + res.data.activeVersion + ' active' : '';
-                        showNotice('Saved ' + label + version);
+                        showNotice('Saved key #' + keyId + version);
                         closeSheet();
                         loadHealth();
                     } else {
@@ -1366,7 +1449,7 @@ export function getFrontendHTML(): string {
                             sheetTitle.textContent = 'New key (' + selected + ') — will be saved as ' + nextLabel();
                             return;
                         }
-                        showNotice(label + ' added — token sealed server-side; re-test recommended.');
+                        showNotice('Key added — token sealed server-side; re-test recommended.');
                         closeSheet();
                         loadHealth();
                     }
@@ -1389,9 +1472,10 @@ export function getFrontendHTML(): string {
                 }
             });
 
-            button.addEventListener('click', openModal);
-            closeBtn.addEventListener('click', closeModal);
-            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+            button.addEventListener('click', () => { window.location.hash = '#admin'; });
+            backBtn.addEventListener('click', () => { window.location.hash = ''; });
+            window.addEventListener('hashchange', syncRoute);
+            window.addEventListener('popstate', syncRoute);
             unlockBtn.addEventListener('click', async () => {
                 const value = keyInput.value.trim();
                 if (!value) {
@@ -1401,9 +1485,11 @@ export function getFrontendHTML(): string {
                 adminKey = value;
                 keyInput.value = '';
                 hideError(errorLine);
-                unlockBtn.classList.add('hidden');
-                lockBtn.classList.remove('hidden');
+                gate.classList.add('hidden');
                 panel.classList.remove('hidden');
+                lockBtn.classList.remove('hidden');
+                chipsActive.classList.remove('hidden');
+                chipsFamilies.classList.remove('hidden');
                 await loadHealth();
             });
             lockBtn.addEventListener('click', lock);
@@ -1423,14 +1509,31 @@ export function getFrontendHTML(): string {
             document.addEventListener('keydown', (e) => {
                 if (e.key !== 'Escape') return;
                 if (!sheet.classList.contains('hidden')) closeSheet();
-                else if (!modal.classList.contains('hidden')) closeModal();
+                else if (window.location.hash === '#admin') window.location.hash = '';
             });
+            
+            // Sync theme toggle between generator and admin views
+            themeToggleAdmin.addEventListener('click', () => {
+                document.getElementById('themeToggle').click();
+            });
+            
+            // Sync logout between views
+            logoutButtonAdmin.addEventListener('click', () => {
+                document.getElementById('logoutButton').click();
+            });
+            
             window.addEventListener('awb-authchange', (e) => {
                 const authed = !!(e.detail && e.detail.authed);
                 button.classList.toggle('hidden', !authed);
-                if (!authed) lock();
+                logoutButtonAdmin.classList.toggle('hidden', !authed);
+                if (!authed && window.location.hash === '#admin') {
+                    window.location.hash = '';
+                }
             });
+            
             button.classList.toggle('hidden', logoutButton.classList.contains('hidden'));
+            logoutButtonAdmin.classList.toggle('hidden', logoutButton.classList.contains('hidden'));
+            syncRoute();
         })();
     </script>
 </body>

@@ -74,6 +74,7 @@ export function requiresAuth(path: string, method: string): boolean {
   const publicPaths = [
     "/",
     "/index.html",
+    "/admin",
     "/health",
     // OAuth Protected Resource Metadata (RFC 9728): unauthenticated
     // clients must resolve the resource_metadata pointer in 401s.

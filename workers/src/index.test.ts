@@ -122,9 +122,11 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     const html = await response.text();
     // Every element id the workbench script addresses must exist.
     for (const id of [
+      "generatorView",
+      "adminView",
       "adminWorkbenchButton",
-      "adminWorkbench",
-      "adminWorkbenchClose",
+      "adminBackBtn",
+      "adminGate",
       "adminKey",
       "adminUnlock",
       "adminLock",
@@ -142,6 +144,8 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
       "adminSheetError",
       "adminSheetSave",
       "adminSheetCancel",
+      "themeToggleAdmin",
+      "logoutButtonAdmin",
     ]) {
       expect(html).toContain('id="' + id + '"');
     }
@@ -167,5 +171,15 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     // The served UI mirrors the store's weight ceiling: it cannot import the
     // constant, so this pins the two together.
     expect(html).toContain('max="' + MAX_WEIGHT + '"');
+  });
+
+  test("GET /admin routes to the frontend", async () => {
+    const response = await worker.fetch(get("/admin"), env());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain('id="adminView"');
+    expect(html).toContain('id="adminGate"');
+    expect(html).toContain('id="generatorView"');
   });
 });

@@ -54,7 +54,7 @@ export default {
       }
 
       // Route: Frontend
-      if (path === "/" || path === "/index.html") {
+      if (path === "/" || path === "/index.html" || path === "/admin") {
         return serveFrontend();
       }
 
