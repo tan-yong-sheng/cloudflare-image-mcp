@@ -22,7 +22,7 @@ Both config files are gitignored, so none of this touches the PR:
   (`chromium.launch({ executablePath: "/usr/bin/google-chrome" })`) because
   Playwright's pinned chromium build is not downloaded in this environment.
 
-## What the run verified (30 checks, repeatable)
+## What the run verified (32 checks, repeatable)
 
 Journey: sign in through the login modal → admin button appears → panel hidden
 until the management key is entered → empty state → add (sheet announces the
@@ -45,12 +45,24 @@ Race scenarios, each asserted against the server as well as the UI:
    started from different sheets, so A completes while B is still in flight. A's
    cleanup must not re-enable the Save button, which would allow a duplicate
    submission; the later value must be the one stored.
+4. **Rapid double-toggle.** Two clicks land on the row's enable switch before the
+   first PATCH returns. Exactly one request may be issued, and the switch must
+   agree with the stored state afterwards.
+
+**Measure with raw mouse events.** Playwright's locator click retries its hit
+
+test; after the health refresh rebuilds the row it can land on the _new_ control,
+
+which measured Playwright rather than the page and produced a false failure here
+
+(2 requests) until the probe used fixed coordinates.
 
 **Negative controls.** With the PATCH sheet-scope guard removed, the two
 scenario-2 assertions fail (observed 24 of 26 at the time; the suite has since
 grown). With the `finally` guard narrowed back to the lock check alone, exactly
-the scenario-3 assertion fails (observed 29 of 30). The checks therefore detect
-the defects rather than restating the implementation.
+the scenario-3 assertion fails (observed 29 of 30). With the row switch's
+serialization removed, exactly the scenario-4 assertion fails (observed 31 of
+32). The checks therefore detect the defects rather than restating the code.
 
 ## Observations from the run
 
