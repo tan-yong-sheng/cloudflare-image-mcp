@@ -90,6 +90,19 @@ describe("router public paths", () => {
     expect(html).toContain("body.num_steps");
   });
 
+  test("generator readiness is server-rendered, not an unauthenticated health probe", async () => {
+    // ADR-001 UX fix: /api/admin/health is gated, so fetching it from the
+    // generator before login always 401/403s and the "no keys" warning
+    // never showed. Readiness is baked into the page instead.
+    const response = await worker.fetch(get("/"), env());
+    const html = await response.text();
+
+    // No PROVIDER_DB bound in this env -> no servable pool -> false.
+    expect(html).toContain("const HAS_CREDENTIALS = false;");
+    expect(html).toContain("applyCredentialWarning");
+    expect(html).not.toContain("fetch(API_BASE + '/admin/health'");
+  });
+
   test("unknown routes return 404", async () => {
     const response = await worker.fetch(get("/no-such-route"), env());
 

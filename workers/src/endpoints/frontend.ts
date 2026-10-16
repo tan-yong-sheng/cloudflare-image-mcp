@@ -3,7 +3,9 @@
 // Responsive web UI for image generation
 // ============================================================================
 
-export function getFrontendHTML(): string {
+export function getFrontendHTML(options?: {
+  hasCredentials?: boolean;
+}): string {
   return `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
@@ -518,6 +520,13 @@ export function getFrontendHTML(): string {
         // Configuration
         const API_BASE = '/v1';
 
+        // Credential readiness, baked at render time (ADR-001). The
+        // generator runs before login and /api/admin/health is gated, so a
+        // client fetch cannot tell an unconfigured pool from a 401/403.
+        // The admin workbench refreshes this from the health payload it is
+        // already authenticated to read.
+        const HAS_CREDENTIALS = ${options?.hasCredentials === true ? "true" : "false"};
+
         // State
         let currentImageUrl = null;
         let authToken = sessionStorage.getItem('api_key') || '';
@@ -604,6 +613,21 @@ export function getFrontendHTML(): string {
         const advancedIcon = document.getElementById('advancedIcon');
         const submitButton = document.getElementById('submitButton');
         const noKeysWarning = document.getElementById('noKeysWarning');
+
+        let credentialsConfigured = HAS_CREDENTIALS;
+        function applyCredentialWarning() {
+            noKeysWarning.classList.toggle('hidden', credentialsConfigured);
+            submitButton.disabled = !credentialsConfigured;
+            if (credentialsConfigured) {
+                submitButton.removeAttribute('title');
+            } else {
+                submitButton.title = 'No API keys configured';
+            }
+        }
+        function setCredentialsConfigured(hasCredentials) {
+            credentialsConfigured = hasCredentials;
+            applyCredentialWarning();
+        }
         const loadingOverlay = document.getElementById('loadingOverlay');
         const initialPrompt = document.getElementById('initialPrompt');
         const aiImage = document.getElementById('aiImage');
@@ -750,35 +774,8 @@ export function getFrontendHTML(): string {
         modelSelect.addEventListener('change', applyModelControls);
         loadModels();
 
-        // Check for API keys and show warning if none configured
-        async function checkCredentials() {
-            try {
-                const headers = {};
-                if (authToken) {
-                    headers['Authorization'] = 'Bearer ' + authToken;
-                }
-                const response = await fetch(API_BASE + '/admin/health', {
-                    method: 'GET',
-                    headers: headers,
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    const hasActiveKeys = data.keys && data.keys.some((k) => k.enabled);
-                    if (!hasActiveKeys) {
-                        noKeysWarning.classList.remove('hidden');
-                        submitButton.disabled = true;
-                        submitButton.title = 'No API keys configured';
-                    } else {
-                        noKeysWarning.classList.add('hidden');
-                        // Don't enable button - let existing logic handle that
-                    }
-                }
-            } catch (error) {
-                // If health check fails, don't show warning - might be permission issue
-                console.warn('Could not check credentials:', error);
-            }
-        }
-        checkCredentials();
+        // No credentials: warn before the user can hit the failing path.
+        applyCredentialWarning();
 
         // Generate image
         submitButton.addEventListener('click', async () => {
@@ -861,7 +858,7 @@ export function getFrontendHTML(): string {
                 settled = true;
                 clearTimeout(abortTimer);
                 loadingOverlay.classList.add('hidden');
-                submitButton.disabled = false;
+                submitButton.disabled = !credentialsConfigured;
             };
             const imageFailed = () => {
                 finish();
@@ -969,7 +966,13 @@ export function getFrontendHTML(): string {
                 if (error instanceof DOMException && error.name === 'AbortError') {
                     showGenerateError('Error: generation timed out after 120s — please retry');
                 } else {
-                    showGenerateError('Error: ' + (error instanceof Error ? error.message : String(error)));
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    // ADR-001: Improve error message for missing credentials
+                    if (!errorMsg || errorMsg === 'null' || errorMsg === 'undefined') {
+                        showGenerateError('Image generation failed. Please check your API credentials in the admin panel.');
+                    } else {
+                        showGenerateError('Error: ' + errorMsg);
+                    }
                 }
             }
         });
@@ -1180,6 +1183,12 @@ export function getFrontendHTML(): string {
                 lastHealth = health;
                 const providers = health.providers;
                 const keys = health.keys;
+                // Authenticated truth: a key counts only when it is enabled,
+                // positively weighted, and has a live credential version —
+                // the same set the pool loader joins (revoked_at IS NULL).
+                setCredentialsConfigured(
+                    keys.some((k) => k.enabled && k.weight > 0 && k.activeVersion !== null)
+                );
                 if (!selected || !providers.some((p) => p.id === selected)) {
                     selected = providers.length ? providers[0].id : '';
                 }
@@ -1540,8 +1549,10 @@ export function getFrontendHTML(): string {
 </html>`;
 }
 
-export function serveFrontend(): Response {
-  return new Response(getFrontendHTML(), {
+export function serveFrontend(options?: {
+  hasCredentials?: boolean;
+}): Response {
+  return new Response(getFrontendHTML(options), {
     headers: {
       "Content-Type": "text/html",
       "Cache-Control": "no-cache",

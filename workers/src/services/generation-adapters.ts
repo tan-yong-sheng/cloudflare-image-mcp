@@ -99,7 +99,15 @@ export class RestAITransport implements AITransport {
       }
     }
 
-    throw lastError;
+    // Zero accounts means nothing was attempted: without this fallback the
+    // bare `throw lastError` throws null, and the endpoint envelope turns
+    // that into the literal string "null" (ADR-001 empty-credential path).
+    throw (
+      lastError ??
+      new Error(
+        "No AI provider credentials configured. Add credentials via admin UI at /#admin"
+      )
+    );
   }
 
   /**

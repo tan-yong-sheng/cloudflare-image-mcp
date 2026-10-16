@@ -109,6 +109,22 @@ describe("RestAITransport account failover", () => {
     expect(failure).not.toBeInstanceOf(SyntaxError);
     expect((failure as Error).message).toMatch("unparseable JSON");
   });
+
+  test("zero accounts throws a clear Error, never null", async () => {
+    // ADR-001 empty-credential path: image-generator builds a transport
+    // with no accounts. A bare `throw lastError` here threw null, which the
+    // endpoint envelope rendered as the literal string "null".
+    const transport = new RestAITransport([], "d1");
+
+    const failure = await transport
+      .run(JSON_MODEL.id, { prompt: "a cat" }, JSON_MODEL)
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String((failure as Error).message)).toContain(
+      "No AI provider credentials configured"
+    );
+    expect(String((failure as Error).message)).not.toBe("null");
+  });
 });
 
 // Spec-review fix (#72 AC: "Weighted selection + failure cooldown on the

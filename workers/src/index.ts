@@ -55,7 +55,11 @@ export default {
 
       // Route: Frontend
       if (path === "/" || path === "/index.html" || path === "/admin") {
-        return serveFrontend();
+        // Credential readiness is part of the page, not a client probe:
+        // the admin health route is gated, so an unauthenticated page
+        // cannot tell "no credentials" from "403".
+        const pool = await getProviderPool(env);
+        return serveFrontend({ hasCredentials: pool.entries().length > 0 });
       }
 
       // Route: Health check

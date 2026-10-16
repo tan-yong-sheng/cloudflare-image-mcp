@@ -608,6 +608,24 @@ describe("database-only credential wiring (ADR-001)", () => {
     expect(said).toContain("admin UI");
   });
 
+  test("an empty pool surfaces a readable error, never the string null", async () => {
+    // Production-shaped fix: with no servable credentials the service used
+    // to build a real transport with zero accounts, and its bare
+    // `throw lastError` produced { error: "null" } in the API envelope.
+    const svc = new ImageGeneratorService(minimalEnv, {
+      store: new MemoryStore(),
+      pool: new ProviderPool([], { source: "d1" }),
+    });
+
+    const result = await svc.runOnce({ modelId: TEXT_MODEL, prompt: "a cat" });
+
+    expect(result.success).toBe(false);
+    expect(String(result.error)).not.toBe("null");
+    expect(String(result.error)).toContain(
+      "No AI provider credentials configured"
+    );
+  });
+
   // AC5-response fix (#72): "zero-secret-character assertions on logs AND
   // responses" — the log half was pinned, but no test scanned what the
   // service returns to callers. This drives runOnce + runMany through the
