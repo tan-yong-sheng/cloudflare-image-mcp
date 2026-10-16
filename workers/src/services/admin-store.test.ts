@@ -313,6 +313,34 @@ describe("admin store against the real migrations (S2)", () => {
     expect(auditRows(db).map((r) => r.action)).toEqual(["add", "update"]);
   });
 
+  test("update echoes the stored row, not the pre-commit snapshot", async () => {
+    // A concurrent save can commit between this call's pre-read and its own
+    // commit (the seal is the await point). The response must report what is
+    // stored, not the snapshot this caller started from.
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "race",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const concurrentSeal = async (token: string) => {
+      db.prepare("UPDATE provider_keys SET enabled = 0 WHERE id = ?").run(
+        added.id
+      );
+      return seal(token);
+    };
+    const out = await updateProviderKey(d1, concurrentSeal, {
+      keyId: added.id,
+      weight: 9,
+      apiToken: "token-v2",
+    });
+    expect(out.weight).toBe(9);
+    expect(out.enabled).toBe(false); // the pre-read still saw enabled = 1
+    expect(out.activeVersion).toBe(2);
+  });
+
   test("update with a token rotates in the same batch: revoke + insert", async () => {
     const db = freshDb();
     const d1 = asD1(db);

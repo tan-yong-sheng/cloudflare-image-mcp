@@ -397,10 +397,10 @@ function appendRotateWrites(
   writes: AdminWrite[],
   keyId: number,
   envelope: string,
-  current: { v: number | null } | null
+  current: number | null
 ): number {
-  const next = (current?.v ?? 0) + 1;
-  if (current?.v !== null && current?.v !== undefined) {
+  const next = (current ?? 0) + 1;
+  if (current !== null) {
     writes.push(
       write(
         "UPDATE credential_versions SET revoked_at = unixepoch() " +
@@ -440,12 +440,7 @@ export async function rotateProviderKey(
   assertTokenLength(token);
   const key = await keyRow(db, keyId);
   if (!key) throw new AdminStoreError(404, `unknown provider key ${keyId}`);
-  const current = await db
-    .prepare(
-      "SELECT MAX(version) AS v FROM credential_versions WHERE provider_key_id = ?"
-    )
-    .bind(keyId)
-    .first<{ v: number | null }>();
+  const current = await activeVersionOf(db, keyId);
   const envelope = await seal(token);
   const writes: AdminWrite[] = [];
   const next = appendRotateWrites(writes, keyId, envelope, current);
@@ -506,6 +501,20 @@ async function keyRowFull(
     )
     .bind(keyId)
     .first();
+}
+
+/** Highest credential version recorded for a key (null when unsealed). */
+async function activeVersionOf(
+  db: AdminD1,
+  keyId: number
+): Promise<number | null> {
+  const row = await db
+    .prepare(
+      "SELECT MAX(version) AS v FROM credential_versions WHERE provider_key_id = ?"
+    )
+    .bind(keyId)
+    .first<{ v: number | null }>();
+  return row?.v ?? null;
 }
 
 /**
@@ -580,17 +589,12 @@ export async function updateProviderKey(
   }
 
   let activeVersion: number | null;
-  const current = await db
-    .prepare(
-      "SELECT MAX(version) AS v FROM credential_versions WHERE provider_key_id = ?"
-    )
-    .bind(input.keyId)
-    .first<{ v: number | null }>();
+  const current = await activeVersionOf(db, input.keyId);
   if (token) {
     const envelope = await seal(token);
     activeVersion = appendRotateWrites(writes, input.keyId, envelope, current);
   } else {
-    activeVersion = current?.v ?? null;
+    activeVersion = current;
   }
 
   writes.push(
@@ -608,13 +612,28 @@ export async function updateProviderKey(
     }
     throw error;
   }
+  // Echo the stored row rather than the pre-commit snapshot: a concurrent save
+  // that touched another field has committed its own change by then, and the
+  // snapshot would report that field as unchanged. A present token is this
+  // request's own insert, so its version is already exact; without one the
+  // highest recorded version is re-read for the same reason.
+  const after = await keyRowFull(db, input.keyId);
+  if (!after) {
+    throw new AdminStoreError(
+      500,
+      `key ${input.keyId} is missing after update`
+    );
+  }
+  const echoedVersion = token
+    ? activeVersion
+    : await activeVersionOf(db, input.keyId);
   return {
     id: input.keyId,
-    label: key.label,
-    providerId: key.provider_id,
-    activeVersion,
-    weight,
-    enabled,
-    accountId: storedAccountId,
+    label: after.label,
+    providerId: after.provider_id,
+    activeVersion: echoedVersion,
+    weight: num(after.weight),
+    enabled: num(after.enabled) === 1,
+    accountId: after.external_account_id,
   };
 }
