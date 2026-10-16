@@ -1386,9 +1386,7 @@ export function getFrontendHTML(): string {
                             showError(sheetError, errorMessage(res));
                             return;
                         }
-                        const keyId = res.data && res.data.id ? res.data.id : 'key';
-                        const version = res.data && res.data.activeVersion ? ' — v' + res.data.activeVersion + ' active' : '';
-                        showNotice('Saved key #' + keyId + version);
+                        // Success - sheet closes, table refreshes (visual feedback sufficient)
                         closeSheet();
                         loadHealth();
                     } else {
@@ -1411,7 +1409,7 @@ export function getFrontendHTML(): string {
                             if (sheetScope !== sheetGeneration) return;
                             return;
                         }
-                        showNotice('Key added — token sealed server-side; re-test recommended.');
+                        // Success - sheet closes, table refreshes (visual feedback sufficient)
                         closeSheet();
                         loadHealth();
                     }
