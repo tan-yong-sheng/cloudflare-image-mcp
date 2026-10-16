@@ -22,7 +22,7 @@ Both config files are gitignored, so none of this touches the PR:
   (`chromium.launch({ executablePath: "/usr/bin/google-chrome" })`) because
   Playwright's pinned chromium build is not downloaded in this environment.
 
-## What the run verified (26 checks, twice, repeatable)
+## What the run verified (30 checks, repeatable)
 
 Journey: sign in through the login modal → admin button appears → panel hidden
 until the management key is entered → empty state → add (sheet announces the
@@ -41,10 +41,16 @@ Race scenarios, each asserted against the server as well as the UI:
 2. **Dismiss mid-save, then reopen.** Escape dismisses the sheet while the save
    is pending, then the sheet is reopened for the same key. The late response
    must not close the new sheet, retitle it, or print a notice.
+3. **Two saves on two sheets.** Save A (brief delay) and save B (long delay) are
+   started from different sheets, so A completes while B is still in flight. A's
+   cleanup must not re-enable the Save button, which would allow a duplicate
+   submission; the later value must be the one stored.
 
-**Negative control.** With the PATCH sheet-scope guard removed, exactly the two
-scenario-2 assertions fail (24/26), so those checks detect the real defect
-rather than restating the implementation.
+**Negative controls.** With the PATCH sheet-scope guard removed, the two
+scenario-2 assertions fail (observed 24 of 26 at the time; the suite has since
+grown). With the `finally` guard narrowed back to the lock check alone, exactly
+the scenario-3 assertion fails (observed 29 of 30). The checks therefore detect
+the defects rather than restating the implementation.
 
 ## Observations from the run
 
@@ -62,6 +68,8 @@ rather than restating the implementation.
 - The failed-add retitle guard (`sheetTitle` written after an awaited
   `loadHealth()`) is inspected, not behaviourally tested: reproducing it needs
   a rejected POST plus a dismissal during that await.
+- The token-length and weight messages are asserted by unit tests, not by the
+  browser run.
 - Anything about a deployed Worker: migrations applied to a real D1, the e2e
   admin spec, and `ADMIN_API_KEY` provisioning on staging are all out of scope.
 
