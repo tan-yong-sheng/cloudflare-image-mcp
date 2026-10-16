@@ -150,5 +150,15 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     // The management key must remain memory-only: never persisted.
     expect(html).not.toMatch(/sessionStorage\.(set|get)Item\('admin/);
     expect(html).not.toMatch(/localStorage.*admin/i);
+    // Locking invalidates in-flight admin requests: api() compares the
+    // generation it captured against the current one before a response may
+    // drive the UI, so a save that resolves after lock or logout cannot be
+    // reported as success.
+    const lockAt = html.indexOf("function lock()");
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(html.slice(lockAt, lockAt + 160)).toContain(
+      "adminRequestGeneration += 1"
+    );
+    expect(html).toContain("if (generation !== adminRequestGeneration)");
   });
 });
