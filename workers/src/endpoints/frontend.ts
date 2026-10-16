@@ -989,20 +989,30 @@ export function getFrontendHTML(): string {
 
             async function api(method, path, body) {
                 const generation = adminRequestGeneration;
-                const response = await fetch(path, {
-                    method: method,
-                    headers: headers(),
-                    body: body === undefined ? undefined : JSON.stringify(body)
-                });
-                if (generation !== adminRequestGeneration) {
-                    // Locked or logged out while this was in flight: it may
-                    // already have reached the server, but its result must not
-                    // drive the UI after the management key was cleared.
-                    return { ok: false, status: 0, data: null, stale: true };
+                // Locked or logged out while this was in flight: the request may
+                // already have reached the server, but its result must not drive
+                // the UI after the management key was cleared.
+                const stale = { ok: false, status: 0, data: null, stale: true };
+                let response;
+                try {
+                    response = await fetch(path, {
+                        method: method,
+                        headers: headers(),
+                        body: body === undefined ? undefined : JSON.stringify(body)
+                    });
+                } catch (error) {
+                    // A rejection after lock/logout is stale as well; every other
+                    // failure still reaches the caller's error handling.
+                    if (generation !== adminRequestGeneration) return stale;
+                    throw error;
                 }
+                if (generation !== adminRequestGeneration) return stale;
                 const text = await response.text();
                 let data = null;
                 try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
+                // Reading the body is asynchronous too, so a lock can land
+                // between the check above and this one.
+                if (generation !== adminRequestGeneration) return stale;
                 return { ok: response.ok, status: response.status, data: data };
             }
 
@@ -1229,6 +1239,7 @@ export function getFrontendHTML(): string {
                 sheetWeight.value = isEdit ? String(key.weight) : '1';
                 sheetEnabled.checked = isEdit ? !!key.enabled : true;
                 sheetSave.textContent = isEdit ? 'Save' : 'Add key';
+                sheetSave.disabled = false;
                 hideError(sheetError);
                 sheet.classList.remove('hidden');
                 sheetAcct.focus();
@@ -1279,6 +1290,7 @@ export function getFrontendHTML(): string {
                     return;
                 }
                 sheetSave.disabled = true;
+                const generation = adminRequestGeneration;
                 try {
                     if (isEdit) {
                         const body = {
@@ -1324,7 +1336,10 @@ export function getFrontendHTML(): string {
                 } catch (error) {
                     showError(sheetError, error instanceof Error ? error.message : String(error));
                 } finally {
-                    sheetSave.disabled = false;
+                    // Only the live request may reset the button: one that keeps
+                    // running past lock/logout must not touch the sheet, and
+                    // openSheet owns the state for the next open.
+                    if (generation === adminRequestGeneration) sheetSave.disabled = false;
                 }
             });
 
