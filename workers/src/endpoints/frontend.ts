@@ -1180,7 +1180,7 @@ export function getFrontendHTML(): string {
 
                     const acctCell = document.createElement('td');
                     acctCell.className = 'p-2 text-xs opacity-70';
-                    acctCell.textContent = k.externalAccountId || '—';
+                    acctCell.textContent = k.accountId || '—';
 
                     const actions = document.createElement('td');
                     actions.className = 'p-2 whitespace-nowrap';
@@ -1205,11 +1205,11 @@ export function getFrontendHTML(): string {
                 sheetEyebrow.textContent = isEdit ? 'EDIT' : 'NEW';
                 sheetTitle.textContent = isEdit
                     ? 'Edit key — ' + key.label + ' (' + key.providerId + (key.activeVersion !== null && key.activeVersion !== undefined ? ' · currently v' + key.activeVersion : '') + ')'
-                    : 'New key (' + selected + ')';
+                    : 'New key (' + selected + ') — will be saved as ' + nextLabel();
                 sheetNote.textContent = isEdit
                     ? 'Leave the token blank to keep the current version. Filling it rotates as part of save.'
                     : 'Label is auto-assigned. Keys are sealed server-side on save.';
-                sheetAcct.value = isEdit ? (key.externalAccountId || '') : '';
+                sheetAcct.value = isEdit ? (key.accountId || '') : '';
                 sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined ? '(blank = keep v' + key.activeVersion + ')' : '';
                 sheetToken.value = '';
                 sheetToken.type = 'password';
@@ -1298,6 +1298,10 @@ export function getFrontendHTML(): string {
                         });
                         if (!res.ok) {
                             showError(sheetError, errorMessage(res));
+                            // Re-read the pool, then re-derive: a retry must not
+                            // repeat the same colliding label from a stale read.
+                            await loadHealth();
+                            sheetTitle.textContent = 'New key (' + selected + ') — will be saved as ' + nextLabel();
                             return;
                         }
                         showNotice(label + ' added — token sealed server-side; re-test recommended.');
