@@ -545,28 +545,29 @@ describe("runMany", () => {
   });
 });
 
-describe("dual-read credential wiring (S4)", () => {
-  const envWithAIAccounts = {
-    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
-    CLOUDFLARE_API_TOKEN: "deploy-token",
-    AI_ACCOUNTS: JSON.stringify([
-      { account_id: "env-account", api_token: "env-token" },
-    ]),
+describe("database-only credential wiring (ADR-001)", () => {
+  const minimalEnv = {
     IMAGE_EXPIRY_HOURS: "24",
     IMAGE_BUCKET: {},
   } as unknown as Env;
 
   function constructWith(pool: ProviderPool | undefined): string {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      new ImageGeneratorService(envWithAIAccounts, {
+      new ImageGeneratorService(minimalEnv, {
         transport: new MemoryTransport(),
         store: new MemoryStore(),
         pool,
       });
-      return warn.mock.calls.map((c) => String(c[0])).join("\n");
+      const allLogs = [
+        ...warn.mock.calls.map((c) => String(c[0])),
+        ...error.mock.calls.map((c) => String(c[0])),
+      ].join("\n");
+      return allLogs;
     } finally {
       warn.mockRestore();
+      error.mockRestore();
     }
   }
 
@@ -587,57 +588,24 @@ describe("dual-read credential wiring (S4)", () => {
     },
   ];
 
-  test("a servable D1 pool wins over env AI_ACCOUNTS, labels only in logs", () => {
-    const said = constructWith(new ProviderPool(d1Keys));
+  test("a servable D1 pool is used, labels only in logs", () => {
+    const said = constructWith(new ProviderPool(d1Keys, { source: "d1" }));
     expect(said).toContain("AI inference path: d1 with 2 account(s)");
     expect(said).not.toContain("d1-t1");
     expect(said).not.toContain("d1-a1");
-    expect(said).not.toContain("env-token");
   });
 
-  test("a pool with no servable keys falls through to env dual-read", () => {
+  test("a pool with no servable keys logs error (ADR-001)", () => {
     const disabled = d1Keys.map((k) => ({ ...k, enabled: false }));
-    const said = constructWith(new ProviderPool(disabled));
-    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
+    const said = constructWith(new ProviderPool(disabled, { source: "d1" }));
+    expect(said).toContain("No AI provider credentials configured");
+    expect(said).toContain("admin UI");
   });
 
-  test("no pool keeps the env path exactly as before", () => {
+  test("no pool logs error (ADR-001)", () => {
     const said = constructWith(undefined);
-    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
-  });
-
-  // Spec-review fix (#72): index.ts always passes a pool, and the loader
-  // falls back to env credentials when D1 is empty — so the log must carry
-  // the pool's REAL source, or the runbook's verification signal would say
-  // "d1" even while serving AI_ACCOUNTS (false staging evidence).
-  test("a pool whose source is AI_ACCOUNTS logs AI_ACCOUNTS, not d1", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      new ImageGeneratorService(envWithAIAccounts, {
-        transport: new MemoryTransport(),
-        store: new MemoryStore(),
-        pool: new ProviderPool(
-          [
-            {
-              label: "AI_ACCOUNTS[0]",
-              accountId: "env-account",
-              apiToken: "env-token",
-              weight: 1,
-              enabled: true,
-            },
-          ],
-          { source: "AI_ACCOUNTS" }
-        ),
-      });
-      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
-      expect(said).toContain(
-        "AI inference path: AI_ACCOUNTS with 1 account(s)"
-      );
-      expect(said).not.toContain("d1");
-      expect(said).not.toContain("env-token");
-    } finally {
-      warn.mockRestore();
-    }
+    expect(said).toContain("No AI provider credentials configured");
+    expect(said).toContain("admin UI");
   });
 
   // AC5-response fix (#72): "zero-secret-character assertions on logs AND

@@ -159,12 +159,8 @@ export class ImageGeneratorService {
       )
     );
 
-    // Dual-read (R1b, #72): a servable pool wins; the env paths below
-    // remain the fallback, so a half-migrated store never takes inference
-    // down. The log and transport tag carry the pool's REAL source — the
-    // loader falls back to env credentials, so a hardcoded "d1" would make
-    // the runbook's verification signal lie. Labels and counts only, never
-    // secret values.
+    // Database-only credentials (ADR-001): a servable pool is required.
+    // When no pool is provided or pool is empty, error clearly.
     const pool = deps?.pool;
     const poolEntries = pool?.entries() ?? [];
     if (pool && poolEntries.length > 0) {
@@ -181,68 +177,12 @@ export class ImageGeneratorService {
       return;
     }
 
-    // Build AI accounts list:
-    // 1. AI_ACCOUNTS (JSON array) if set and valid
-    // 2. Else fall back to CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
-    const fallback = [
-      {
-        account_id: env.CLOUDFLARE_ACCOUNT_ID,
-        api_token: env.CLOUDFLARE_API_TOKEN,
-      },
-    ];
-
-    /**
-     * Which credential pool is active (observability label only, never a secret value):
-     * 'AI_ACCOUNTS' when multi-account inference is configured, 'fallback' when
-     * using the deploy credentials (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).
-     */
-    let credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback";
-    let aiAccounts = fallback;
-
-    if (env.AI_ACCOUNTS) {
-      try {
-        const parsed = JSON.parse(env.AI_ACCOUNTS) as {
-          account_id: string;
-          api_token: string;
-        }[];
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          console.warn(
-            "AI_ACCOUNTS is empty or not an array, falling back to deploy credentials"
-          );
-          aiAccounts = fallback;
-        } else {
-          const valid = parsed.every((a) => a.account_id && a.api_token);
-          if (!valid) {
-            console.warn(
-              "AI_ACCOUNTS entries missing account_id/api_token, falling back to deploy credentials"
-            );
-            aiAccounts = fallback;
-          } else {
-            aiAccounts = parsed;
-            credentialSource = "AI_ACCOUNTS";
-          }
-        }
-      } catch {
-        console.warn(
-          "AI_ACCOUNTS is not valid JSON, falling back to deploy credentials"
-        );
-        aiAccounts = fallback;
-      }
-    } else {
-      aiAccounts = fallback;
-    }
-
-    // Observability: name the active inference path (counts only, never values).
-    if (credentialSource === "AI_ACCOUNTS") {
-      console.warn(
-        `AI inference path: AI_ACCOUNTS with ${aiAccounts.length} account(s)`
-      );
-    } else {
-      console.warn("AI inference path: fallback to deploy credentials");
-    }
-
-    this.transport =
-      deps?.transport ?? new RestAITransport(aiAccounts, credentialSource);
+    // No servable credentials: error clearly (ADR-001)
+    console.error(
+      "No AI provider credentials configured. Add credentials via admin UI at /#admin"
+    );
+    // Provide empty transport that will error on first use
+    this.transport = deps?.transport ?? new RestAITransport([], "d1");
     this.store = deps?.store ?? new R2StorageService(env);
   }
 
