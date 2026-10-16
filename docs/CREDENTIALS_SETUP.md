@@ -160,7 +160,10 @@ commit it, and delete it after applying.
 The import is one-shot; day-to-day key management goes through the
 admin API (`/api/admin/*`, R2 #74), behind two gates: the usual login
 bearer, then the `ADMIN_API_KEY` management key in the `X-Admin-Key`
-header (wrong key → 403, checked constant-time).
+header (wrong key → 403, checked constant-time). Both gates must be
+configured: with `API_KEYS` unset the app-wide auth bypass would leave
+admin on the management key alone, so `/api/admin/*` refuses with 403 in
+that state.
 
 - **Health** — `GET /api/admin/health` returns providers, key labels
   with weights/flags/active versions, the exposure overlay rows, and the

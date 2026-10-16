@@ -215,7 +215,10 @@ export async function handleAdminHealth(
 
 /**
  * Route admin requests. The bearer gate already ran in index.ts; this
- * module owns the management-key gate and the method dispatch. Writes go
+ * module owns the management-key gate and the method dispatch. That
+ * bearer gate only exists when API_KEYS is set — the app-wide auth bypass
+ * treats unset API_KEYS as authenticated — so this module refuses admin
+ * outright in that state instead of degrading to a single gate. Writes go
  * through an injectable store (deps.adminStore, default d1AdminStore):
  * the store executes the real SQL against any D1Database-shaped handle,
  * so the S2 harness runs the same statements as production against the
@@ -228,6 +231,10 @@ export async function handleAdmin(
   deps?: AdminDeps
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
+  if (!env.API_KEYS) {
+    console.warn("admin API refused: API_KEYS is not configured");
+    return forbidden();
+  }
   if (!(await checkAdminKey(request, env))) return forbidden();
   try {
     const store = deps?.adminStore;

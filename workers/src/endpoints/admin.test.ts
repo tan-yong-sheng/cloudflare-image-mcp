@@ -81,6 +81,22 @@ describe("admin health (R2)", () => {
     expect(response.status).toBe(403);
   });
 
+  test("an unconfigured bearer gate refuses admin even with the right management key", async () => {
+    // Gate one exists only when API_KEYS is set, and authenticateRequest
+    // bypasses auth entirely when it is not — so admin must refuse rather
+    // than silently run on the management key alone.
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).API_KEYS;
+    const response = await worker.fetch(
+      get(
+        "/api/admin/health",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      unconfigured
+    );
+    expect(response.status).toBe(403);
+  });
+
   test("oversized admin key fails closed with 403 before hashing", async () => {
     const response = await worker.fetch(
       get(
