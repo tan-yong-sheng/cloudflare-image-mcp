@@ -1328,12 +1328,10 @@ export function getFrontendHTML(): string {
             }
 
             function nextLabel() {
-                const keys = lastHealth ? lastHealth.keys : [];
-                const max = keys.reduce((n, k) => {
-                    const m = /^imported-(\d+)$/.exec(k.label);
-                    return m ? Math.max(n, parseInt(m[1], 10)) : n;
-                }, 0);
-                return 'imported-' + (max + 1);
+                // Generate timestamp-based label to avoid collisions
+                // Format: key-1729123456789
+                // User never sees this (labels hidden from UI)
+                return 'key-' + Date.now();
             }
 
             sheetSave.addEventListener('click', async () => {
@@ -1407,11 +1405,10 @@ export function getFrontendHTML(): string {
                         if (sheetScope !== sheetGeneration) return;
                         if (!res.ok) {
                             showError(sheetError, errorMessage(res));
-                            // Re-read the pool, then re-derive: a retry must not
-                            // repeat the same colliding label from a stale read.
+                            // Re-read the pool then retry with fresh label
+                            // (timestamp-based labels should never collide, but refresh just in case)
                             await loadHealth();
                             if (sheetScope !== sheetGeneration) return;
-                            sheetTitle.textContent = 'New key (' + selected + ') — will be saved as ' + nextLabel();
                             return;
                         }
                         showNotice('Key added — token sealed server-side; re-test recommended.');
