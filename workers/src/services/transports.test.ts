@@ -78,6 +78,18 @@ describe("transport registry", () => {
     }
   });
 
+  test("an inherited object property name is not a transport (C4 review)", () => {
+    // `"toString" in registry` is true for any object literal, and
+    // `registry.toString` is a function, so an `in` check would let a
+    // config typo reach dispatch and fail as a TypeError instead.
+    expect("toString" in TRANSPORT_FACTORIES).toBe(true);
+    for (const inherited of ["toString", "constructor", "valueOf"]) {
+      expect(() => assertKnownTransports([inherited])).toThrow(
+        UnknownTransportError
+      );
+    }
+  });
+
   test("the cloudflare entry builds a REST transport from the pool", () => {
     const transport = TRANSPORT_FACTORIES[CF](pool("cf-token"));
     expect(typeof transport.run).toBe("function");
@@ -117,6 +129,11 @@ describe("dispatching transport", () => {
     });
     await expect(
       dispatcher.run(TEXT_MODEL, {}, modelWith("typo-rest"))
+    ).rejects.toThrow(UnknownTransportError);
+    // An inherited name is not a factory either, even though the pool
+    // resolves: dispatch must refuse it the same way.
+    await expect(
+      dispatcher.run(TEXT_MODEL, {}, modelWith("toString"))
     ).rejects.toThrow(UnknownTransportError);
   });
 

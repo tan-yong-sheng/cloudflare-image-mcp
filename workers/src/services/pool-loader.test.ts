@@ -4,13 +4,14 @@
 // Seam: loadProviderPools(env, deps) — injected D1 row reader + envelope
 // opener, no D1 wire, no crypto internals. Proves D1 envelopes open with
 // the data key into servable per-provider pools; empty D1 returns no pools;
-// a missing data key errors and returns no pools; an unreadable store
-// returns no pools; nothing secret reaches the logs.
+// an unreadable store or a missing data key rejects (so the cache can keep
+// serving the previous pools); legacy environment variables have no effect;
+// nothing secret reaches the logs.
 
 import { describe, expect, test, vi } from "vitest";
 import { loadProviderPools } from "./pool-loader.js";
 import type { ProviderPoolEntry } from "./provider-pools.js";
-import type { PoolRow } from "./pool-source.js";
+import type { PoolRow } from "./pool-loader.js";
 
 const ENV = {
   PROVIDER_DATA_KEY: "data-key",
@@ -102,14 +103,16 @@ describe("pool loader (F1)", () => {
     }
   });
 
-  test("D1 rows without a data key return no pools with error", async () => {
+  test("D1 rows without a data key reject with error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const entries = await loadProviderPools({} as any, {
+      const loading = loadProviderPools({} as any, {
         readRows: async () => ROWS,
         openEnvelope: async () => "x",
       });
-      expect(entries).toEqual([]);
+      // Rejects rather than resolving to no pools: the cache distinguishes
+      // "cannot read credentials" from "there are none".
+      await expect(loading).rejects.toThrow(/PROVIDER_DATA_KEY/);
       const said = error.mock.calls.map((c) => String(c[0])).join("\n");
       expect(said).toMatch(/PROVIDER_DATA_KEY/i);
       expect(said).not.toContain("env-1");
@@ -118,22 +121,48 @@ describe("pool loader (F1)", () => {
     }
   });
 
-  test("an unreadable D1 returns no pools (ADR-001)", async () => {
+  test("an unreadable D1 rejects (ADR-001)", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const opener = vi.fn();
-      const entries = await loadProviderPools(ENV, {
+      const loading = loadProviderPools(ENV, {
         readRows: async () => {
           throw new Error("D1 unavailable");
         },
         openEnvelope: opener,
       });
+      await expect(loading).rejects.toThrow(/D1 unavailable/);
       expect(opener).not.toHaveBeenCalled();
-      expect(entries).toEqual([]);
       const said = error.mock.calls.map((c) => String(c[0])).join("\n");
       expect(said).toMatch(/D1 read failed/i);
     } finally {
       error.mockRestore();
+    }
+  });
+
+  test("legacy environment variables have no effect (ADR-001)", async () => {
+    // The resolver that used to read these is gone. This pins the guarantee
+    // on the production path: only D1 rows can produce credentials, so a
+    // deployment with old env vars and an empty store stays empty.
+    const envWithLegacyVars = {
+      PROVIDER_DATA_KEY: "data-key",
+      CLOUDFLARE_ACCOUNT_ID: "ignored-account",
+      CLOUDFLARE_API_TOKEN: "ignored-token",
+      AI_ACCOUNTS: JSON.stringify([
+        { account_id: "ignored", api_token: "ignored" },
+      ]),
+    } as any;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const opener = vi.fn();
+      const entries = await loadProviderPools(envWithLegacyVars, {
+        readRows: async () => [],
+        openEnvelope: opener,
+      });
+      expect(entries).toEqual([]);
+      expect(opener).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
     }
   });
 
@@ -189,15 +218,15 @@ describe("loader source truth", () => {
     expect(emptyD1).toEqual([]);
   });
 
-  test("a missing data key returns no pools with error", async () => {
+  test("a missing data key rejects", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const noKey = { ...minimalEnv, PROVIDER_DATA_KEY: undefined };
-      const entries = await loadProviderPools(noKey, {
+      const loading = loadProviderPools(noKey, {
         ...deps,
         readRows: async () => [row("k1")],
       });
-      expect(entries).toEqual([]);
+      await expect(loading).rejects.toThrow(/PROVIDER_DATA_KEY is not set/i);
       const said = error.mock.calls.map((c) => String(c[0])).join("\n");
       expect(said).toMatch(/PROVIDER_DATA_KEY is not set/i);
     } finally {

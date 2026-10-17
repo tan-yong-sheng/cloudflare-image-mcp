@@ -3,16 +3,29 @@
 // ============================================================================
 // Async because envelope opening is async. D1 rows open with PROVIDER_DATA_KEY
 // into pool credentials. Database-only: no environment variable fallback.
-// A missing key or unopenable envelope yields no servable pool (clear error
-// path). Rows are grouped by provider_id, so each provider gets its own
-// pool and its own cooldown state — one provider's parked keys can never
-// absorb another's requests. Labels only in logs; envelopes and tokens never
-// logged.
+// A load that cannot happen — unreadable store, no data key — throws, so the
+// snapshot cache keeps serving the previous pools instead of replacing them
+// with none; a store that legitimately has no rows returns no pools. Rows are
+// grouped by provider_id, so each provider gets its own pool and its own
+// cooldown state — one provider's parked keys can never absorb another's
+// requests. Labels only in logs; envelopes and tokens never logged.
 
 import type { Env } from "../types.js";
 import { ProviderPool, type PoolKey } from "./provider-pool.js";
 import type { ProviderPoolEntry } from "./provider-pools.js";
-import { resolvePoolSource, type PoolRow } from "./pool-source.js";
+
+/** One D1 credential row as the loader sees it (envelope still sealed). */
+export interface PoolRow {
+  /** Owning providers row; groups credentials into per-provider pools. */
+  providerId: string;
+  /** The owning provider's transport key (providers.transport). */
+  transport: string;
+  label: string;
+  accountId: string;
+  envelope: string;
+  weight: number;
+  enabled: boolean;
+}
 
 export interface PoolLoaderDeps {
   readRows: () => Promise<PoolRow[]>;
@@ -20,11 +33,13 @@ export interface PoolLoaderDeps {
 }
 
 /**
- * Load the servable pools from D1 rows (envelopes opened with PROVIDER_DATA_KEY,
- * ADR-001). Returns an empty list on any error (D1 outage, no data key); a
- * provider with no rows is simply absent, which is the same shape readiness
- * and routing read. Providers are keyed by provider_id and tagged with the
- * transport their `providers` row declares.
+ * Load the servable pools from D1 rows (envelopes opened with
+ * PROVIDER_DATA_KEY, ADR-001). Rejects when the store cannot be read or the
+ * data key is missing: both are failures the caller must distinguish from
+ * "no credentials configured", and the snapshot cache's stale-serving path
+ * depends on that distinction. A provider with no rows is simply absent,
+ * which is the same shape readiness and routing read. Providers are keyed by
+ * provider_id and tagged with the transport their `providers` row declares.
  */
 export async function loadProviderPools(
   env: Env,
@@ -33,9 +48,12 @@ export async function loadProviderPools(
   let rows: PoolRow[];
   try {
     rows = await deps.readRows();
-  } catch {
+  } catch (error) {
+    // Propagate, never resolve to []: the cache keeps the previous pools
+    // only when this rejects, so swallowing a D1 blip here would replace
+    // working credentials with none until the next successful load.
     console.error("provider pool: D1 read failed. Cannot load credentials.");
-    return [];
+    throw error;
   }
   if (rows.length === 0) {
     console.warn(
@@ -46,10 +64,14 @@ export async function loadProviderPools(
 
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
+    // Rows exist but cannot be opened: a configuration failure, not an
+    // empty store, so it must not resolve to "no credentials" either.
     console.error(
       "D1 provider rows exist but PROVIDER_DATA_KEY is not set. Cannot decrypt credentials."
     );
-    return [];
+    throw new Error(
+      "PROVIDER_DATA_KEY is not set; cannot decrypt provider credentials"
+    );
   }
 
   // Group rows by provider so each pool holds one provider's credentials.
@@ -73,7 +95,7 @@ export async function loadProviderPools(
       });
     } catch {
       // Unopenable envelope: park the key by disabling it — it stays
-      // visible in labels(), never picked.
+      // visible in labels(), never picked, and never counted servable.
       console.warn(
         `provider pool: skipping unopenable credential "${row.label}"`
       );

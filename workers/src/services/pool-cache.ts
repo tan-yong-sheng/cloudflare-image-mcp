@@ -5,11 +5,13 @@
 // load once per isolate, then a single-row config_versions poll (cheap)
 // decides whether to reload both payloads together. A TTL window collapses
 // bursts; a failed version query or a failed reload serves the stale
-// snapshot; a failed overlay load drops the overlay — a D1 blip must never
-// take inference down. Without a version source the snapshot reloads
-// after each TTL window. Clock, version source, and loaders are injected
-// for deterministic tests; production deps read PROVIDER_DB and open
-// envelopes with PROVIDER_DATA_KEY via loadProviderPools.
+// snapshot; a failed initial load serves "no credentials"; a failed overlay
+// load drops the overlay — a D1 blip must never take inference down. Without
+// a version source the snapshot reloads after each TTL window. Clock, version
+// source, and loaders are injected for deterministic tests; production deps
+// read PROVIDER_DB and open envelopes with PROVIDER_DATA_KEY via
+// loadProviderPools, whose rejection on an unreadable store is what keeps the
+// stale snapshot in place.
 
 import type { Env } from "../types.js";
 import { ProviderPools, type ProviderPoolEntry } from "./provider-pools.js";
@@ -66,10 +68,27 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
   const ttl = d.ttlMs ?? DEFAULT_TTL_MS;
 
   if (!snapshot) {
-    const { pools, overlay } = await loadBoth(d);
+    // A cold start has no previous snapshot to fall back on, and a failing
+    // load must not take the route down: serve "no credentials" and retry
+    // on a later TTL window. version stays null so the version-match
+    // shortcut below cannot pin an empty snapshot in place after the store
+    // recovers. The refresh path keeps the previous snapshot instead.
+    const loaded = await loadBoth(d).catch(() => null);
+    if (!loaded) {
+      console.warn(
+        "config snapshot cache: initial load failed, serving no credentials"
+      );
+      snapshot = {
+        pools: new ProviderPools([]),
+        overlay: new Map(),
+        version: null,
+        checkedAt: now,
+      };
+      return snapshot;
+    }
     snapshot = {
-      pools,
-      overlay,
+      pools: loaded.pools,
+      overlay: loaded.overlay,
       version: await readVersionOrNull(d),
       checkedAt: now,
     };

@@ -17,6 +17,9 @@ import {
 } from "./pool-cache.js";
 import { ProviderPool } from "./provider-pool.js";
 import type { ProviderPools } from "./provider-pools.js";
+import type { ProviderPoolEntry } from "./provider-pools.js";
+import { loadProviderPools } from "./pool-loader.js";
+import type { PoolRow } from "./pool-loader.js";
 import type { Env } from "../types.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_API_TOKEN: "t" } as Env;
@@ -166,6 +169,72 @@ describe("pool cache (F2)", () => {
     const stale = await getProviderPools(ENV, f.deps);
     expect(stale).toBe(first);
     expect(f.counts().loads).toBe(1);
+  });
+
+  // The two tests below cross the F2/S4 seam on purpose: the cache tests
+  // above inject a loader that throws, so they passed while the production
+  // loader swallowed a D1 failure and resolved to [] — a blip replaced good
+  // credentials with none. These drive the real loader through the cache.
+  const d1Row = {
+    providerId: "cloudflare",
+    transport: "cloudflare-rest",
+    label: "k1",
+    accountId: "a1",
+    envelope: "env-1",
+    weight: 1,
+    enabled: true,
+  } satisfies PoolRow;
+
+  function loaderDeps(readRows: () => Promise<PoolRow[]>) {
+    return (): Promise<ProviderPoolEntry[]> =>
+      loadProviderPools({ ...ENV, PROVIDER_DATA_KEY: "data-key" } as Env, {
+        readRows,
+        openEnvelope: async () => "token",
+      });
+  }
+
+  test("a real loader failure on refresh keeps the previous pools", async () => {
+    let failing = false;
+    const f = makeFakes();
+    const deps: PoolCacheDeps = {
+      ...f.deps,
+      loadPools: loaderDeps(async () => {
+        if (failing) throw new Error("D1 unavailable");
+        return [d1Row];
+      }),
+    };
+
+    const first = await getProviderPools(ENV, deps);
+    expect(labelsOf(first)).toEqual(["k1"]);
+
+    failing = true;
+    f.advance(1_001);
+    f.bump();
+    const stale = await getProviderPools(ENV, deps);
+    expect(stale).toBe(first);
+    expect(labelsOf(stale)).toEqual(["k1"]);
+  });
+
+  test("a real loader failure at cold start serves no credentials, then recovers", async () => {
+    let failing = true;
+    const f = makeFakes();
+    const deps: PoolCacheDeps = {
+      ...f.deps,
+      loadPools: async () => {
+        if (failing) throw new Error("D1 unavailable");
+        return f.deps.loadPools();
+      },
+    };
+
+    const cold = await getProviderPools(ENV, deps);
+    expect(cold.hasAnyServable()).toBe(false);
+
+    // Recovery must not need a config-version bump: the empty cold snapshot
+    // records version null, so the version-match shortcut cannot pin it.
+    failing = false;
+    f.advance(1_001);
+    const recovered = await getProviderPools(ENV, deps);
+    expect(labelsOf(recovered)).toEqual(["v1"]);
   });
 
   test("without an overlay loader the overlay is an empty map", async () => {

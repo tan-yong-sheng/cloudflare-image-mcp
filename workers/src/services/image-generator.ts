@@ -182,12 +182,12 @@ export class ImageGeneratorService {
       return;
     }
 
-    // No servable credentials: error clearly (ADR-001). The dispatcher
-    // reports it per request, naming the transport that could not be
-    // served, instead of failing with a bare null.
-    console.error(
-      "No AI provider credentials configured. Add credentials via admin UI at /#admin"
-    );
+    // No servable credentials: nothing to serve, but no error logged here.
+    // The pool loader already reports this once per snapshot load, and the
+    // dispatcher reports it per request with the transport named — this
+    // constructor runs for every MCP/OpenAI request (and hourly on the cron
+    // path, which never generates), so logging it here was both duplicate
+    // and, on the cron, a false alarm.
     this.transport = deps?.transport ?? dispatch(pools);
   }
 

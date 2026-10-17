@@ -55,14 +55,25 @@ export function noCredentialsError(transport: string): Error {
   );
 }
 
-/** Throw UnknownTransportError for the first key absent from the registry. */
+/** Throw UnknownTransportError for the first key the registry cannot serve. */
 export function assertKnownTransports(
   transports: Iterable<string>,
   registry: Readonly<Record<string, TransportFactory>> = TRANSPORT_FACTORIES
 ): void {
   for (const key of new Set(transports)) {
-    if (!(key in registry)) throw new UnknownTransportError(key);
+    // Own property, not `in`: every object inherits `toString`,
+    // `constructor`, and friends, so an inherited name would pass this
+    // check and then resolve an inherited member at request time.
+    if (!isRegistered(registry, key)) throw new UnknownTransportError(key);
   }
+}
+
+/** A registry key that owns a buildable factory (never an inherited name). */
+function isRegistered(
+  registry: Readonly<Record<string, TransportFactory>>,
+  key: string
+): boolean {
+  return Object.hasOwn(registry, key) && typeof registry[key] === "function";
 }
 
 /**
@@ -96,13 +107,16 @@ export class DispatchingAITransport implements AITransport {
     const cached = this.resolved.get(key);
     if (cached) return cached;
 
-    const factory = this.deps.factories[key];
-    if (!factory) throw new UnknownTransportError(key);
+    // Same own-property rule as assertKnownTransports: an injected registry
+    // that is missing the key (or carries an inherited name) fails loudly
+    // here instead of resolving to undefined.
+    if (!isRegistered(this.deps.factories, key))
+      throw new UnknownTransportError(key);
 
     const pool = this.deps.poolFor(key);
     if (!pool) throw noCredentialsError(key);
 
-    const transport = factory(pool);
+    const transport = this.deps.factories[key](pool);
     this.resolved.set(key, transport);
     return transport;
   }

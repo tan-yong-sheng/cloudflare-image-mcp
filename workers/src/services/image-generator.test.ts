@@ -607,17 +607,21 @@ describe("database-only credential wiring (ADR-001)", () => {
     expect(said).not.toContain("d1-a1");
   });
 
-  test("a pool with no servable keys logs error (ADR-001)", () => {
+  test("no servable keys do not log on construction (log-spam fix)", () => {
+    // Replaces the old "logs error" pin: the loader reports this once per
+    // snapshot load and the dispatcher reports it per request, so logging
+    // it here fired on every request — and hourly on the cron path, which
+    // never generates — which made the false alarm outnumber the signal.
     const disabled = d1Keys.map((k) => ({ ...k, enabled: false }));
-    const said = constructWith(new ProviderPool(disabled, { source: "d1" }));
-    expect(said).toContain("No AI provider credentials configured");
-    expect(said).toContain("admin UI");
+    expect(
+      constructWith(new ProviderPool(disabled, { source: "d1" }))
+    ).not.toContain("No AI provider credentials configured");
   });
 
-  test("no pool logs error (ADR-001)", () => {
-    const said = constructWith(undefined);
-    expect(said).toContain("No AI provider credentials configured");
-    expect(said).toContain("admin UI");
+  test("no pools do not log on construction (log-spam fix)", () => {
+    expect(constructWith(undefined)).not.toContain(
+      "No AI provider credentials configured"
+    );
   });
 
   test("an empty pool surfaces a readable error, never the string null", async () => {
