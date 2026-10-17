@@ -14,6 +14,7 @@ const fluxConfig: ModelConfig = {
   name: "FLUX.1 [schnell]",
   description: "test model",
   provider: "black-forest-labs",
+  inferenceProvider: "cloudflare-rest",
   apiVersion: 2,
   inputFormat: "json",
   responseFormat: "base64",

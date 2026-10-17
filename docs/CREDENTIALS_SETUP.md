@@ -43,14 +43,18 @@ Create a token with these **Account-scoped** permissions:
 | Variable            | Description                                                                                                                                                                        | Example                   |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                                                              | `mykey1,mykey2`           |
-| `AI_ACCOUNTS`       | Multi-account AI inference credentials (JSON array)                                                                                                                                | See below                 |
+| `AI_ACCOUNTS`       | **Legacy — no longer read at runtime (ADR-001).** Source for the one-shot D1 import only.                                                                                          | See below                 |
 | `TZ`                | Timezone for logging                                                                                                                                                               | `America/New_York`        |
 | `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Required for the R1b D1 provider store; set it before running the one-shot import (see below). | `openssl rand -base64 32` |
 | `ADMIN_API_KEY`     | Management key gating the `/api/admin/*` routes (R2 #74). Checked server-side against the `X-Admin-Key` header; never the login bearer. Generate like `PROVIDER_DATA_KEY`.         | `openssl rand -base64 32` |
 
 ### `AI_ACCOUNTS` Format
 
-By default, the worker uses `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` for both deployment **and** AI inference. If you want to distribute AI inference across multiple Cloudflare accounts (e.g. for rate limit distribution), set `AI_ACCOUNTS` as a JSON array:
+Inference credentials live in D1 only (ADR-001): the Worker reads no
+credential environment variable at runtime. `AI_ACCOUNTS` survives only as
+the source format the one-shot import reads to seed D1, so this section is
+for migrating an existing deployment. If you still have it set, the JSON
+array looks like:
 
 ```json
 [
@@ -61,15 +65,18 @@ By default, the worker uses `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` f
 
 Each entry needs an API token with **Workers AI Read + Edit** permissions for that account. The worker picks a random account per request for load distribution.
 
-If `AI_ACCOUNTS` is **not set**, the worker falls back to `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` for AI inference.
+Setting `AI_ACCOUNTS` alone no longer enables inference: with an empty D1
+store, generation fails with `No AI provider credentials configured`. Import
+the array into D1 (below) to restore service.
 
 ### Migrating `AI_ACCOUNTS` to D1 (one-shot import)
 
-Since R1b, the provider store lives in D1: tokens are stored as AES-GCM
-envelopes (encrypted with the `PROVIDER_DATA_KEY` Worker secret), and D1 wins
-over `AI_ACCOUNTS` whenever rows exist. `AI_ACCOUNTS` keeps working as a
-fallback with a deprecation warning, so there is **no flag day** — import at
-your own pace, then unset the blob in a later deploy.
+Since R1b the provider store lives in D1: tokens are stored as AES-GCM
+envelopes (encrypted with the `PROVIDER_DATA_KEY` Worker secret). ADR-001 made
+D1 the **only** credential source, so this upgrade is a flag day rather than a
+gradual migration: a deployment whose credentials live in `AI_ACCOUNTS` or
+`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` stops generating until the
+import below runs (or a key is added in the admin UI).
 
 **Preferred path — import from CI.** `AI_ACCOUNTS` is a write-only GitHub
 secret: no shell can read it back, so the local steps below cannot even
@@ -128,15 +135,20 @@ reach. One-time steps, per environment (staging first):
      --command "SELECT label, external_account_id, enabled FROM provider_keys"
    ```
 
-   Then hit any inference endpoint and check the logs for
-   `AI inference path: d1 with N account(s)` (labels and counts only — the
-   logs never contain tokens or account ids).
+   Then call `GET /api/admin/health` and confirm the imported labels are
+   listed with their weights, flags and active versions, and run one
+   generation. An import that is not live shows up instead as
+   `provider pool: no credentials in database` in the pool logs and
+   `No AI provider credentials configured` on the request (labels and
+   counts only — the logs never contain tokens or account ids).
 
 **Rollback** — two independent options, both immediate:
 
-- **Empty the tables** (Worker falls back to `AI_ACCOUNTS` / deploy
-  credentials on the next version-poll, ≤ 5 s — keep the version bump, or a
-  warm isolate keeps serving the deleted rows until its next deploy):
+- **Empty the tables** (ADR-001 removed the environment-variable
+  fallback, so inference then has no credentials and fails with
+  `No AI provider credentials configured. Add credentials via admin UI at
+/#admin`. Keep the version bump, or a warm isolate keeps serving the
+  deleted rows until its next deploy):
 
   ```sql
   DELETE FROM credential_versions;

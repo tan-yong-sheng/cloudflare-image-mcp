@@ -12,6 +12,7 @@ import {
   type GenerationRequest,
 } from "./image-generator.js";
 import { ProviderPool, type PoolKey } from "./provider-pool.js";
+import { ProviderPools, type ProviderPoolEntry } from "./provider-pools.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RestAITransport,
@@ -545,28 +546,40 @@ describe("runMany", () => {
   });
 });
 
-describe("dual-read credential wiring (S4)", () => {
-  const envWithAIAccounts = {
-    CLOUDFLARE_ACCOUNT_ID: "deploy-account",
-    CLOUDFLARE_API_TOKEN: "deploy-token",
-    AI_ACCOUNTS: JSON.stringify([
-      { account_id: "env-account", api_token: "env-token" },
-    ]),
+describe("database-only credential wiring (ADR-001)", () => {
+  /** One provider's pool, as the isolate cache would present it (C4). */
+  function poolsOf(pool: ProviderPool): ProviderPools {
+    return new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool,
+      } satisfies ProviderPoolEntry,
+    ]);
+  }
+
+  const minimalEnv = {
     IMAGE_EXPIRY_HOURS: "24",
     IMAGE_BUCKET: {},
   } as unknown as Env;
 
   function constructWith(pool: ProviderPool | undefined): string {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      new ImageGeneratorService(envWithAIAccounts, {
+      new ImageGeneratorService(minimalEnv, {
         transport: new MemoryTransport(),
         store: new MemoryStore(),
-        pool,
+        pools: pool ? poolsOf(pool) : undefined,
       });
-      return warn.mock.calls.map((c) => String(c[0])).join("\n");
+      const allLogs = [
+        ...warn.mock.calls.map((c) => String(c[0])),
+        ...error.mock.calls.map((c) => String(c[0])),
+      ].join("\n");
+      return allLogs;
     } finally {
       warn.mockRestore();
+      error.mockRestore();
     }
   }
 
@@ -587,57 +600,81 @@ describe("dual-read credential wiring (S4)", () => {
     },
   ];
 
-  test("a servable D1 pool wins over env AI_ACCOUNTS, labels only in logs", () => {
-    const said = constructWith(new ProviderPool(d1Keys));
-    expect(said).toContain("AI inference path: d1 with 2 account(s)");
-    expect(said).not.toContain("d1-t1");
-    expect(said).not.toContain("d1-a1");
-    expect(said).not.toContain("env-token");
-  });
-
-  test("a pool with no servable keys falls through to env dual-read", () => {
-    const disabled = d1Keys.map((k) => ({ ...k, enabled: false }));
-    const said = constructWith(new ProviderPool(disabled));
-    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
-  });
-
-  test("no pool keeps the env path exactly as before", () => {
-    const said = constructWith(undefined);
-    expect(said).toContain("AI inference path: AI_ACCOUNTS with 1 account(s)");
-  });
-
-  // Spec-review fix (#72): index.ts always passes a pool, and the loader
-  // falls back to env credentials when D1 is empty — so the log must carry
-  // the pool's REAL source, or the runbook's verification signal would say
-  // "d1" even while serving AI_ACCOUNTS (false staging evidence).
-  test("a pool whose source is AI_ACCOUNTS logs AI_ACCOUNTS, not d1", () => {
+  test("a servable D1 pool reaches the transport, and logs nothing per request", async () => {
+    // Replaces an "AI inference path: d1 with N account(s)" pin: that warn
+    // ran in the constructor, which is built per request (and hourly on the
+    // cron, which never generates), so the line was request noise. The
+    // wiring it sat next to is what matters, so assert that instead: no
+    // injected transport here, so the service must build the dispatcher,
+    // resolve the cloudflare-rest factory, and reach the pooled account.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ result: { image: HELLO_B64 } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      new ImageGeneratorService(envWithAIAccounts, {
-        transport: new MemoryTransport(),
+      const svc = new ImageGeneratorService(minimalEnv, {
         store: new MemoryStore(),
-        pool: new ProviderPool(
-          [
-            {
-              label: "AI_ACCOUNTS[0]",
-              accountId: "env-account",
-              apiToken: "env-token",
-              weight: 1,
-              enabled: true,
-            },
-          ],
-          { source: "AI_ACCOUNTS" }
-        ),
+        pools: poolsOf(new ProviderPool(d1Keys, { source: "d1" })),
       });
-      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
-      expect(said).toContain(
-        "AI inference path: AI_ACCOUNTS with 1 account(s)"
-      );
-      expect(said).not.toContain("d1");
-      expect(said).not.toContain("env-token");
+
+      const result = await svc.runOnce({
+        modelId: TEXT_MODEL,
+        prompt: "a cat",
+      });
+
+      expect(result.success).toBe(true);
+      const url = String(fetchMock.mock.calls[0]?.[0]);
+      expect(url).toMatch(/\/accounts\/d1-a[12]\/ai\/run\//);
+      const logs = [
+        ...warn.mock.calls.map((c) => String(c[0])),
+        ...error.mock.calls.map((c) => String(c[0])),
+      ].join("\n");
+      expect(logs).not.toContain("d1-t1");
+      expect(logs).not.toContain("d1-t2");
     } finally {
       warn.mockRestore();
+      error.mockRestore();
     }
+  });
+
+  test("no servable keys do not log on construction (log-spam fix)", () => {
+    // Replaces the old "logs error" pin: the loader reports this once per
+    // snapshot load and the dispatcher reports it per request, so logging
+    // it here fired on every request — and hourly on the cron path, which
+    // never generates — which made the false alarm outnumber the signal.
+    const disabled = d1Keys.map((k) => ({ ...k, enabled: false }));
+    expect(
+      constructWith(new ProviderPool(disabled, { source: "d1" }))
+    ).not.toContain("No AI provider credentials configured");
+  });
+
+  test("no pools do not log on construction (log-spam fix)", () => {
+    expect(constructWith(undefined)).not.toContain(
+      "No AI provider credentials configured"
+    );
+  });
+
+  test("an empty pool surfaces a readable error, never the string null", async () => {
+    // Production-shaped fix: with no servable credentials the service used
+    // to build a real transport with zero accounts, and its bare
+    // `throw lastError` produced { error: "null" } in the API envelope.
+    const svc = new ImageGeneratorService(minimalEnv, {
+      store: new MemoryStore(),
+      pools: poolsOf(new ProviderPool([], { source: "d1" })),
+    });
+
+    const result = await svc.runOnce({ modelId: TEXT_MODEL, prompt: "a cat" });
+
+    expect(result.success).toBe(false);
+    expect(String(result.error)).not.toBe("null");
+    expect(String(result.error)).toContain(
+      "No AI provider credentials configured"
+    );
   });
 
   // AC5-response fix (#72): "zero-secret-character assertions on logs AND
@@ -650,20 +687,22 @@ describe("dual-read credential wiring (S4)", () => {
     const transport = new MemoryTransport();
     transport.enqueue({ image: HELLO_B64 });
     const store = new MemoryStore();
-    const svc = new ImageGeneratorService(envWithAIAccounts, {
+    const svc = new ImageGeneratorService(minimalEnv, {
       transport,
       store,
-      pool: new ProviderPool(
-        [
-          {
-            label: "k1",
-            accountId: "a1",
-            apiToken: "SECRET-TOKEN-K1",
-            weight: 1,
-            enabled: true,
-          },
-        ],
-        { source: "d1" }
+      pools: poolsOf(
+        new ProviderPool(
+          [
+            {
+              label: "k1",
+              accountId: "a1",
+              apiToken: "SECRET-TOKEN-K1",
+              weight: 1,
+              enabled: true,
+            },
+          ],
+          { source: "d1" }
+        )
       ),
     });
 
@@ -687,7 +726,6 @@ describe("dual-read credential wiring (S4)", () => {
     // scrubbing lives in the transport, the only module holding secrets.
     const realTransport = new RestAITransport(
       [{ account_id: "a1", api_token: "SECRET-TOKEN-K1" }],
-      "d1",
       new ProviderPool(
         [
           {
@@ -710,7 +748,7 @@ describe("dual-read credential wiring (S4)", () => {
         })
       )
     );
-    const failing = new ImageGeneratorService(envWithAIAccounts, {
+    const failing = new ImageGeneratorService(minimalEnv, {
       transport: realTransport,
       store: new MemoryStore(),
     });

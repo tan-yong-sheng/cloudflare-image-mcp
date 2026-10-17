@@ -89,8 +89,9 @@ with the one-shot import — preferred from CI (dispatch the deploy workflow
 with the `import_credentials` input; no local blob handling), manual
 otherwise — see
 [CREDENTIALS_SETUP.md → Migrating AI_ACCOUNTS to D1](CREDENTIALS_SETUP.md#migrating-ai_accounts-to-d1-one-shot-import).
-Until then the Worker keeps serving from `AI_ACCOUNTS` / deploy credentials
-with a deprecation warning, so the import can happen any time.
+ADR-001 made D1 the only credential source, so this is a flag day: without the
+import (or a key added in the admin UI) generation fails with
+`No AI provider credentials configured`.
 
 ---
 

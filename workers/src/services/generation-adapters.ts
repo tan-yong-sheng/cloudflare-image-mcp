@@ -40,22 +40,17 @@ export interface ImageStore {
 }
 
 /**
- * Production transport: Cloudflare Workers AI via REST API.
- * Accounts (and the observability-only credential source label) come from
- * the service, which owns AI_ACCOUNTS parsing and fallback.
+ * Production transport: Cloudflare Workers AI via REST API. Accounts come
+ * from database-only credential management (ADR-001); that is the only
+ * remaining source, so the credential tag is a literal rather than a label
+ * carried on the instance.
  */
 export class RestAITransport implements AITransport {
   private aiAccounts: AIAccount[];
-  private credentialSource: "AI_ACCOUNTS" | "fallback" | "d1";
   private pool?: ProviderPool;
 
-  constructor(
-    accounts: AIAccount[],
-    credentialSource: "AI_ACCOUNTS" | "fallback" | "d1" = "fallback",
-    pool?: ProviderPool
-  ) {
+  constructor(accounts: AIAccount[], pool?: ProviderPool) {
     this.aiAccounts = accounts;
-    this.credentialSource = credentialSource;
     this.pool = pool;
   }
 
@@ -79,12 +74,7 @@ export class RestAITransport implements AITransport {
       const index = (start + attempt) % this.aiAccounts.length;
       const account = this.aiAccounts[index];
       // Credential source tag for observability (never a secret value).
-      const credentialTag =
-        this.credentialSource === "AI_ACCOUNTS"
-          ? `AI_ACCOUNTS[${index}]`
-          : this.credentialSource === "d1"
-            ? `D1[${index}]`
-            : "fallback deploy credential";
+      const credentialTag = `D1[${index}]`;
       const url = `https://api.cloudflare.com/client/v4/accounts/${account.account_id}/ai/run/${modelId}`;
 
       try {
@@ -104,7 +94,15 @@ export class RestAITransport implements AITransport {
       }
     }
 
-    throw lastError;
+    // Zero accounts means nothing was attempted: without this fallback the
+    // bare `throw lastError` throws null, and the endpoint envelope turns
+    // that into the literal string "null" (ADR-001 empty-credential path).
+    throw (
+      lastError ??
+      new Error(
+        "No AI provider credentials configured. Add credentials via admin UI at /#admin"
+      )
+    );
   }
 
   /**
