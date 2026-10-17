@@ -57,9 +57,10 @@ function json(data: unknown, status = 200): Response {
 function errorJson(
   status: number,
   message: string,
-  type: "invalid_request_error" | "api_error" = "invalid_request_error"
+  type: "invalid_request_error" | "api_error" = "invalid_request_error",
+  code: string | null = null
 ): Response {
-  return json({ error: { message, type, code: null } }, status);
+  return json({ error: { message, type, code } }, status);
 }
 
 /** 403 response: standard OpenAI error envelope with invalid_request_error. */
@@ -258,8 +259,17 @@ export async function handleAdmin(
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
   if (!env.API_KEYS) {
+    // Fail closed, and say why: the presented management key is not the
+    // problem, so "Invalid admin key" would send the operator hunting for a
+    // key that cannot work here. Its own code lets the workbench show this
+    // reason instead of blaming the key.
     console.warn("admin API refused: API_KEYS is not configured");
-    return forbidden();
+    return errorJson(
+      403,
+      "Admin API is disabled: this Worker has no API_KEYS configured, so its admin gate cannot be satisfied.",
+      "api_error",
+      "admin_disabled"
+    );
   }
   if (!(await checkAdminKey(request, env))) return forbidden();
   try {

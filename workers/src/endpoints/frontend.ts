@@ -1171,7 +1171,12 @@ export function getFrontendHTML(options?: {
                 if (!res.ok) {
                     if (res.status === 403) {
                         lock();
-                        showError(errorLine, 'Management key rejected.');
+                        // A disabled admin gate is not the operator's key
+                        // being wrong, so show the server's reason when it
+                        // says which it was.
+                        const denied = res.data && res.data.error ? res.data.error : null;
+                        const reason = denied && denied.code === 'admin_disabled' && typeof denied.message === 'string' ? denied.message : '';
+                        showError(errorLine, reason || 'Management key rejected.');
                         return;
                     }
                     showError(errorLine, errorMessage(res));

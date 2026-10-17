@@ -97,6 +97,14 @@ describe("admin health (R2)", () => {
       unconfigured
     );
     expect(response.status).toBe(403);
+    // The refusal names its own cause: a correct management key must not be
+    // reported as invalid, which is what the workbench showed before.
+    const body = (await response.json()) as {
+      error: { message: string; type: string; code: string | null };
+    };
+    expect(body.error.code).toBe("admin_disabled");
+    expect(body.error.type).toBe("api_error");
+    expect(body.error.message).toMatch(/API_KEYS/);
   });
 
   test("oversized admin key fails closed with 403 before hashing", async () => {

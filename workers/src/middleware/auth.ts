@@ -61,7 +61,9 @@ export function authenticateRequest(request: Request, env: Env): AuthResult {
 
 /**
  * Check if request path requires authentication
- * Public endpoints: /, /index.html, /health, /images/*
+ * Public endpoints: /, /index.html, /admin, /health, /images/*
+ * `/admin` is the same SPA shell as `/` (admin data is behind the gated
+ * /api/admin/*), so it discloses nothing `/` does not.
  * Note: Frontend handles auth via JS login modal; API endpoints return 401
  */
 export function requiresAuth(path: string, method: string): boolean {
