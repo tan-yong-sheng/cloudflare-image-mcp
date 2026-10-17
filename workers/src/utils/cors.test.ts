@@ -15,7 +15,7 @@ describe("corsHeaders", () => {
 
   test("allows the router method set", () => {
     expect(corsHeaders["Access-Control-Allow-Methods"]).toBe(
-      "GET, POST, DELETE, OPTIONS"
+      "GET, POST, PATCH, DELETE, OPTIONS"
     );
   });
 
