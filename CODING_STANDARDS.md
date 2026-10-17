@@ -41,9 +41,11 @@ as unused).
 Open-by-default: no `env.API_KEYS` → authenticated. Otherwise
 `Authorization: Bearer <token>` split-and-compare against
 `env.API_KEYS.split(',').map(trim).filter(Boolean)`.
-Public: `OPTIONS` always; exact `/`, `/index.html`, `/health`;
-prefix `/images/`; exact `/api/internal/models`. Everything else
-requires auth when `API_KEYS` is set.
+Public: `OPTIONS` always; exact `/`, `/index.html`, `/admin`, `/health`;
+prefix `/images/`; exact `/api/internal/models`. `/admin` serves the same
+SPA shell as `/` — admin data lives behind `/api/admin/*`, which is gated —
+so it discloses nothing `/` does not. Everything else requires auth when
+`API_KEYS` is set.
 
 ## Validation idiom (hand-rolled — zod only for MCP tool schemas)
 

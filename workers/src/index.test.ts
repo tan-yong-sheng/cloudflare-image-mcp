@@ -8,6 +8,8 @@
 
 import { describe, expect, test } from "vitest";
 import worker from "./index.js";
+import { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH } from "./endpoints/admin.js";
+import { MAX_WEIGHT } from "./services/admin-store.js";
 import type { Env } from "./types.js";
 
 function env(): Env {
@@ -88,6 +90,22 @@ describe("router public paths", () => {
     expect(html).toContain("body.num_steps");
   });
 
+  test("generator readiness is server-rendered, not an unauthenticated health probe", async () => {
+    // ADR-001 UX fix: /api/admin/health is gated, so fetching it from the
+    // generator before login always 401/403s and the "no keys" warning
+    // never showed. Readiness is baked into the page instead.
+    const response = await worker.fetch(get("/"), env());
+    const html = await response.text();
+
+    // No PROVIDER_DB bound in this env -> no servable pool -> false.
+    expect(html).toContain("const HAS_CREDENTIALS = false;");
+    expect(html).toContain("applyCredentialWarning");
+    // The model picker greys out with the same flag, so an unconfigured
+    // pool never offers a model the user then cannot generate with.
+    expect(html).toContain("modelSelect.disabled = !credentialsConfigured;");
+    expect(html).not.toContain("fetch(API_BASE + '/admin/health'");
+  });
+
   test("unknown routes return 404", async () => {
     const response = await worker.fetch(get("/no-such-route"), env());
 
@@ -110,5 +128,82 @@ describe("router public paths", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+});
+
+describe("provider credentials workbench (R2 follow-up, #91)", () => {
+  test("the workbench markup, gates, and endpoints exist on /", async () => {
+    const response = await worker.fetch(get("/"), env());
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    // Every element id the workbench script addresses must exist.
+    for (const id of [
+      "generatorView",
+      "adminView",
+      "adminWorkbenchButton",
+      "adminBackBtn",
+      "adminGate",
+      "adminKey",
+      "adminUnlock",
+      "adminLock",
+      "adminError",
+      "adminPanel",
+      "adminKeys",
+      "adminRail",
+      "adminAddKey",
+      "adminNotice",
+      "adminSheet",
+      "adminSheetAcct",
+      "adminSheetToken",
+      "adminSheetWeight",
+      "adminSheetEnabled",
+      "adminSheetError",
+      "adminSheetSave",
+      "adminSheetCancel",
+      "themeToggleAdmin",
+      "logoutButtonAdmin",
+    ]) {
+      expect(html).toContain('id="' + id + '"');
+    }
+    // The workbench talks to the admin API with the management-key header.
+    // These are the server's own constants, so renaming a route on either side
+    // without the other fails here.
+    expect(html).toContain(ADMIN_HEALTH_PATH);
+    expect(html).toContain(ADMIN_KEYS_PATH);
+    expect(html).toContain("X-Admin-Key");
+    // The management key must remain memory-only: never persisted.
+    expect(html).not.toMatch(/sessionStorage\.(set|get)Item\('admin/);
+    expect(html).not.toMatch(/localStorage.*admin/i);
+    // Locking invalidates in-flight admin requests: api() compares the
+    // generation it captured against the current one before a response may
+    // drive the UI, so a save that resolves after lock or logout cannot be
+    // reported as success.
+    const lockAt = html.indexOf("function lock()");
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(html.slice(lockAt, lockAt + 160)).toContain(
+      "adminRequestGeneration += 1"
+    );
+    expect(html).toContain("if (generation !== adminRequestGeneration)");
+    // A 403 whose cause is a disabled admin gate (API_KEYS unset) carries
+    // its own code, and the UI must show that reason rather than telling the
+    // operator their management key is wrong.
+    expect(html).toContain("admin_disabled");
+    // /admin is routed to this same shell, so the shell has to adopt the
+    // admin fragment: with a hash-only route check, visiting /admin showed
+    // the generator and the route was pointless.
+    expect(html).toContain("window.location.pathname === '/admin'");
+    // The served UI mirrors the store's weight ceiling: it cannot import the
+    // constant, so this pins the two together.
+    expect(html).toContain('max="' + MAX_WEIGHT + '"');
+  });
+
+  test("GET /admin routes to the frontend", async () => {
+    const response = await worker.fetch(get("/admin"), env());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain('id="adminView"');
+    expect(html).toContain('id="adminGate"');
+    expect(html).toContain('id="generatorView"');
   });
 });

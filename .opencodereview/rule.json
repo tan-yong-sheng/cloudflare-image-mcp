@@ -7,7 +7,7 @@
     },
     {
       "path": "workers/src/middleware/*.ts",
-      "rule": "Auth changes must go through requiresAuth + authenticateRequest + createUnauthorizedResponse (see CODING_STANDARDS.md Auth idiom). New routes are protected by default; only OPTIONS, /, /index.html, /health, /images/*, /api/internal/models are public. Flag open-by-default bypasses and missing WWW-Authenticate: Bearer on 401s. Type-only imports must use `import type`; relative imports keep the `.js` extension.",
+      "rule": "Auth changes must go through requiresAuth + authenticateRequest + createUnauthorizedResponse (see CODING_STANDARDS.md Auth idiom). New routes are protected by default; only OPTIONS, /, /index.html, /admin, /health, /images/*, /api/internal/models are public (/admin serves the same SPA shell as /, and admin data sits behind the gated /api/admin/*). Flag open-by-default bypasses and missing WWW-Authenticate: Bearer on 401s. Type-only imports must use `import type`; relative imports keep the `.js` extension.",
       "merge_system_rule": true
     },
     {
