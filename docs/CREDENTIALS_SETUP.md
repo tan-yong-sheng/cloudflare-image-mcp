@@ -43,10 +43,20 @@ Create a token with these **Account-scoped** permissions:
 | Variable            | Description                                                                                                                                                                        | Example                   |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | `API_KEYS`          | Protect endpoints with API key auth (comma-separated)                                                                                                                              | `mykey1,mykey2`           |
-| `AI_ACCOUNTS`       | **Legacy — no longer read at runtime (ADR-001).** Source for the one-shot D1 import only.                                                                                          | See below                 |
 | `TZ`                | Timezone for logging                                                                                                                                                               | `America/New_York`        |
 | `PROVIDER_DATA_KEY` | AES-GCM data key that encrypts provider credential tokens in D1 (base64, 32 bytes). Required for the R1b D1 provider store; set it before running the one-shot import (see below). | `openssl rand -base64 32` |
 | `ADMIN_API_KEY`     | Management key gating the `/api/admin/*` routes (R2 #74). Checked server-side against the `X-Admin-Key` header; never the login bearer. Generate like `PROVIDER_DATA_KEY`.         | `openssl rand -base64 32` |
+
+---
+
+## Migration Secrets (One-time, D1 Import Only)
+
+> **Note:** Only needed if importing credentials from a pre-D1 deployment into D1.
+> New deployments should add credentials directly via the Admin Workbench UI or API.
+
+| Variable      | Description                                                                               | Example   |
+| ------------- | ----------------------------------------------------------------------------------------- | --------- |
+| `AI_ACCOUNTS` | **Legacy — no longer read at runtime (ADR-001).** Source for the one-shot D1 import only. | See below |
 
 ### `AI_ACCOUNTS` Format
 
@@ -177,6 +187,11 @@ configured: with `API_KEYS` unset the app-wide auth bypass would leave
 admin on the management key alone, so `/api/admin/*` refuses with 403 in
 that state.
 
+The signed-in frontend exposes the same operations through the **Provider
+Credentials workbench** (the 🔑 Admin button in the header): the management
+key is entered in the UI, held in memory only, and cleared on lock, close,
+or logout — never persisted.
+
 - **Health** — `GET /api/admin/health` returns providers, key labels
   with weights/flags/active versions/account ids, the exposure overlay
   rows, the config version, and `hasServableCredential` (any provider)
@@ -210,7 +225,8 @@ that state.
   in a single transaction (a concurrent rotation loses loudly with 409
   instead of forking versions).
 - **Disable** — `POST /api/admin/keys/:id/disable`: the row is kept but no
-  longer served (`enabled: 0` in health).
+  longer served (`enabled: 0` in health). The workbench's row switch
+  sends `PATCH { "enabled": false }` for the same effect.
 
 Every mutation bumps `config_versions` (the pool cache's reload signal)
 and writes an `admin_audit` row (actor, action, key, timestamp) — who
