@@ -190,8 +190,11 @@ For existing deployments using environment variables:
 
 **Mitigation:**
 
-- Admin UI remains accessible without credentials (for setup)
-- Management key (`API_KEYS` env var) is separate from provider credentials
+- Admin UI remains reachable without provider credentials (for setup)
+- `/api/admin/*` needs both gates configured before it accepts a key, and
+  neither is a provider credential: `API_KEYS` (the login bearer list — with
+  it unset, admin refuses outright) and `ADMIN_API_KEY` (the management key
+  sent as `X-Admin-Key`). Provider credentials are what the UI writes.
 - Documentation clearly states: deploy → access UI → add key → test
 
 ## Verification

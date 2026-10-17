@@ -135,9 +135,12 @@ reach. One-time steps, per environment (staging first):
      --command "SELECT label, external_account_id, enabled FROM provider_keys"
    ```
 
-   Then hit any inference endpoint and check the logs for
-   `AI inference path: d1 with N account(s)` (labels and counts only — the
-   logs never contain tokens or account ids).
+   Then call `GET /api/admin/health` and confirm the imported labels are
+   listed with their weights, flags and active versions, and run one
+   generation. An import that is not live shows up instead as
+   `provider pool: no credentials in database` in the pool logs and
+   `No AI provider credentials configured` on the request (labels and
+   counts only — the logs never contain tokens or account ids).
 
 **Rollback** — two independent options, both immediate:
 

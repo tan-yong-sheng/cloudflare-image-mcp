@@ -137,6 +137,7 @@ Add the same model configuration in TypeScript format:
   name: 'Display Name',
   description: 'Brief description',
   provider: 'provider-name',
+  inferenceProvider: 'cloudflare-rest',
   apiVersion: 2,
   inputFormat: 'json',
   responseFormat: 'base64',
