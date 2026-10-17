@@ -220,10 +220,12 @@ describe("pool cache (F2)", () => {
     const f = makeFakes();
     const deps: PoolCacheDeps = {
       ...f.deps,
-      loadPools: async () => {
+      // Both halves go through the production loader, so this exercises the
+      // real throw-on-D1-failure path rather than a synthetic rejection.
+      loadPools: loaderDeps(async () => {
         if (failing) throw new Error("D1 unavailable");
-        return f.deps.loadPools();
-      },
+        return [d1Row];
+      }),
     };
 
     const cold = await getProviderPools(ENV, deps);
@@ -234,7 +236,7 @@ describe("pool cache (F2)", () => {
     failing = false;
     f.advance(1_001);
     const recovered = await getProviderPools(ENV, deps);
-    expect(labelsOf(recovered)).toEqual(["v1"]);
+    expect(labelsOf(recovered)).toEqual(["k1"]);
   });
 
   test("without an overlay loader the overlay is an empty map", async () => {

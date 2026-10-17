@@ -16,7 +16,7 @@ The application currently has three sources for Cloudflare Workers AI credential
 2. **AI_ACCOUNTS environment variable (secondary)** - JSON array of account credentials
 3. **Environment variable fallback (tertiary)** - `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`
 
-This was implemented in `src/services/pool-source.ts` with the intent to provide flexibility during initial setup and deployment. However, this multi-source approach creates several problems:
+This was implemented in `src/services/pool-source.ts` (since removed: the loader reads D1 rows directly in `src/services/pool-loader.ts`) with the intent to provide flexibility during initial setup and deployment. However, this multi-source approach creates several problems:
 
 ### Current Issues
 
@@ -67,7 +67,7 @@ Specifically:
 
 - Remove `AI_ACCOUNTS` environment variable support
 - Remove `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` fallback
-- Simplify `pool-source.ts` to read from database only
+- Simplify the pool resolver to read from the database only (`src/services/pool-loader.ts`)
 - Return empty pool when database has no keys (clear error path)
 
 ## Alternatives Considered
@@ -134,7 +134,7 @@ Specifically:
 - **Single source of truth:** Database is authoritative, UI is accurate
 - **Clear errors:** "No credentials configured" is unambiguous
 - **Security:** Full audit trail, credentials rotatable via UI
-- **Simpler code:** Remove fallback logic from `pool-source.ts`
+- **Simpler code:** Remove fallback logic from the pool resolver (`pool-loader.ts`)
 - **Better testing:** No environment variable dependencies in tests
 - **Predictable behavior:** What you see in admin UI is what's running
 
@@ -170,8 +170,8 @@ For existing deployments using environment variables:
 
 ### Code Changes Required
 
-- `src/services/pool-source.ts` - Remove fallback logic, database-only
-- `src/services/pool-source.test.ts` - Remove fallback tests, update scenarios
+- `src/services/pool-loader.ts` - Read D1 rows only, no environment fallback
+- `src/services/pool-loader.test.ts` - Cover the database-only loader
 - `workers/src/endpoints/frontend.ts` - Warning logic already correct (checks DB)
 - `workers/wrangler.toml` - Remove credential env var references from examples
 
@@ -198,7 +198,7 @@ For existing deployments using environment variables:
 
 After implementation:
 
-- [ ] `pool-source.ts` reads only from database
+- [ ] `pool-loader.ts` reads only from database
 - [ ] Environment variables `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `AI_ACCOUNTS` have no effect
 - [ ] When database is empty, generation returns "no servable credential"
 - [ ] Warning banner appears on generator page when DB has 0 keys
@@ -209,6 +209,6 @@ After implementation:
 
 ## References
 
-- Related code: `src/services/pool-source.ts`
+- Related code: `src/services/pool-loader.ts`
 - User feedback: "can we deprecate that fallback mechanism... and make the current admin dashboard approach... the only one (only source of truth)"
 - Original implementation: Multi-source fallback for deployment flexibility
