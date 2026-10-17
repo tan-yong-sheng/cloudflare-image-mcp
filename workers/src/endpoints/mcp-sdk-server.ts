@@ -10,7 +10,7 @@ import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { WORKER_VERSION } from "../version.js";
 import type { Env } from "../types.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
-import type { ProviderPool } from "../services/provider-pool.js";
+import type { ProviderPools } from "../services/provider-pools.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RunModelMultiSchema,
@@ -37,8 +37,8 @@ export interface McpHandlerDeps {
   mode: McpMode;
   /** Required when mode is single-model: the pinned model (?model=). */
   defaultModel?: string | null;
-  /** R1b dual-read: resolved provider pool; env credentials stay the fallback. */
-  pool?: ProviderPool;
+  /** R1b credential view: per-provider pools loaded from D1 (ADR-001). */
+  pools?: ProviderPools;
   /** R1b exposure overlay: D1-wins exposure rows over the R0 registry. */
   exposureOverlay?: ExposureOverlay;
 }
@@ -48,7 +48,7 @@ export interface McpHandlerDeps {
  */
 export function buildMcpServer(deps: McpHandlerDeps): McpServer {
   const generator = new ImageGeneratorService(deps.env, {
-    pool: deps.pool,
+    pools: deps.pools,
     exposureOverlay: deps.exposureOverlay,
   });
   const ctx: ToolsContext = { generator, baseUrl: deps.baseUrl };

@@ -10,7 +10,7 @@ import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleAdmin } from "./endpoints/admin.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { serveFrontend } from "./endpoints/frontend.js";
-import { getProviderPool, getExposureOverlay } from "./services/pool-cache.js";
+import { getProviderPools, getExposureOverlay } from "./services/pool-cache.js";
 import { overlayRegistry } from "./config/exposure-overlay.js";
 import { listModels, MODEL_CONFIGS } from "./config/models.js";
 import {
@@ -120,7 +120,7 @@ export default {
       // Route: OpenAI-compatible API
       if (path.startsWith("/v1/")) {
         const openai = new OpenAIEndpoint(env, {
-          pool: await getProviderPool(env),
+          pools: await getProviderPools(env),
           exposureOverlay: await getExposureOverlay(env),
         });
         return openai.handle(request);
@@ -145,7 +145,7 @@ export default {
             baseUrl: url.protocol + "//" + url.host,
             mode,
             defaultModel,
-            pool: await getProviderPool(env),
+            pools: await getProviderPools(env),
             exposureOverlay: await getExposureOverlay(env),
           })
         );

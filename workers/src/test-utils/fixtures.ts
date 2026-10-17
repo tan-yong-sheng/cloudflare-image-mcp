@@ -11,6 +11,8 @@
 // fixture fails loudly, an edited one hides drift.
 
 import { vi } from "vitest";
+import { ProviderPool } from "../services/provider-pool.js";
+import { ProviderPools } from "../services/provider-pools.js";
 
 /** 1x1 red PNG, base64 (no data-URI prefix). */
 export const FIXTURE_PNG_B64 =
@@ -129,10 +131,36 @@ function fakeBucket(): R2Bucket {
 export function fakeEnv(): Env {
   return {
     IMAGE_BUCKET: fakeBucket(),
-    CLOUDFLARE_API_TOKEN: "test-token",
-    CLOUDFLARE_ACCOUNT_ID: "test-account",
+    CLOUDFLARE_API_TOKEN: "test-token", // Deprecated (ADR-001)
+    CLOUDFLARE_ACCOUNT_ID: "test-account", // Deprecated (ADR-001)
     IMAGE_EXPIRY_HOURS: "24",
   };
+}
+
+/**
+ * Test provider credentials (ADR-001): one servable key under the seeded
+ * Cloudflare provider, as the isolate cache would hand it to the generator.
+ * Tests should use this instead of relying on environment variables.
+ */
+export function fakePools(): ProviderPools {
+  return new ProviderPools([
+    {
+      providerId: "cloudflare",
+      transport: "cloudflare-rest",
+      pool: new ProviderPool(
+        [
+          {
+            label: "test-key-1",
+            accountId: "test-account",
+            apiToken: "test-token",
+            weight: 1,
+            enabled: true,
+          },
+        ],
+        { source: "d1" }
+      ),
+    },
+  ]);
 }
 
 // Local type import (type-only, erased at runtime).

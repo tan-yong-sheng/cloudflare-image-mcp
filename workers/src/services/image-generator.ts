@@ -10,14 +10,15 @@
 import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
-import type { ProviderPool } from "./provider-pool.js";
+import type { ProviderPools } from "./provider-pools.js";
 import { overlayRegistry } from "../config/exposure-overlay.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
+import type { AITransport, ImageStore } from "./generation-adapters.js";
 import {
-  RestAITransport,
-  type AITransport,
-  type ImageStore,
-} from "./generation-adapters.js";
+  DispatchingAITransport,
+  TRANSPORT_FACTORIES,
+  type TransportFactory,
+} from "./transports.js";
 import type { GeneratedImage } from "../utils/image-request.js";
 import {
   MODEL_CONFIGS,
@@ -149,7 +150,10 @@ export class ImageGeneratorService {
     deps?: {
       transport?: AITransport;
       store?: ImageStore;
-      pool?: ProviderPool;
+      /** Per-provider credentials (C4); absent means none are configured. */
+      pools?: ProviderPools;
+      /** Transport registry override, so tests can add a fake transport. */
+      transportFactories?: Readonly<Record<string, TransportFactory>>;
       exposureOverlay?: ExposureOverlay;
     }
   ) {
@@ -158,92 +162,23 @@ export class ImageGeneratorService {
         overlayRegistry(MODEL_CONFIGS, deps?.exposureOverlay ?? null)
       )
     );
-
-    // Dual-read (R1b, #72): a servable pool wins; the env paths below
-    // remain the fallback, so a half-migrated store never takes inference
-    // down. The log and transport tag carry the pool's REAL source — the
-    // loader falls back to env credentials, so a hardcoded "d1" would make
-    // the runbook's verification signal lie. Labels and counts only, never
-    // secret values.
-    const pool = deps?.pool;
-    const poolEntries = pool?.entries() ?? [];
-    if (pool && poolEntries.length > 0) {
-      const poolAccounts = poolEntries.map((e) => ({
-        account_id: e.accountId,
-        api_token: e.apiToken,
-      }));
-      console.warn(
-        `AI inference path: ${pool.source} with ${poolAccounts.length} account(s)`
-      );
-      this.transport =
-        deps?.transport ?? new RestAITransport(poolAccounts, pool.source, pool);
-      this.store = deps?.store ?? new R2StorageService(env);
-      return;
-    }
-
-    // Build AI accounts list:
-    // 1. AI_ACCOUNTS (JSON array) if set and valid
-    // 2. Else fall back to CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
-    const fallback = [
-      {
-        account_id: env.CLOUDFLARE_ACCOUNT_ID,
-        api_token: env.CLOUDFLARE_API_TOKEN,
-      },
-    ];
-
-    /**
-     * Which credential pool is active (observability label only, never a secret value):
-     * 'AI_ACCOUNTS' when multi-account inference is configured, 'fallback' when
-     * using the deploy credentials (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).
-     */
-    let credentialSource: "AI_ACCOUNTS" | "fallback" = "fallback";
-    let aiAccounts = fallback;
-
-    if (env.AI_ACCOUNTS) {
-      try {
-        const parsed = JSON.parse(env.AI_ACCOUNTS) as {
-          account_id: string;
-          api_token: string;
-        }[];
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          console.warn(
-            "AI_ACCOUNTS is empty or not an array, falling back to deploy credentials"
-          );
-          aiAccounts = fallback;
-        } else {
-          const valid = parsed.every((a) => a.account_id && a.api_token);
-          if (!valid) {
-            console.warn(
-              "AI_ACCOUNTS entries missing account_id/api_token, falling back to deploy credentials"
-            );
-            aiAccounts = fallback;
-          } else {
-            aiAccounts = parsed;
-            credentialSource = "AI_ACCOUNTS";
-          }
-        }
-      } catch {
-        console.warn(
-          "AI_ACCOUNTS is not valid JSON, falling back to deploy credentials"
-        );
-        aiAccounts = fallback;
-      }
-    } else {
-      aiAccounts = fallback;
-    }
-
-    // Observability: name the active inference path (counts only, never values).
-    if (credentialSource === "AI_ACCOUNTS") {
-      console.warn(
-        `AI inference path: AI_ACCOUNTS with ${aiAccounts.length} account(s)`
-      );
-    } else {
-      console.warn("AI inference path: fallback to deploy credentials");
-    }
-
-    this.transport =
-      deps?.transport ?? new RestAITransport(aiAccounts, credentialSource);
     this.store = deps?.store ?? new R2StorageService(env);
+
+    // One dispatcher fronts every transport: run() reads the model's
+    // inferenceProvider and resolves the seam (services/transports.ts).
+    const dispatch = (pools?: ProviderPools) =>
+      new DispatchingAITransport({
+        factories: deps?.transportFactories ?? TRANSPORT_FACTORIES,
+        poolFor: (transport) => pools?.forTransport(transport),
+      });
+
+    // Database-only credentials (ADR-001): a servable pool is required.
+    // Nothing is logged here. This constructor runs for every MCP/OpenAI
+    // request — and hourly on the cron path, which never generates — so a
+    // line here fires per request: the loader reports the store state once
+    // per snapshot load, the dispatcher names the transport when a request
+    // finds no credential, and readiness is queryable per provider.
+    this.transport = deps?.transport ?? dispatch(deps?.pools);
   }
 
   /**

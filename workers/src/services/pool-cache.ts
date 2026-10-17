@@ -1,24 +1,26 @@
 // ============================================================================
 // Config snapshot cache - isolate-scoped boot-load + version-poll (R1b, #72)
 // ============================================================================
-// The hot path must stay off D1: the provider pool and the exposure overlay
+// The hot path must stay off D1: the provider pools and the exposure overlay
 // load once per isolate, then a single-row config_versions poll (cheap)
 // decides whether to reload both payloads together. A TTL window collapses
 // bursts; a failed version query or a failed reload serves the stale
-// snapshot; a failed overlay load drops the overlay — a D1 blip must never
-// take inference down. Without a version source the snapshot reloads
-// after each TTL window. Clock, version source, and loaders are injected
-// for deterministic tests; production deps read PROVIDER_DB and open
-// envelopes with PROVIDER_DATA_KEY via loadProviderPool.
+// snapshot; a failed initial load serves "no credentials"; a failed overlay
+// load drops the overlay — a D1 blip must never take inference down. Without
+// a version source the snapshot reloads after each TTL window. Clock, version
+// source, and loaders are injected for deterministic tests; production deps
+// read PROVIDER_DB and open envelopes with PROVIDER_DATA_KEY via
+// loadProviderPools, whose rejection on an unreadable store is what keeps the
+// stale snapshot in place.
 
 import type { Env } from "../types.js";
-import type { ProviderPool } from "./provider-pool.js";
-import { loadProviderPool } from "./pool-loader.js";
+import { ProviderPools, type ProviderPoolEntry } from "./provider-pools.js";
+import { loadProviderPools } from "./pool-loader.js";
 import { openEnvelope } from "./provider-crypto.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
 
 export interface PoolCacheDeps {
-  loadPool: () => Promise<ProviderPool>;
+  loadPools: () => Promise<ProviderPoolEntry[]>;
   loadOverlay?: () => Promise<ExposureOverlay>;
   readVersion: () => Promise<number | null>;
   now?: () => number;
@@ -26,7 +28,7 @@ export interface PoolCacheDeps {
 }
 
 interface Snapshot {
-  pool: ProviderPool;
+  pools: ProviderPools;
   overlay: ExposureOverlay;
   version: number | null;
   checkedAt: number;
@@ -41,11 +43,16 @@ export function resetPoolCache(): void {
   snapshot = null;
 }
 
-export async function getProviderPool(
+/**
+ * The isolate-cached credentials, split per provider (C4): readiness and
+ * routing read one view, so they cannot disagree about which providers are
+ * servable.
+ */
+export async function getProviderPools(
   env: Env,
   deps?: PoolCacheDeps
-): Promise<ProviderPool> {
-  return (await getSnapshot(env, deps)).pool;
+): Promise<ProviderPools> {
+  return (await getSnapshot(env, deps)).pools;
 }
 
 export async function getExposureOverlay(
@@ -61,10 +68,27 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
   const ttl = d.ttlMs ?? DEFAULT_TTL_MS;
 
   if (!snapshot) {
-    const { pool, overlay } = await loadBoth(d);
+    // A cold start has no previous snapshot to fall back on, and a failing
+    // load must not take the route down: serve "no credentials" and retry
+    // on a later TTL window. version stays null so the version-match
+    // shortcut below cannot pin an empty snapshot in place after the store
+    // recovers. The refresh path keeps the previous snapshot instead.
+    const loaded = await loadBoth(d).catch(() => null);
+    if (!loaded) {
+      console.warn(
+        "config snapshot cache: initial load failed, serving no credentials"
+      );
+      snapshot = {
+        pools: new ProviderPools([]),
+        overlay: new Map(),
+        version: null,
+        checkedAt: now,
+      };
+      return snapshot;
+    }
     snapshot = {
-      pool,
-      overlay,
+      pools: loaded.pools,
+      overlay: loaded.overlay,
       version: await readVersionOrNull(d),
       checkedAt: now,
     };
@@ -88,12 +112,12 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
   }
 
   const previous = snapshot;
-  let reloaded: { pool: ProviderPool; overlay: ExposureOverlay };
+  let reloaded: { pools: ProviderPools; overlay: ExposureOverlay };
   try {
     reloaded = await loadBoth(d);
   } catch {
     // Never replace a good snapshot with an error: inference keeps
-    // serving the previous pool until a later reload succeeds.
+    // serving the previous pools until a later reload succeeds.
     previous.checkedAt = now;
     console.warn("config snapshot cache: reload failed, serving stale");
     return previous;
@@ -104,9 +128,9 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
 
 async function loadBoth(
   d: PoolCacheDeps
-): Promise<{ pool: ProviderPool; overlay: ExposureOverlay }> {
-  const [pool, overlay] = await Promise.all([
-    d.loadPool(),
+): Promise<{ pools: ProviderPools; overlay: ExposureOverlay }> {
+  const [entries, overlay] = await Promise.all([
+    d.loadPools(),
     (d.loadOverlay ? d.loadOverlay() : Promise.resolve(new Map())).catch(() => {
       // The overlay only refines the base registry; losing it must
       // never fail the pool load beside it.
@@ -116,7 +140,7 @@ async function loadBoth(
       return new Map();
     }),
   ]);
-  return { pool, overlay };
+  return { pools: new ProviderPools(entries), overlay };
 }
 
 async function readVersionOrNull(d: PoolCacheDeps): Promise<number | null> {
@@ -142,8 +166,8 @@ export function productionDeps(env: Env): PoolCacheDeps {
         .first<{ version: number }>();
       return row?.version ?? null;
     },
-    loadPool: () =>
-      loadProviderPool(env, {
+    loadPools: () =>
+      loadProviderPools(env, {
         readRows: async () => {
           if (!db) return [];
           const res = await db
@@ -152,10 +176,13 @@ export function productionDeps(env: Env): PoolCacheDeps {
                       k.external_account_id AS accountId,
                       v.envelope AS envelope,
                       k.weight AS weight,
-                      k.enabled AS enabled
+                      k.enabled AS enabled,
+                      k.provider_id AS providerId,
+                      p.transport AS transport
                  FROM provider_keys k
                  JOIN credential_versions v
-                   ON v.provider_key_id = k.id AND v.revoked_at IS NULL`
+                   ON v.provider_key_id = k.id AND v.revoked_at IS NULL
+                 JOIN providers p ON p.id = k.provider_id`
             )
             .all<{
               label: string;
@@ -163,8 +190,12 @@ export function productionDeps(env: Env): PoolCacheDeps {
               envelope: string;
               weight: number;
               enabled: number;
+              providerId: string;
+              transport: string;
             }>();
           return (res.results ?? []).map((r) => ({
+            providerId: r.providerId,
+            transport: r.transport,
             label: r.label,
             accountId: r.accountId,
             envelope: r.envelope,

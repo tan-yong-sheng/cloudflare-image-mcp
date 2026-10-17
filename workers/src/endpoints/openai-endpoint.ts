@@ -4,7 +4,7 @@
 // ============================================================================
 
 import type { Env, OpenAIImageResponse } from "../types.js";
-import type { ProviderPool } from "../services/provider-pool.js";
+import type { ProviderPools } from "../services/provider-pools.js";
 import {
   ImageGeneratorService,
   type BatchResult,
@@ -57,10 +57,10 @@ export class OpenAIEndpoint {
 
   constructor(
     env: Env,
-    deps?: { pool?: ProviderPool; exposureOverlay?: ExposureOverlay }
+    deps?: { pools?: ProviderPools; exposureOverlay?: ExposureOverlay }
   ) {
     this.generator = new ImageGeneratorService(env, {
-      pool: deps?.pool,
+      pools: deps?.pools,
       exposureOverlay: deps?.exposureOverlay,
     });
     this.defaultModel = resolveDefaultModel(

@@ -74,12 +74,14 @@ describe("production queries against the real migration (S5)", () => {
     seedKeyWithRotation(db, "k1", [envV1, envV2]);
     seedKeyWithRotation(db, "k2", [await sealToken("token-k2", DATA_KEY)]);
 
-    const pool = await productionDeps(harnessEnv(db)).loadPool();
-    const entries = pool.entries();
+    const pools = await productionDeps(harnessEnv(db)).loadPools();
+    expect(pools.map((p) => p.providerId)).toEqual(["cloudflare"]);
+    expect(pools[0].transport).toBe("cloudflare-rest");
+    const entries = pools[0].pool.entries();
     expect(entries.map((e) => e.label).sort()).toEqual(["k1", "k2"]);
 
     const k1 = entries.find((e) => e.label === "k1")!;
-    // The JOIN excludes revoked versions and loadPool opens envelopes:
+    // The JOIN excludes revoked versions and loadPools opens envelopes:
     // k1 serves plaintext v2, never the revoked v1.
     expect(k1.apiToken).toBe(TOKEN_V2);
   });
