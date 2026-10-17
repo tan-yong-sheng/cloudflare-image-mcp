@@ -36,13 +36,10 @@ afterEach(() => {
 
 describe("RestAITransport account failover", () => {
   test("a failing first account retries on the next account", async () => {
-    const transport = new RestAITransport(
-      [
-        { account_id: "first", api_token: "token-one" },
-        { account_id: "second", api_token: "token-two" },
-      ],
-      "d1"
-    );
+    const transport = new RestAITransport([
+      { account_id: "first", api_token: "token-one" },
+      { account_id: "second", api_token: "token-two" },
+    ]);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(textResponse("first down"))
@@ -70,10 +67,9 @@ describe("RestAITransport account failover", () => {
   });
 
   test("all accounts failing surfaces the last error", async () => {
-    const transport = new RestAITransport(
-      [{ account_id: "only", api_token: "token" }],
-      "d1"
-    );
+    const transport = new RestAITransport([
+      { account_id: "only", api_token: "token" },
+    ]);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(textResponse("still down"))
@@ -88,10 +84,9 @@ describe("RestAITransport account failover", () => {
     // A SyntaxError here would be misclassified as malformed caller JSON
     // by the endpoint's handle() catch (400); operational failures must
     // stay plain Errors so they map to 500.
-    const transport = new RestAITransport(
-      [{ account_id: "only", api_token: "token" }],
-      "d1"
-    );
+    const transport = new RestAITransport([
+      { account_id: "only", api_token: "token" },
+    ]);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -114,7 +109,7 @@ describe("RestAITransport account failover", () => {
     // ADR-001 empty-credential path: image-generator builds a transport
     // with no accounts. A bare `throw lastError` here threw null, which the
     // endpoint envelope rendered as the literal string "null".
-    const transport = new RestAITransport([], "d1");
+    const transport = new RestAITransport([]);
 
     const failure = await transport
       .run(JSON_MODEL.id, { prompt: "a cat" }, JSON_MODEL)
@@ -164,7 +159,6 @@ describe("pool-driven weighted selection + cooldown", () => {
   test("the pool's weighted pick decides the first attempt", async () => {
     const transport = new RestAITransport(
       ACCOUNTS,
-      "d1",
       poolWith(() => 0.0)
     );
     const fetchMock = vi.fn().mockResolvedValue(jsonResult("aGVsbG8="));
@@ -180,7 +174,7 @@ describe("pool-driven weighted selection + cooldown", () => {
 
   test("a failed key is parked so later requests start elsewhere", async () => {
     const pool = poolWith(() => 0.0);
-    const transport = new RestAITransport(ACCOUNTS, "d1", pool);
+    const transport = new RestAITransport(ACCOUNTS, pool);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(textResponse("heavy down"))
@@ -203,7 +197,6 @@ describe("pool-driven weighted selection + cooldown", () => {
     try {
       const transport = new RestAITransport(
         ACCOUNTS,
-        "d1",
         poolWith(() => 0.0)
       );
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(textResponse("down")));
@@ -228,10 +221,9 @@ describe("pool-driven weighted selection + cooldown", () => {
 // module holding the secrets. Shape is unchanged when no secret embeds.
 describe("transport error scrubbing", () => {
   test("an upstream body echoing the token is redacted, shape intact", async () => {
-    const transport = new RestAITransport(
-      [{ account_id: "heavy-acc", api_token: "t-heavy" }],
-      "d1"
-    );
+    const transport = new RestAITransport([
+      { account_id: "heavy-acc", api_token: "t-heavy" },
+    ]);
     vi.stubGlobal(
       "fetch",
       vi

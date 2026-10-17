@@ -1159,6 +1159,17 @@ export function getFrontendHTML(options?: {
                 }
             }
 
+            // /admin is routed here as the workbench's addressable path, but
+            // the view itself is hash-routed (design-plans/005: a real page
+            // navigation cannot carry the two auth headers, so the workbench
+            // lives in this shell). Adopt the fragment instead of branching
+            // the view logic on the path, which keeps one routing source and
+            // leaves the back button working. replaceState, not assignment:
+            // this is not a navigation the user made.
+            if (window.location.pathname === '/admin' && window.location.hash !== '#admin') {
+                history.replaceState(null, '', '/admin#admin');
+            }
+
             async function loadHealth() {
                 let res;
                 try {

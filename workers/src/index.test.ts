@@ -188,6 +188,10 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     // its own code, and the UI must show that reason rather than telling the
     // operator their management key is wrong.
     expect(html).toContain("admin_disabled");
+    // /admin is routed to this same shell, so the shell has to adopt the
+    // admin fragment: with a hash-only route check, visiting /admin showed
+    // the generator and the route was pointless.
+    expect(html).toContain("window.location.pathname === '/admin'");
     // The served UI mirrors the store's weight ceiling: it cannot import the
     // constant, so this pins the two together.
     expect(html).toContain('max="' + MAX_WEIGHT + '"');

@@ -34,7 +34,6 @@ export const TRANSPORT_FACTORIES: Readonly<Record<string, TransportFactory>> = {
       pool
         .entries()
         .map((e) => ({ account_id: e.accountId, api_token: e.apiToken })),
-      pool.source,
       pool
     ),
 };

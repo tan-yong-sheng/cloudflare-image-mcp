@@ -600,11 +600,46 @@ describe("database-only credential wiring (ADR-001)", () => {
     },
   ];
 
-  test("a servable D1 pool is used, labels only in logs", () => {
-    const said = constructWith(new ProviderPool(d1Keys, { source: "d1" }));
-    expect(said).toContain("AI inference path: d1 with 2 account(s)");
-    expect(said).not.toContain("d1-t1");
-    expect(said).not.toContain("d1-a1");
+  test("a servable D1 pool reaches the transport, and logs nothing per request", async () => {
+    // Replaces an "AI inference path: d1 with N account(s)" pin: that warn
+    // ran in the constructor, which is built per request (and hourly on the
+    // cron, which never generates), so the line was request noise. The
+    // wiring it sat next to is what matters, so assert that instead: no
+    // injected transport here, so the service must build the dispatcher,
+    // resolve the cloudflare-rest factory, and reach the pooled account.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ result: { image: HELLO_B64 } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const svc = new ImageGeneratorService(minimalEnv, {
+        store: new MemoryStore(),
+        pools: poolsOf(new ProviderPool(d1Keys, { source: "d1" })),
+      });
+
+      const result = await svc.runOnce({
+        modelId: TEXT_MODEL,
+        prompt: "a cat",
+      });
+
+      expect(result.success).toBe(true);
+      const url = String(fetchMock.mock.calls[0]?.[0]);
+      expect(url).toMatch(/\/accounts\/d1-a[12]\/ai\/run\//);
+      const logs = [
+        ...warn.mock.calls.map((c) => String(c[0])),
+        ...error.mock.calls.map((c) => String(c[0])),
+      ].join("\n");
+      expect(logs).not.toContain("d1-t1");
+      expect(logs).not.toContain("d1-t2");
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 
   test("no servable keys do not log on construction (log-spam fix)", () => {
@@ -691,7 +726,6 @@ describe("database-only credential wiring (ADR-001)", () => {
     // scrubbing lives in the transport, the only module holding secrets.
     const realTransport = new RestAITransport(
       [{ account_id: "a1", api_token: "SECRET-TOKEN-K1" }],
-      "d1",
       new ProviderPool(
         [
           {

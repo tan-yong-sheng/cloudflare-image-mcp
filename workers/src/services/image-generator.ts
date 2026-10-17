@@ -173,22 +173,12 @@ export class ImageGeneratorService {
       });
 
     // Database-only credentials (ADR-001): a servable pool is required.
-    const pools = deps?.pools;
-    if (pools && pools.hasAnyServable()) {
-      console.warn(
-        `AI inference path: ${pools.source()} with ${pools.servableCount()} account(s)`
-      );
-      this.transport = deps?.transport ?? dispatch(pools);
-      return;
-    }
-
-    // No servable credentials: nothing to serve, but no error logged here.
-    // The pool loader already reports this once per snapshot load, and the
-    // dispatcher reports it per request with the transport named — this
-    // constructor runs for every MCP/OpenAI request (and hourly on the cron
-    // path, which never generates), so logging it here was both duplicate
-    // and, on the cron, a false alarm.
-    this.transport = deps?.transport ?? dispatch(pools);
+    // Nothing is logged here. This constructor runs for every MCP/OpenAI
+    // request — and hourly on the cron path, which never generates — so a
+    // line here fires per request: the loader reports the store state once
+    // per snapshot load, the dispatcher names the transport when a request
+    // finds no credential, and readiness is queryable per provider.
+    this.transport = deps?.transport ?? dispatch(deps?.pools);
   }
 
   /**

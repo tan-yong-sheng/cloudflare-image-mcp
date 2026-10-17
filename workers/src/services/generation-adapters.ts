@@ -40,22 +40,17 @@ export interface ImageStore {
 }
 
 /**
- * Production transport: Cloudflare Workers AI via REST API.
- * Accounts (and the observability-only credential source label) come from
- * Database-only credential management (ADR-001).
+ * Production transport: Cloudflare Workers AI via REST API. Accounts come
+ * from database-only credential management (ADR-001); that is the only
+ * remaining source, so the credential tag is a literal rather than a label
+ * carried on the instance.
  */
 export class RestAITransport implements AITransport {
   private aiAccounts: AIAccount[];
-  private credentialSource: "d1";
   private pool?: ProviderPool;
 
-  constructor(
-    accounts: AIAccount[],
-    credentialSource: "d1" = "d1",
-    pool?: ProviderPool
-  ) {
+  constructor(accounts: AIAccount[], pool?: ProviderPool) {
     this.aiAccounts = accounts;
-    this.credentialSource = credentialSource;
     this.pool = pool;
   }
 

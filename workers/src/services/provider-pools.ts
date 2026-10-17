@@ -87,14 +87,4 @@ export class ProviderPools {
   hasAnyServable(): boolean {
     return this.entries.some((e) => e.pool.entries().length > 0);
   }
-
-  /** Servable key count across providers, for the startup log. */
-  servableCount(): number {
-    return this.entries.reduce((n, e) => n + e.pool.entries().length, 0);
-  }
-
-  /** Credential source label (ADR-001: always "d1"). Observability only. */
-  source(): string {
-    return this.entries[0]?.pool.source ?? "d1";
-  }
 }

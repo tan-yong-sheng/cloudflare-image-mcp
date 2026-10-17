@@ -65,11 +65,8 @@ describe("provider pools", () => {
   test("no pools at all is not servable", () => {
     const pools = new ProviderPools([]);
     expect(pools.hasAnyServable()).toBe(false);
-    expect(pools.servableCount()).toBe(0);
     expect(pools.forProvider("cloudflare")).toBeUndefined();
     expect(pools.forTransport("cloudflare-rest")).toBeUndefined();
-    // ADR-001: the source label stays truthful with nothing loaded.
-    expect(pools.source()).toBe("d1");
   });
 
   test("a transport resolves to its provider's pool by identity", () => {
