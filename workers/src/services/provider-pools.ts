@@ -18,6 +18,11 @@ export interface ProviderPoolEntry {
   /** providers.transport — the registry key (services/transports.ts). */
   transport: string;
   pool: ProviderPool;
+  /**
+   * D1 rows in this pool whose envelope would not open (parked, weight 0).
+   * Absent means none. See openedNoRow.
+   */
+  unopenableRows?: number;
 }
 
 export class ProviderPools {
@@ -86,5 +91,24 @@ export class ProviderPools {
    */
   hasAnyServable(): boolean {
     return this.entries.some((e) => e.pool.entries().length > 0);
+  }
+
+  /**
+   * True when rows loaded and not one envelope opened. A wrong
+   * PROVIDER_DATA_KEY fails every row at once, and AES-GCM cannot tell that
+   * from row corruption, so this is the broken-key signature. Deliberately
+   * parked rows still open and a deleted row is simply absent, so "nothing
+   * servable" is a different state that must keep meaning what the operator
+   * said. The snapshot cache reads this to avoid replacing working pools
+   * with pools that can serve nothing.
+   */
+  openedNoRow(): boolean {
+    const rows = this.entries.reduce((n, e) => n + e.pool.labels().length, 0);
+    if (rows === 0) return false;
+    const unopenable = this.entries.reduce(
+      (n, e) => n + (e.unopenableRows ?? 0),
+      0
+    );
+    return unopenable === rows;
   }
 }

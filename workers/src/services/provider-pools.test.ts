@@ -118,4 +118,58 @@ describe("provider pools", () => {
     expect(resolved.labels()).toEqual(["k2"]);
     expect(pools.forProvider("cf-b")).toBe(resolved);
   });
+
+  test("openedNoRow is the broken-key signature, not 'nothing servable'", () => {
+    // The cache reads this to decide whether a reload may replace a working
+    // snapshot, so it must fire on the one case nothing can be served
+    // *because the key is wrong* and stay quiet when the operator meant it.
+    const parked = (label: string) =>
+      new ProviderPool(
+        [{ label, accountId: "a", apiToken: "", weight: 0, enabled: false }],
+        { source: "d1" }
+      );
+
+    // Every row failed to open: AES-GCM cannot tell a wrong data key from
+    // corruption, and all rows failing at once is that signature.
+    const nothingOpened = new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool: parked("k1"),
+        unopenableRows: 1,
+      },
+    ]);
+    expect(nothingOpened.openedNoRow()).toBe(true);
+
+    // Same shape, different cause: these rows opened and the operator
+    // parked them, so readiness must keep reporting the operator's intent.
+    const parkedByOperator = new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool: parked("k1"),
+      },
+    ]);
+    expect(parkedByOperator.openedNoRow()).toBe(false);
+
+    // One row opened, one did not: a partial failure is not the all-at-once
+    // signature, so the policy that emptied the servable set still lands.
+    const partial = new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool: parked("k1"),
+        unopenableRows: 1,
+      },
+      {
+        providerId: "agnes",
+        transport: "openai-compat",
+        pool: parked("k2"),
+      },
+    ]);
+    expect(partial.openedNoRow()).toBe(false);
+
+    // No rows at all is an empty store, not a broken key.
+    expect(new ProviderPools([]).openedNoRow()).toBe(false);
+  });
 });

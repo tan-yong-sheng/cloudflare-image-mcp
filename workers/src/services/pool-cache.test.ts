@@ -4,11 +4,12 @@
 // Seam: getProviderPools(env, deps) — the isolate-scoped cache so the hot
 // path stays off D1. Proves boot-load once, version-poll inside a TTL
 // window, reload only on config_versions change, stale-serving when the
-// version query or the reload fails (a D1 blip never takes inference
-// down), and reload when no version source exists. Clock, version source,
+// version query fails, the reload fails, or the reload opens no envelope at
+// all (a D1 blip or a wrong data key never takes inference down), and reload
+// when no version source exists. Clock, version source,
 // and loader are injected — no D1, no timers, no real crypto.
 
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   getProviderPools,
   getExposureOverlay,
@@ -185,11 +186,17 @@ describe("pool cache (F2)", () => {
     enabled: true,
   } satisfies PoolRow;
 
-  function loaderDeps(readRows: () => Promise<PoolRow[]>) {
+  function loaderDeps(
+    readRows: () => Promise<PoolRow[]>,
+    openEnvelope: (
+      envelope: string,
+      keyMaterial: string
+    ) => Promise<string> = async () => "token"
+  ) {
     return (): Promise<ProviderPoolEntry[]> =>
       loadProviderPools({ ...ENV, PROVIDER_DATA_KEY: "data-key" } as Env, {
         readRows,
-        openEnvelope: async () => "token",
+        openEnvelope,
       });
   }
 
@@ -237,6 +244,109 @@ describe("pool cache (F2)", () => {
     f.advance(1_001);
     const recovered = await getProviderPools(ENV, deps);
     expect(labelsOf(recovered)).toEqual(["k1"]);
+  });
+
+  test("a reload that opens no envelope keeps the previous pools", async () => {
+    // A wrong PROVIDER_DATA_KEY parks every row and the loader resolves, so
+    // the cache cannot lean on a rejection here: it has to read the
+    // unopenable counts, or a bad secret trades working credentials for a
+    // pool that can serve nothing.
+    let keyBroken = false;
+    const f = makeFakes();
+    const deps: PoolCacheDeps = {
+      ...f.deps,
+      loadPools: loaderDeps(
+        async () => [d1Row],
+        async () => {
+          if (keyBroken) throw new Error("cannot open envelope");
+          return "token";
+        }
+      ),
+    };
+
+    const first = await getProviderPools(ENV, deps);
+    expect(labelsOf(first)).toEqual(["k1"]);
+
+    keyBroken = true;
+    f.advance(1_001);
+    f.bump();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const stale = await getProviderPools(ENV, deps);
+      expect(stale).toBe(first);
+      expect(labelsOf(stale)).toEqual(["k1"]);
+      expect(stale.hasAnyServable()).toBe(true);
+      const said = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toMatch(/serving stale/i);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  test("a reload that parks every credential still replaces the snapshot", async () => {
+    // The guard above must key on "no envelope opened", never on "nothing is
+    // servable": rows the operator disabled do open, so dropping every
+    // credential on purpose has to take effect.
+    let parked = false;
+    const f = makeFakes();
+    const deps: PoolCacheDeps = {
+      ...f.deps,
+      loadPools: loaderDeps(async () => [
+        parked ? { ...d1Row, enabled: false } : d1Row,
+      ]),
+    };
+
+    const first = await getProviderPools(ENV, deps);
+    expect(labelsOf(first)).toEqual(["k1"]);
+
+    parked = true;
+    f.advance(1_001);
+    f.bump();
+    const replaced = await getProviderPools(ENV, deps);
+    expect(replaced).not.toBe(first);
+    expect(replaced.hasAnyServable()).toBe(false);
+    // Parked, not forgotten: the row stays visible to readiness.
+    expect(labelsOf(replaced)).toEqual(["k1"]);
+  });
+
+  test("a cold start that opens no envelope retries instead of pinning", async () => {
+    // No previous snapshot to keep, and fixing the secret bumps no
+    // config_versions row (it is not D1 state), so an unversioned snapshot is
+    // what lets recovery happen at the next window instead of waiting for an
+    // unrelated write or an isolate recycle.
+    let keyBroken = true;
+    const f = makeFakes();
+    const deps: PoolCacheDeps = {
+      ...f.deps,
+      loadPools: loaderDeps(
+        async () => [d1Row],
+        async () => {
+          if (keyBroken) throw new Error("cannot open envelope");
+          return "token";
+        }
+      ),
+    };
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const cold = await getProviderPools(ENV, deps);
+      // The rows are still named, so the health surface can say "present,
+      // not usable" — the state a rejection could not report.
+      expect(cold.forProvider("cloudflare")).toBeDefined();
+      expect(cold.hasAnyServable()).toBe(false);
+
+      keyBroken = false;
+      f.advance(1_001);
+      const recovered = await getProviderPools(ENV, deps);
+      expect(labelsOf(recovered)).toEqual(["k1"]);
+      expect(recovered.hasAnyServable()).toBe(true);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 
   test("without an overlay loader the overlay is an empty map", async () => {

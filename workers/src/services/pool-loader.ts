@@ -5,7 +5,10 @@
 // into pool credentials. Database-only: no environment variable fallback.
 // A load that cannot happen — unreadable store, no data key — throws, so the
 // snapshot cache keeps serving the previous pools instead of replacing them
-// with none; a store that legitimately has no rows returns no pools. Rows are
+// with none; a store that legitimately has no rows returns no pools. A row
+// whose envelope will not open is parked and counted instead, which the cache
+// reads as "no envelope opened" to keep the previous pools while readiness
+// still names the rows it cannot serve. Rows are
 // grouped by provider_id, so each provider gets its own pool and its own
 // cooldown state — one provider's parked keys can never absorb another's
 // requests. Labels only in logs; envelopes and tokens never logged.
@@ -37,9 +40,12 @@ export interface PoolLoaderDeps {
  * PROVIDER_DATA_KEY, ADR-001). Rejects when the store cannot be read or the
  * data key is missing: both are failures the caller must distinguish from
  * "no credentials configured", and the snapshot cache's stale-serving path
- * depends on that distinction. A provider with no rows is simply absent,
- * which is the same shape readiness and routing read. Providers are keyed by
- * provider_id and tagged with the transport their `providers` row declares.
+ * depends on that distinction. A row that will not open does not reject —
+ * readiness has to report the rows it cannot serve — so it is parked with
+ * unopenableRows counted, which lets the cache tell a broken key from rows the
+ * operator parked. A provider with no rows is simply absent, which is the same
+ * shape readiness and routing read. Providers are keyed by provider_id and
+ * tagged with the transport their `providers` row declares.
  */
 export async function loadProviderPools(
   env: Env,
@@ -75,12 +81,15 @@ export async function loadProviderPools(
   }
 
   // Group rows by provider so each pool holds one provider's credentials.
-  const grouped = new Map<string, { transport: string; keys: PoolKey[] }>();
+  const grouped = new Map<
+    string,
+    { transport: string; keys: PoolKey[]; unopenable: number }
+  >();
   const totals = new Map<string, number>();
   for (const row of rows) {
     let group = grouped.get(row.providerId);
     if (!group) {
-      group = { transport: row.transport, keys: [] };
+      group = { transport: row.transport, keys: [], unopenable: 0 };
       grouped.set(row.providerId, group);
     }
     totals.set(row.providerId, (totals.get(row.providerId) ?? 0) + 1);
@@ -95,7 +104,10 @@ export async function loadProviderPools(
       });
     } catch {
       // Unopenable envelope: park the key by disabling it — it stays
-      // visible in labels(), never picked, and never counted servable.
+      // visible in labels(), never picked, and never counted servable — and
+      // count it, so a load that opened nothing is distinguishable from one
+      // whose rows the operator parked.
+      group.unopenable += 1;
       console.warn(
         `provider pool: skipping unopenable credential "${row.label}"`
       );
@@ -107,6 +119,21 @@ export async function loadProviderPools(
         enabled: false,
       });
     }
+  }
+
+  // Nothing opened at all: AES-GCM cannot tell a wrong key from row
+  // corruption, so this is the wrong-key case, not "the operator disabled
+  // everything" (those rows open). Say so once, naming the likely cause;
+  // the cache keeps the previous pools on the unopenableRows count below,
+  // because resolving would otherwise replace working pools with nothing.
+  const unopenableRows = [...grouped.values()].reduce(
+    (n, g) => n + g.unopenable,
+    0
+  );
+  if (unopenableRows === rows.length) {
+    console.error(
+      `provider pool: PROVIDER_DATA_KEY opened none of ${rows.length} D1 credential row(s). Cannot decrypt credentials.`
+    );
   }
 
   const entries: ProviderPoolEntry[] = [];
@@ -121,6 +148,7 @@ export async function loadProviderPools(
       providerId,
       transport: group.transport,
       pool: new ProviderPool(group.keys, { source: "d1" }),
+      unopenableRows: group.unopenable,
     });
   }
   return entries;

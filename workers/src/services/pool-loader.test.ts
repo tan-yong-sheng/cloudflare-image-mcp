@@ -5,8 +5,9 @@
 // opener, no D1 wire, no crypto internals. Proves D1 envelopes open with
 // the data key into servable per-provider pools; empty D1 returns no pools;
 // an unreadable store or a missing data key rejects (so the cache can keep
-// serving the previous pools); legacy environment variables have no effect;
-// nothing secret reaches the logs.
+// serving the previous pools); a load that opens no row resolves with those
+// rows counted (the cache's other stale-serving signal); legacy environment
+// variables have no effect; nothing secret reaches the logs.
 
 import { describe, expect, test, vi } from "vitest";
 import { loadProviderPools } from "./pool-loader.js";
@@ -174,7 +175,9 @@ describe("pool loader (F1)", () => {
         return "open-env-2";
       },
     });
-    // k1 unopenable: only k2 servable.
+    // k1 unopenable: only k2 servable, and the one unopenable row is counted
+    // (a partial failure is not the broken-key signature the cache keys on).
+    expect(entries[0].unopenableRows).toBe(1);
     const pool = onlyPools(entries);
     for (let i = 0; i < 10; i++) {
       expect(pool.pick()?.label).toBe("k2");
@@ -231,6 +234,34 @@ describe("loader source truth", () => {
       expect(said).toMatch(/PROVIDER_DATA_KEY is not set/i);
     } finally {
       error.mockRestore();
+    }
+  });
+
+  test("rows that no key can open park, count, and still resolve", async () => {
+    // A wrong PROVIDER_DATA_KEY fails every row at once. The loader must keep
+    // resolving — readiness has to report the rows it cannot serve, which a
+    // rejection cannot do — while counting them, so the snapshot cache can
+    // tell "no envelope opened" from "the operator parked everything" and
+    // refuse to trade its working pools for these.
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const entries = await loadProviderPools(minimalEnv, {
+        ...deps,
+        readRows: async () => [row("k1"), row("k2")],
+        openEnvelope: async () => {
+          throw new Error("cannot open envelope");
+        },
+      });
+      expect(entries[0].unopenableRows).toBe(2);
+      const pool = onlyPools(entries);
+      expect(pool.labels()).toEqual(["k1", "k2"]);
+      expect(pool.pick()).toBeNull();
+      const said = error.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(said).toMatch(/opened none of 2/i);
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
     }
   });
 

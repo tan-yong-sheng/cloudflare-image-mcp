@@ -10,8 +10,9 @@
 // a version source the snapshot reloads after each TTL window. Clock, version
 // source, and loaders are injected for deterministic tests; production deps
 // read PROVIDER_DB and open envelopes with PROVIDER_DATA_KEY via
-// loadProviderPools, whose rejection on an unreadable store is what keeps the
-// stale snapshot in place.
+// loadProviderPools, whose rejection on an unreadable store and whose
+// openedNoRow() signal for a data key that opens nothing are both what keep
+// the stale snapshot in place.
 
 import type { Env } from "../types.js";
 import { ProviderPools, type ProviderPoolEntry } from "./provider-pools.js";
@@ -89,7 +90,12 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
     snapshot = {
       pools: loaded.pools,
       overlay: loaded.overlay,
-      version: await readVersionOrNull(d),
+      // A snapshot that opened no envelope is provisional: fixing the secret
+      // leaves no config_versions trace (it is not a D1 row), so recording
+      // the version would let the match shortcut below pin "nothing
+      // servable" until some unrelated write. A snapshot with no rows keeps
+      // its version: an empty store is the operator's state, not a fault.
+      version: loaded.pools.openedNoRow() ? null : await readVersionOrNull(d),
       checkedAt: now,
     };
     return snapshot;
@@ -120,6 +126,18 @@ async function getSnapshot(env: Env, deps?: PoolCacheDeps): Promise<Snapshot> {
     // serving the previous pools until a later reload succeeds.
     previous.checkedAt = now;
     console.warn("config snapshot cache: reload failed, serving stale");
+    return previous;
+  }
+  if (previous.pools.hasAnyServable() && reloaded.pools.openedNoRow()) {
+    // Same rule as a failed reload, for a failure that resolves instead of
+    // rejecting: a wrong PROVIDER_DATA_KEY parks every row, so replacing the
+    // snapshot would swap working credentials for a pool that can serve
+    // nothing. Rows the operator parked still open, so a deliberate drop
+    // (openedNoRow() false) still lands.
+    previous.checkedAt = now;
+    console.warn(
+      "config snapshot cache: no credential envelope opened, serving stale"
+    );
     return previous;
   }
   snapshot = { ...reloaded, version, checkedAt: now };
