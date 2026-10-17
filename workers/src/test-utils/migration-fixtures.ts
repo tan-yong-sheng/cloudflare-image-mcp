@@ -30,13 +30,16 @@ export function migrationSql(file: string): string {
 }
 
 /** Empty database with every migration applied, in order. */
-export function freshDb(): DatabaseSync {
+export function freshDb(through?: string): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   // D1 enforces foreign keys by default (PRAGMA foreign_keys = 1); mirror
   // that here so FK constraints are exercised, not silently skipped.
   db.exec("PRAGMA foreign_keys = ON");
   for (const file of migrationFiles()) {
     db.exec(migrationSql(file));
+    // `through` stops after one migration, for tests that need to seed a
+    // pre-upgrade database.
+    if (file === through) break;
   }
   return db;
 }

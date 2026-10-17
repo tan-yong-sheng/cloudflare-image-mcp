@@ -7,10 +7,12 @@
 // management key second (403). Health carries labels and counts only — the
 // S3 tripwire asserts no secret character reaches any admin response.
 
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import worker from "../index.js";
 import { handleAdmin } from "./admin.js";
 import type { AdminD1 } from "../services/admin-store.js";
+import { resetPoolCache } from "../services/pool-cache.js";
+import { sealToken } from "../services/provider-crypto.js";
 import type { Env } from "../types.js";
 
 function env(): Env {
@@ -95,6 +97,14 @@ describe("admin health (R2)", () => {
       unconfigured
     );
     expect(response.status).toBe(403);
+    // The refusal names its own cause: a correct management key must not be
+    // reported as invalid, which is what the workbench showed before.
+    const body = (await response.json()) as {
+      error: { message: string; type: string; code: string | null };
+    };
+    expect(body.error.code).toBe("admin_disabled");
+    expect(body.error.type).toBe("api_error");
+    expect(body.error.message).toMatch(/API_KEYS/);
   });
 
   test("oversized admin key fails closed with 403 before hashing", async () => {
@@ -404,6 +414,7 @@ describe("production D1 adapter (R2)", () => {
         body: JSON.stringify({
           providerId: "cloudflare",
           label: "served-key",
+          accountId: "acct-1",
           apiToken: "cf-token-abc",
         }),
       }),
@@ -415,5 +426,319 @@ describe("production D1 adapter (R2)", () => {
     expect(body.id).toBe(7);
     // One atomic batch: key, credential version, config bump, audit.
     expect(batched).toHaveLength(4);
+  });
+});
+
+describe("admin PATCH (R2 follow-up, #91)", () => {
+  async function handle(request: Request, store?: unknown): Promise<Response> {
+    const { handleAdmin } = await import("./admin.js");
+    const response = await handleAdmin(
+      request,
+      new URL(request.url).pathname,
+      env(),
+      store ? { adminStore: store as never } : undefined
+    );
+    if (!response) throw new Error("no admin route matched");
+    return response;
+  }
+
+  function patchRequest(
+    path: string,
+    body: unknown,
+    adminKey = "admin-key"
+  ): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "PATCH",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": adminKey }),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const keyRow = {
+    id: 7,
+    provider_id: "cloudflare",
+    label: "imported-1",
+    weight: 1,
+    enabled: 1,
+    external_account_id: "acct-1",
+  };
+
+  /** Recording stub: the S2 seam owns SQL truth; this pins wiring. */
+  function stubStore(activeVersion: number | null = 1) {
+    const commits: { sql: string; params: readonly unknown[] }[] = [];
+    // The write paths read back what they committed, so the stub applies the
+    // column writes and ledger inserts it records; reading at prepare time is
+    // what lets those post-commit reads see them. S2 still owns SQL truth.
+    const row: Record<string, unknown> = { ...keyRow };
+    let currentVersion = activeVersion;
+    const stmt = (sql: string) => {
+      const value = sql.includes("MAX(version)")
+        ? currentVersion === null
+          ? null
+          : { v: currentVersion }
+        : { ...row };
+      const bound = {
+        first: async () => value,
+        all: async () => ({ results: [] as unknown[] }),
+        run: async () => ({ meta: { changes: 1 } }),
+        bind: () => bound,
+      };
+      return bound;
+    };
+    return {
+      commits,
+      store: {
+        prepare: (sql: string) => stmt(sql),
+        commit: async (
+          writes: readonly { sql: string; params: readonly unknown[] }[]
+        ) => {
+          commits.push(...writes);
+          for (const w of writes) {
+            const sql = w.sql.trim();
+            const update =
+              /^UPDATE provider_keys SET (\w+) = \? WHERE id = \?$/.exec(sql);
+            if (update) row[update[1]] = w.params[0];
+            if (sql.startsWith("INSERT INTO credential_versions")) {
+              currentVersion = Number(w.params[1]);
+            }
+          }
+        },
+      },
+    };
+  }
+
+  test("PATCH without a store is a 500, never a silent no-op", async () => {
+    const response = await worker.fetch(
+      patchRequest("/api/admin/keys/7", { weight: 2 }),
+      env()
+    );
+    expect(response.status).toBe(500);
+  });
+
+  test("PATCH with a wrong admin key is a 403", async () => {
+    const { store } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", { weight: 2 }, "wrong-key"),
+      store
+    );
+    expect(response.status).toBe(403);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+  });
+
+  test("a key id beyond a safe integer is a 400, not a 500", async () => {
+    // The path regex is digit-only, so a huge id used to reach the store as a
+    // rounded float (or Infinity) and fail there as a server error.
+    const { store, commits } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/99999999999999999999", { weight: 2 }),
+      store
+    );
+    expect(response.status).toBe(400);
+    expect(commits).toEqual([]);
+  });
+
+  test("PATCH on a non-numeric key path is a 404", async () => {
+    const { store } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/abc", { weight: 2 }),
+      store
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("PATCH validates the body before any write", async () => {
+    for (const body of [
+      { weight: 1.5 },
+      { weight: -1 },
+      { weight: "2" },
+      { enabled: "yes" },
+      { accountId: 5 },
+      { apiToken: 7 },
+    ]) {
+      const { store, commits } = stubStore();
+      const response = await handle(
+        patchRequest("/api/admin/keys/7", body),
+        store
+      );
+      expect(response.status).toBe(400);
+      expect(commits).toEqual([]);
+    }
+  });
+
+  test("PATCH rejects an explicitly empty token instead of skipping the rotate", async () => {
+    const { store, commits } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", { weight: 5, apiToken: "" }),
+      store
+    );
+    expect(response.status).toBe(400);
+    expect(commits).toEqual([]);
+  });
+
+  test("PATCH edits fields: update + bump + audit in one commit, no new version", async () => {
+    const { store, commits } = stubStore();
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", {
+        accountId: "acct-2",
+        weight: 5,
+        enabled: false,
+      }),
+      store
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: 7,
+      label: "imported-1",
+      providerId: "cloudflare",
+      activeVersion: 1,
+      weight: 5,
+      enabled: false,
+      accountId: "acct-2",
+    });
+    const sqls = commits.map((w) => w.sql);
+    expect(sqls[0]).toContain("UPDATE provider_keys");
+    expect(
+      sqls.some((s) => s.includes("INSERT INTO credential_versions"))
+    ).toBe(false);
+    expect(sqls.some((s) => s.includes("UPDATE config_versions"))).toBe(true);
+    const audit = commits.find((w) =>
+      w.sql.includes("INSERT INTO admin_audit")
+    );
+    expect(audit?.params).toEqual([
+      "admin-api",
+      "update",
+      "cloudflare",
+      7,
+      "imported-1",
+    ]);
+  });
+
+  test("PATCH with a token rotates: revoke + insert in the same commit, token never echoes", async () => {
+    const { store, commits } = stubStore(3);
+    const response = await handle(
+      patchRequest("/api/admin/keys/7", {
+        accountId: "acct-1",
+        apiToken: "new-token-value",
+      }),
+      store
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { activeVersion: number };
+    expect(body.activeVersion).toBe(4);
+    expect(JSON.stringify(body)).not.toContain("new-token-value");
+    const sqls = commits.map((w) => w.sql);
+    expect(
+      sqls.some((s) => s.includes("UPDATE credential_versions SET revoked_at"))
+    ).toBe(true);
+    expect(
+      sqls.some((s) => s.includes("INSERT INTO credential_versions"))
+    ).toBe(true);
+  });
+});
+
+describe("admin health readiness (ADR-001)", () => {
+  // Readiness must be the pool's servable predicate (enabled, weighted,
+  // envelope opens), not re-derived from the key list. A key can be listed,
+  // enabled, and weighted while its envelope is unopenable and the pool has
+  // parked it — if health reported "configured" there, the generator's
+  // warning would disagree with what generation actually picks.
+  beforeEach(() => resetPoolCache());
+
+  function envWithOneKey(opts: {
+    envelope: string;
+    enabled: number;
+    weight: number;
+  }): Env {
+    const poolRow = {
+      providerId: "cloudflare",
+      transport: "cloudflare-rest",
+      label: "parked",
+      accountId: "acct-1",
+      envelope: opts.envelope,
+      weight: opts.weight,
+      enabled: opts.enabled,
+    };
+    const db = {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () =>
+            sql.includes("config_versions") ? { version: 4 } : null,
+          all: async () => {
+            if (sql.includes("v.envelope")) return { results: [poolRow] };
+            if (sql.includes("MAX(v.version)")) {
+              return {
+                results: [
+                  {
+                    id: 1,
+                    providerId: "cloudflare",
+                    label: "parked",
+                    weight: opts.weight,
+                    enabled: opts.enabled,
+                    accountId: "acct-1",
+                    activeVersion: 1,
+                  },
+                ],
+              };
+            }
+            if (sql.includes("FROM providers")) {
+              return {
+                results: [{ id: "cloudflare", display_name: "Cloudflare" }],
+              };
+            }
+            return { results: [] };
+          },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return { ...stmt, bind: (..._p: unknown[]) => ({ ...stmt }) };
+      },
+      batch: async () => [],
+    };
+    return { ...env(), PROVIDER_DB: db } as unknown as Env;
+  }
+
+  async function healthOf(envWithDb: Env): Promise<{
+    keys: unknown[];
+    hasServableCredential: boolean;
+    hasServableCredentialByProvider: Record<string, boolean>;
+  }> {
+    const response = await handleAdmin(
+      get(
+        "/api/admin/health",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      "/api/admin/health",
+      envWithDb
+    );
+    expect(response?.status).toBe(200);
+    return (await response!.json()) as {
+      keys: unknown[];
+      hasServableCredential: boolean;
+      hasServableCredentialByProvider: Record<string, boolean>;
+    };
+  }
+
+  test("an enabled, weighted key with an unopenable envelope is not servable", async () => {
+    const body = await healthOf(
+      envWithOneKey({ envelope: "not-a-v1-envelope", enabled: 1, weight: 1 })
+    );
+    expect(body.keys).toHaveLength(1);
+    expect(body.hasServableCredential).toBe(false);
+    expect(body.hasServableCredentialByProvider).toEqual({
+      cloudflare: false,
+    });
+  });
+
+  test("an enabled, weighted key whose envelope opens is servable", async () => {
+    const envelope = await sealToken("cf-token", "r2-test-sealing-key");
+    const body = await healthOf(
+      envWithOneKey({ envelope, enabled: 1, weight: 1 })
+    );
+    expect(body.hasServableCredential).toBe(true);
+    // The per-provider map is what routing splits on (C4): same predicate,
+    // so the global flag and the provider's entry must agree.
+    expect(body.hasServableCredentialByProvider).toEqual({ cloudflare: true });
   });
 });

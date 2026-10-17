@@ -13,16 +13,34 @@
 
 import type { Env } from "../types.js";
 import { sealToken } from "../services/provider-crypto.js";
+import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
   AdminStoreError,
   disableProviderKey,
   getAdminHealth,
+  MAX_WEIGHT,
   rotateProviderKey,
+  updateProviderKey,
   type AdminCommitResult,
   type AdminD1,
   type AdminWrite,
+  type CredentialReadiness,
 } from "../services/admin-store.js";
+
+/** Routes the served frontend also calls; index.test.ts pins them to the UI. */
+export const ADMIN_HEALTH_PATH = "/api/admin/health";
+export const ADMIN_KEYS_PATH = "/api/admin/keys";
+
+/**
+ * Ids arrive as path text. Anything past a safe integer cannot address a row
+ * and would reach D1 as a rounded float or Infinity, so it is rejected before
+ * the store sees it.
+ */
+function parseKeyId(value: string): number | null {
+  const id = Number(value);
+  return Number.isSafeInteger(id) ? id : null;
+}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -39,9 +57,10 @@ function json(data: unknown, status = 200): Response {
 function errorJson(
   status: number,
   message: string,
-  type: "invalid_request_error" | "api_error" = "invalid_request_error"
+  type: "invalid_request_error" | "api_error" = "invalid_request_error",
+  code: string | null = null
 ): Response {
-  return json({ error: { message, type, code: null } }, status);
+  return json({ error: { message, type, code } }, status);
 }
 
 /** 403 response: standard OpenAI error envelope with invalid_request_error. */
@@ -205,12 +224,20 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
  * their flag so an operator can see what is parked.
  */
 export async function handleAdminHealth(
-  store: AdminD1 | null
+  store: AdminD1 | null,
+  readiness: CredentialReadiness
 ): Promise<Response> {
   if (!store) {
-    return json({ providers: [], keys: [], exposure: [], configVersion: null });
+    return json({
+      providers: [],
+      keys: [],
+      exposure: [],
+      configVersion: null,
+      hasServableCredential: readiness.any,
+      hasServableCredentialByProvider: readiness.byProvider,
+    });
   }
-  return json(await getAdminHealth(store));
+  return json(await getAdminHealth(store, readiness));
 }
 
 /**
@@ -232,28 +259,56 @@ export async function handleAdmin(
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
   if (!env.API_KEYS) {
+    // Fail closed, and say why: the presented management key is not the
+    // problem, so "Invalid admin key" would send the operator hunting for a
+    // key that cannot work here. Its own code lets the workbench show this
+    // reason instead of blaming the key.
     console.warn("admin API refused: API_KEYS is not configured");
-    return forbidden();
+    return errorJson(
+      403,
+      "Admin API is disabled: this Worker has no API_KEYS configured, so its admin gate cannot be satisfied.",
+      "api_error",
+      "admin_disabled"
+    );
   }
   if (!(await checkAdminKey(request, env))) return forbidden();
   try {
     const store = deps?.adminStore;
     const db = env.PROVIDER_DB;
     const active = store ?? (db ? d1AdminStore(db) : null);
-    if (request.method === "GET" && path === "/api/admin/health") {
-      return await handleAdminHealth(active);
+    if (request.method === "GET" && path === ADMIN_HEALTH_PATH) {
+      // Readiness comes from the provider pools — the same predicate
+      // inference picks with — not from the key list, which cannot see an
+      // unopenable envelope. The generator's "no credentials" warning reads
+      // the global flag; the per-provider map is what routing splits on, so
+      // the two can never disagree.
+      const pools = await getProviderPools(env);
+      return await handleAdminHealth(active, {
+        any: pools.hasAnyServable(),
+        byProvider: pools.readiness(),
+      });
     }
     if (!active) return internalError("no provider store bound");
-    if (request.method === "POST" && path === "/api/admin/keys") {
+    if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
     const rotate = path.match(/^\/api\/admin\/keys\/(\d+)\/rotate$/);
     if (request.method === "POST" && rotate) {
-      return await handleRotateKey(request, env, active, Number(rotate[1]));
+      const id = parseKeyId(rotate[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleRotateKey(request, env, active, id);
     }
     const disable = path.match(/^\/api\/admin\/keys\/(\d+)\/disable$/);
     if (request.method === "POST" && disable) {
-      return await handleDisableKey(request, env, active, Number(disable[1]));
+      const id = parseKeyId(disable[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleDisableKey(request, env, active, id);
+    }
+    const update = path.match(/^\/api\/admin\/keys\/(\d+)$/);
+    if (request.method === "PATCH" && update) {
+      const id = parseKeyId(update[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleUpdateKey(request, env, active, id);
     }
     return errorJson(404, "Not found");
   } catch (error) {
@@ -296,6 +351,12 @@ async function handleAddKey(
   } catch (error) {
     return storeError(error);
   }
+  let fields: KeyFields;
+  try {
+    fields = parseKeyFields(body, { requireToken: true });
+  } catch (error) {
+    return storeError(error);
+  }
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
     return internalError("no sealing key configured");
@@ -305,7 +366,10 @@ async function handleAddKey(
       providerId:
         typeof body["providerId"] === "string" ? body["providerId"] : "",
       label: typeof body["label"] === "string" ? body["label"] : "",
-      apiToken: typeof body["apiToken"] === "string" ? body["apiToken"] : "",
+      apiToken: fields.apiToken ?? "",
+      accountId: fields.accountId,
+      weight: fields.weight,
+      enabled: fields.enabled,
     });
     // Identity only: the settings page echoes this — the token that
     // arrived in the request must never come back out.
@@ -357,6 +421,109 @@ async function handleDisableKey(
 ): Promise<Response> {
   try {
     return json(await disableProviderKey(store, keyId));
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+interface KeyFields {
+  accountId?: string;
+  weight?: number;
+  enabled?: boolean;
+  apiToken?: string;
+}
+
+/** Shared body parsing for add/edit writes; 400s as AdminStoreError. */
+function parseKeyFields(
+  body: Record<string, unknown>,
+  options: { requireToken: boolean }
+): KeyFields {
+  const fields: KeyFields = {};
+  if (body["accountId"] !== undefined) {
+    if (typeof body["accountId"] !== "string") {
+      throw new AdminStoreError(400, "accountId must be a string");
+    }
+    fields.accountId = body["accountId"];
+  }
+  if (body["weight"] !== undefined) {
+    const weight = body["weight"];
+    if (
+      typeof weight !== "number" ||
+      !Number.isInteger(weight) ||
+      weight < 0 ||
+      weight > MAX_WEIGHT
+    ) {
+      throw new AdminStoreError(
+        400,
+        "weight must be an integer between 0 and " + MAX_WEIGHT
+      );
+    }
+    fields.weight = weight;
+  }
+  if (body["enabled"] !== undefined) {
+    if (typeof body["enabled"] !== "boolean") {
+      throw new AdminStoreError(400, "enabled must be a boolean");
+    }
+    fields.enabled = body["enabled"];
+  }
+  if (body["apiToken"] !== undefined) {
+    if (typeof body["apiToken"] !== "string") {
+      throw new AdminStoreError(400, "apiToken must be a string");
+    }
+    // An explicit "" is a caller mistake, not "keep the version": the edit
+    // sheet omits the field to keep it, and rotate/add reject empty outright.
+    if (body["apiToken"].length === 0) {
+      throw new AdminStoreError(400, "apiToken is required");
+    }
+    fields.apiToken = body["apiToken"];
+  }
+  if (options.requireToken && !fields.apiToken) {
+    throw new AdminStoreError(400, "apiToken is required");
+  }
+  return fields;
+}
+
+/**
+ * PATCH /api/admin/keys/:id — edit a key. Field edits (account id,
+ * weight, enabled) with optional rotate-on-save: a present apiToken
+ * rides the revoke-then-insert ledger inside the same transaction.
+ * Echoes identity + edited fields only; the token never comes back out.
+ */
+async function handleUpdateKey(
+  request: Request,
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await requestJson(request);
+  } catch (error) {
+    return storeError(error);
+  }
+  let fields: KeyFields;
+  try {
+    fields = parseKeyFields(body, { requireToken: false });
+  } catch (error) {
+    return storeError(error);
+  }
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (fields.apiToken && !dataKey) {
+    return internalError("no sealing key configured");
+  }
+  try {
+    const summary = await updateProviderKey(
+      store,
+      (t) => sealToken(t, dataKey ?? ""),
+      {
+        keyId,
+        accountId: fields.accountId,
+        weight: fields.weight,
+        enabled: fields.enabled,
+        apiToken: fields.apiToken ? fields.apiToken : undefined,
+      }
+    );
+    return json(summary);
   } catch (error) {
     return storeError(error);
   }

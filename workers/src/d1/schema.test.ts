@@ -15,6 +15,7 @@ import {
   columnsOf,
   freshDb,
   migrationFiles,
+  migrationSql,
 } from "../test-utils/migration-fixtures.js";
 
 function userTables(db: DatabaseSync): string[] {
@@ -25,6 +26,17 @@ function userTables(db: DatabaseSync): string[] {
           " AND name NOT LIKE 'sqlite_%' ORDER BY name"
       )
       .all() as { name: string }[]
+  ).map((r) => r.name);
+}
+
+function indexesOf(db: DatabaseSync, table: string): string[] {
+  return (
+    db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?" +
+          " AND name NOT LIKE 'sqlite_%' ORDER BY name"
+      )
+      .all(table) as { name: string }[]
   ).map((r) => r.name);
 }
 
@@ -62,6 +74,37 @@ describe("provider schema migrations (R1a)", () => {
       "key_label",
       "created_at",
     ]);
+  });
+
+  test("0003's rebuild keeps the audit key index (R2 follow-up)", () => {
+    // 0003 rebuilds admin_audit to widen the action CHECK; the rebuilt table
+    // must not silently lose the index 0002 created on it.
+    expect(indexesOf(freshDb(), "admin_audit")).toContain(
+      "idx_admin_audit_key"
+    );
+  });
+
+  test("0003's rebuild keeps the audit autoincrement high-water mark (R2 follow-up)", () => {
+    // An id deleted above the surviving rows must not be reissued by the
+    // rebuild: AUTOINCREMENT's no-reuse guarantee is the whole reason an
+    // audit ledger takes it.
+    const db = freshDb("0002_admin_audit.sql");
+    db.exec(
+      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label)" +
+        " VALUES ('op', 'add', 'cloudflare', NULL, 'a')," +
+        " ('op', 'add', 'cloudflare', NULL, 'b')," +
+        " ('op', 'add', 'cloudflare', NULL, 'c')"
+    );
+    db.exec("DELETE FROM admin_audit WHERE id = 3");
+    db.exec(migrationSql("0003_admin_audit_update_action.sql"));
+    db.exec(
+      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label)" +
+        " VALUES ('op', 'update', 'cloudflare', NULL, 'd')"
+    );
+    const row = db.prepare("SELECT MAX(id) AS id FROM admin_audit").get() as {
+      id: number;
+    };
+    expect(row.id).toBe(4);
   });
 
   test("provider catalog is seeded with Cloudflare only", () => {

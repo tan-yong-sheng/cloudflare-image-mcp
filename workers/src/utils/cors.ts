@@ -12,7 +12,7 @@
  */
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization, X-Admin-Key, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID, MCP-Transport",
   "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",

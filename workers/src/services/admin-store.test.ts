@@ -17,7 +17,9 @@ import {
   AdminStoreError,
   disableProviderKey,
   getAdminHealth,
+  MAX_WEIGHT,
   rotateProviderKey,
+  updateProviderKey,
   type AdminD1,
 } from "./admin-store.js";
 import { openEnvelope, sealToken } from "./provider-crypto.js";
@@ -112,6 +114,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "page-key-1",
       apiToken: "cf-token-aaa",
+      accountId: "acct-1",
     });
     expect(summary).toEqual({
       id: expect.any(Number),
@@ -178,12 +181,14 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "dup",
       apiToken: "t1",
+      accountId: "acct-1",
     });
     await expect(
       addProviderKey(d1, seal, {
         providerId: "cloudflare",
         label: "dup",
         apiToken: "t2",
+        accountId: "acct-1",
       })
     ).rejects.toMatchObject({ status: 409 });
     expect(versionOf(db)).toBe(2);
@@ -196,6 +201,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "rot",
       apiToken: "token-v1",
+      accountId: "acct-1",
     });
     const rotated = await rotateProviderKey(d1, seal, added.id, "token-v2");
     expect(rotated.activeVersion).toBe(2);
@@ -227,6 +233,20 @@ describe("admin store against the real migrations (S2)", () => {
     expect(versionOf(db)).toBe(1);
   });
 
+  test("add requires an account id for cloudflare keys", async () => {
+    // Inference addresses /accounts/{account_id}/ai/run — the account id
+    // is load-bearing, so add refuses a cloudflare key without one.
+    const db = freshDb();
+    await expect(
+      addProviderKey(asD1(db), seal, {
+        providerId: "cloudflare",
+        label: "no-acct",
+        apiToken: "t",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(versionOf(db)).toBe(1);
+  });
+
   test("disable parks the key, keeps the row, bumps, audits", async () => {
     const db = freshDb();
     const d1 = asD1(db);
@@ -234,6 +254,7 @@ describe("admin store against the real migrations (S2)", () => {
       providerId: "cloudflare",
       label: "off",
       apiToken: "t",
+      accountId: "acct-1",
     });
     const out = await disableProviderKey(d1, added.id);
     expect(out).toEqual({ id: added.id, enabled: false });
@@ -243,6 +264,245 @@ describe("admin store against the real migrations (S2)", () => {
       .get(added.id) as { enabled: number };
     expect(row.enabled).toBe(0);
     expect(auditRows(db).map((r) => r.action)).toEqual(["add", "disable"]);
+  });
+
+  test("update edits fields without a token: no new version, bump, audit", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "edit",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const before = versionOf(db);
+    const out = await updateProviderKey(d1, seal, {
+      keyId: added.id,
+      accountId: "acct-2",
+      weight: 5,
+      enabled: false,
+    });
+    expect(out).toEqual({
+      id: added.id,
+      label: "edit",
+      providerId: "cloudflare",
+      activeVersion: 1,
+      weight: 5,
+      enabled: false,
+      accountId: "acct-2",
+    });
+    const row = db
+      .prepare(
+        "SELECT external_account_id, weight, enabled FROM provider_keys WHERE id = ?"
+      )
+      .get(added.id) as {
+      external_account_id: string;
+      weight: number;
+      enabled: number;
+    };
+    expect(row).toEqual({
+      external_account_id: "acct-2",
+      weight: 5,
+      enabled: 0,
+    });
+    expect(versionOf(db)).toBe(before + 1);
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM credential_versions").get() as {
+        n: number;
+      }
+    ).toEqual({ n: 1 });
+    expect(auditRows(db).map((r) => r.action)).toEqual(["add", "update"]);
+  });
+
+  test("update echoes the stored row, not the pre-commit snapshot", async () => {
+    // A concurrent save can commit between this call's pre-read and its own
+    // commit (the seal is the await point). The response must report what is
+    // stored, not the snapshot this caller started from.
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "race",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const concurrentSeal = async (token: string) => {
+      db.prepare("UPDATE provider_keys SET enabled = 0 WHERE id = ?").run(
+        added.id
+      );
+      return seal(token);
+    };
+    const out = await updateProviderKey(d1, concurrentSeal, {
+      keyId: added.id,
+      weight: 9,
+      apiToken: "token-v2",
+    });
+    expect(out.weight).toBe(9);
+    expect(out.enabled).toBe(false); // the pre-read still saw enabled = 1
+    expect(out.activeVersion).toBe(2);
+  });
+
+  test("update with a token rotates in the same batch: revoke + insert", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "rot-on-save",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const out = await updateProviderKey(d1, seal, {
+      keyId: added.id,
+      accountId: "acct-1",
+      weight: 2,
+      apiToken: "token-v2",
+    });
+    expect(out.activeVersion).toBe(2);
+    const versions = db
+      .prepare(
+        "SELECT version, revoked_at FROM credential_versions ORDER BY version"
+      )
+      .all() as { version: number; revoked_at: number | null }[];
+    expect(versions).toEqual([
+      { version: 1, revoked_at: expect.any(Number) },
+      { version: 2, revoked_at: null },
+    ]);
+    const live = db
+      .prepare(
+        "SELECT envelope FROM credential_versions WHERE revoked_at IS NULL"
+      )
+      .get() as { envelope: string };
+    expect(await openEnvelope(live.envelope, DATA_KEY)).toBe("token-v2");
+    expect(auditRows(db).map((r) => r.action)).toEqual(["add", "update"]);
+  });
+
+  test("weight is bounded by the store, not only by the route", async () => {
+    // The ceiling lives with the domain: a store caller that skips the
+    // route's validation must not be able to write a weight the UI cannot
+    // represent, and the UI reads the same bound.
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "bounded",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const before = versionOf(db);
+    await expect(
+      addProviderKey(d1, seal, {
+        providerId: "cloudflare",
+        label: "bounded-2",
+        apiToken: "token-v1",
+        accountId: "acct-1",
+        weight: MAX_WEIGHT + 1,
+      })
+    ).rejects.toThrow(/weight must be an integer/);
+    for (const weight of [MAX_WEIGHT + 1, 1.5, -1, "2"] as unknown[]) {
+      await expect(
+        updateProviderKey(d1, seal, {
+          keyId: added.id,
+          weight: weight as number,
+        })
+      ).rejects.toThrow(/weight must be an integer/);
+    }
+    expect(versionOf(db)).toBe(before);
+    const row = db
+      .prepare("SELECT weight FROM provider_keys WHERE id = ?")
+      .get(added.id) as { weight: number };
+    expect(row.weight).toBe(1);
+  });
+
+  test("update of an unknown key is a 404 with no writes", async () => {
+    const db = freshDb();
+    await expect(
+      updateProviderKey(asD1(db), seal, { keyId: 999, weight: 2 })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(versionOf(db)).toBe(1);
+  });
+
+  test("update rejects a cloudflare key left without an account id", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "acct-guard",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const before = versionOf(db);
+    await expect(
+      updateProviderKey(d1, seal, {
+        keyId: added.id,
+        accountId: "",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(versionOf(db)).toBe(before);
+  });
+
+  test("update rejects a body that changes nothing", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "noop",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    await expect(
+      updateProviderKey(d1, seal, { keyId: added.id })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("update rejects an oversized token before sealing", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "oversize",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    const before = versionOf(db);
+    await expect(
+      updateProviderKey(d1, seal, {
+        keyId: added.id,
+        apiToken: "x".repeat(4097),
+      })
+    ).rejects.toMatchObject({ status: 400, message: "apiToken is too long" });
+    expect(versionOf(db)).toBe(before);
+  });
+
+  test("update writes only supplied fields, leaving omitted columns untouched", async () => {
+    const db = freshDb();
+    const base = asD1(db);
+    const statements: string[] = [];
+    const recording: AdminD1 = {
+      ...base,
+      commit: (writes) => {
+        for (const w of writes) statements.push(w.sql);
+        return base.commit(writes);
+      },
+    };
+    const added = await addProviderKey(base, seal, {
+      providerId: "cloudflare",
+      label: "partial",
+      apiToken: "token-v1",
+      accountId: "acct-1",
+    });
+    await updateProviderKey(recording, seal, {
+      keyId: added.id,
+      enabled: false,
+    });
+    expect(
+      statements.filter((s) => s.startsWith("UPDATE provider_keys"))
+    ).toEqual(["UPDATE provider_keys SET enabled = ? WHERE id = ?"]);
+    const row = db
+      .prepare(
+        "SELECT external_account_id, weight FROM provider_keys WHERE id = ?"
+      )
+      .get(added.id) as { external_account_id: string; weight: number };
+    expect(row).toEqual({ external_account_id: "acct-1", weight: 1 });
   });
 });
 
@@ -260,9 +520,13 @@ describe("admin health exposure rows (S2)", () => {
       providerId: "cloudflare",
       label: "health-key",
       apiToken: "cf-token-123",
+      accountId: "acct-1",
     });
 
-    const health = await getAdminHealth(d1);
+    const health = await getAdminHealth(d1, {
+      any: true,
+      byProvider: { cloudflare: true },
+    });
     expect(health.providers).toEqual([
       { id: "cloudflare", displayName: "Cloudflare Workers AI" },
     ]);
@@ -274,9 +538,14 @@ describe("admin health exposure rows (S2)", () => {
         weight: 1,
         enabled: true,
         activeVersion: 1,
+        accountId: "acct-1",
       },
     ]);
     expect(health.configVersion).toBe(2);
+    expect(health.hasServableCredential).toBe(true);
+    expect(health.hasServableCredentialByProvider).toEqual({
+      cloudflare: true,
+    });
     expect(health.exposure).toContainEqual({
       modelId: "@cf/model-a",
       enabled: false,

@@ -75,6 +75,7 @@ export interface AdminKeySummary {
   weight: number;
   enabled: boolean;
   activeVersion: number | null;
+  accountId: string | null;
 }
 
 export interface AdminExposureSummary {
@@ -90,12 +91,45 @@ export interface AdminHealthSummary {
   keys: AdminKeySummary[];
   exposure: AdminExposureSummary[];
   configVersion: number | null;
+  /**
+   * Injected by the endpoint from the provider pools: the same "servable"
+   * predicate inference picks with (enabled, weight > 0, envelope opens).
+   * The key list beside it cannot answer this — a key can be listed,
+   * enabled, and weighted yet still be parked by an unopenable envelope.
+   * Global, because the frontend keeps one "no credentials" warning (C4).
+   */
+  hasServableCredential: boolean;
+  /**
+   * providerId -> servable, from the same per-provider pools the dispatcher
+   * routes with (C4). A provider absent from both this map and `providers`
+   * has no rows; one present with `false` has rows that cannot be used.
+   */
+  hasServableCredentialByProvider: Record<string, boolean>;
+}
+
+/** Credential readiness as the provider pools report it (C4). */
+export interface CredentialReadiness {
+  /** Any provider servable — the generator's global warning reads this. */
+  any: boolean;
+  /** providerId -> servable. Providers with no rows are absent. */
+  byProvider: Record<string, boolean>;
 }
 
 export interface AddKeyInput {
   providerId: string;
   label: string;
   apiToken: string;
+  accountId?: string;
+  weight?: number;
+  enabled?: boolean;
+}
+
+export interface UpdateKeyInput {
+  keyId: number;
+  accountId?: string | null;
+  weight?: number;
+  enabled?: boolean;
+  apiToken?: string;
 }
 
 export interface KeySummary {
@@ -123,6 +157,25 @@ function rows<T>(res: { results?: T[] } | null | undefined): T[] {
   return res?.results ?? [];
 }
 
+/** Upper bound on a key's scheduling weight; the served UI mirrors it. */
+export const MAX_WEIGHT = 1_000_000;
+
+/** Validated integer weight, or a 400 when it is not one in range. */
+function assertWeight(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_WEIGHT
+  ) {
+    throw new AdminStoreError(
+      400,
+      `weight must be an integer between 0 and ${MAX_WEIGHT}`
+    );
+  }
+  return value;
+}
+
 function num(value: unknown): number {
   return typeof value === "number" ? value : 0;
 }
@@ -132,7 +185,10 @@ function num(value: unknown): number {
  * the config cache version. Reads live in the store so endpoints contain
  * zero SQL.
  */
-export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
+export async function getAdminHealth(
+  db: AdminD1,
+  readiness: CredentialReadiness
+): Promise<AdminHealthSummary> {
   const providerRows = rows<Record<string, unknown>>(
     await db.prepare("SELECT id, display_name FROM providers").all()
   );
@@ -149,6 +205,7 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
                 k.label AS label,
                 k.weight AS weight,
                 k.enabled AS enabled,
+                k.external_account_id AS accountId,
                 MAX(v.version) AS activeVersion
            FROM provider_keys k
            LEFT JOIN credential_versions v
@@ -164,6 +221,7 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
     weight: num(k["weight"]),
     enabled: num(k["enabled"]) === 1,
     activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
+    accountId: k["accountId"] === null ? null : String(k["accountId"]),
   }));
 
   const versionRow = await db
@@ -209,6 +267,8 @@ export async function getAdminHealth(db: AdminD1): Promise<AdminHealthSummary> {
     keys,
     exposure,
     configVersion: versionRow?.version ?? null,
+    hasServableCredential: readiness.any,
+    hasServableCredentialByProvider: readiness.byProvider,
   };
 }
 
@@ -238,7 +298,7 @@ function bumpWrite(): AdminWrite {
 }
 
 function auditWrite(
-  action: "add" | "rotate" | "disable",
+  action: "add" | "rotate" | "disable" | "update",
   providerId: string,
   keyId: number | null,
   label: string
@@ -304,15 +364,25 @@ export async function addProviderKey(
   if (!(await providerExists(db, providerId))) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
+  const accountId = input.accountId !== undefined ? clean(input.accountId) : "";
+  if (providerId === "cloudflare" && accountId.length === 0) {
+    throw new AdminStoreError(400, "accountId is required for cloudflare keys");
+  }
+  const weight = input.weight !== undefined ? assertWeight(input.weight) : 1;
+  const enabled = input.enabled !== undefined ? input.enabled === true : true;
   const envelope = await seal(apiToken);
   // Atomic single-commit: all 4 statements (key, credential version,
   // config bump, audit log) execute together in one batch. A duplicate
   // label rolls the entire batch back (no partial writes, no audit, no bump).
   const writes: AdminWrite[] = [
     write(
-      "INSERT INTO provider_keys (provider_id, label) VALUES (?, ?)",
+      "INSERT INTO provider_keys (provider_id, label, external_account_id, weight, enabled) " +
+        "VALUES (?, ?, ?, ?, ?)",
       providerId,
-      label
+      label,
+      accountId.length > 0 ? accountId : null,
+      weight,
+      enabled ? 1 : 0
     ),
     write(
       "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
@@ -363,6 +433,42 @@ export async function addProviderKey(
 }
 
 /**
+ * Append the R1b rotate ledger writes: revoke the active version (if any)
+ * then insert the next, in the order `uq_credential_single_active` forces —
+ * the revoke must precede the insert even inside one transaction. Returns
+ * the new active version. One home for the ledger order shared by rotate and
+ * update-with-token.
+ */
+function appendRotateWrites(
+  writes: AdminWrite[],
+  keyId: number,
+  envelope: string,
+  current: number | null
+): number {
+  const next = (current ?? 0) + 1;
+  if (current !== null) {
+    writes.push(
+      write(
+        "UPDATE credential_versions SET revoked_at = unixepoch() " +
+          "WHERE provider_key_id = ? AND revoked_at IS NULL",
+        keyId
+      )
+    );
+  }
+  writes.push(
+    write(
+      "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
+        "VALUES (?, ?, ?, ?)",
+      keyId,
+      next,
+      envelope,
+      ADMIN_ACTOR
+    )
+  );
+  return next;
+}
+
+/**
  * Rotate a key through the R1b ledger order: revoke the active version,
  * insert the next one, atomically. A concurrent rotate loses loudly (409)
  * on the single-active index instead of silently forking versions.
@@ -380,33 +486,11 @@ export async function rotateProviderKey(
   assertTokenLength(token);
   const key = await keyRow(db, keyId);
   if (!key) throw new AdminStoreError(404, `unknown provider key ${keyId}`);
-  const current = await db
-    .prepare(
-      "SELECT MAX(version) AS v FROM credential_versions WHERE provider_key_id = ?"
-    )
-    .bind(keyId)
-    .first<{ v: number | null }>();
-  const next = (current?.v ?? 0) + 1;
+  const current = await activeVersionOf(db, keyId);
   const envelope = await seal(token);
   const writes: AdminWrite[] = [];
-  if (current?.v !== null && current?.v !== undefined) {
-    writes.push(
-      write(
-        "UPDATE credential_versions SET revoked_at = unixepoch() " +
-          "WHERE provider_key_id = ? AND revoked_at IS NULL",
-        keyId
-      )
-    );
-  }
+  const next = appendRotateWrites(writes, keyId, envelope, current);
   writes.push(
-    write(
-      "INSERT INTO credential_versions (provider_key_id, version, envelope, created_by) " +
-        "VALUES (?, ?, ?, ?)",
-      keyId,
-      next,
-      envelope,
-      ADMIN_ACTOR
-    ),
     bumpWrite(),
     auditWrite("rotate", key.provider_id, keyId, key.label)
   );
@@ -442,4 +526,159 @@ export async function disableProviderKey(
     auditWrite("disable", key.provider_id, keyId, key.label),
   ]);
   return { id: keyId, enabled: false as const };
+}
+
+/** Full key row the update path edits and echoes back. */
+async function keyRowFull(
+  db: AdminD1,
+  keyId: number
+): Promise<{
+  id: number;
+  provider_id: string;
+  label: string;
+  weight: number;
+  enabled: number;
+  external_account_id: string | null;
+} | null> {
+  return db
+    .prepare(
+      "SELECT id, provider_id, label, weight, enabled, external_account_id " +
+        "FROM provider_keys WHERE id = ?"
+    )
+    .bind(keyId)
+    .first();
+}
+
+/** Highest credential version recorded for a key (null when unsealed). */
+async function activeVersionOf(
+  db: AdminD1,
+  keyId: number
+): Promise<number | null> {
+  const row = await db
+    .prepare(
+      "SELECT MAX(version) AS v FROM credential_versions WHERE provider_key_id = ?"
+    )
+    .bind(keyId)
+    .first<{ v: number | null }>();
+  return row?.v ?? null;
+}
+
+/**
+ * Update a key: field edits (account id, weight, enabled) with optional
+ * rotate-on-save, one transaction. A present token rides the same
+ * revoke-before-insert ledger order as rotateProviderKey so a save can
+ * never fork versions. The cloudflare account id is load-bearing for
+ * inference, so a change that would leave it empty is rejected.
+ */
+export async function updateProviderKey(
+  db: AdminD1,
+  seal: (token: string) => Promise<string>,
+  input: UpdateKeyInput
+): Promise<AdminKeySummary> {
+  const key = await keyRowFull(db, input.keyId);
+  if (!key)
+    throw new AdminStoreError(404, `unknown provider key ${input.keyId}`);
+
+  const accountId =
+    input.accountId !== undefined
+      ? clean(input.accountId)
+      : (key.external_account_id ?? "");
+  if (key.provider_id === "cloudflare" && accountId.length === 0) {
+    throw new AdminStoreError(400, "accountId is required for cloudflare keys");
+  }
+  const storedAccountId = accountId.length > 0 ? accountId : null;
+
+  const weight =
+    input.weight !== undefined ? assertWeight(input.weight) : num(key.weight);
+  const enabled =
+    input.enabled !== undefined
+      ? input.enabled === true
+      : num(key.enabled) === 1;
+  const token = typeof input.apiToken === "string" ? input.apiToken : "";
+  if (token.length > 0) assertTokenLength(token);
+  if (
+    input.weight === undefined &&
+    input.enabled === undefined &&
+    input.accountId === undefined &&
+    token.length === 0
+  ) {
+    throw new AdminStoreError(400, "no fields to update");
+  }
+
+  const writes: AdminWrite[] = [];
+  if (input.accountId !== undefined) {
+    writes.push(
+      write(
+        "UPDATE provider_keys SET external_account_id = ? WHERE id = ?",
+        storedAccountId,
+        input.keyId
+      )
+    );
+  }
+  if (input.weight !== undefined) {
+    writes.push(
+      write(
+        "UPDATE provider_keys SET weight = ? WHERE id = ?",
+        weight,
+        input.keyId
+      )
+    );
+  }
+  if (input.enabled !== undefined) {
+    writes.push(
+      write(
+        "UPDATE provider_keys SET enabled = ? WHERE id = ?",
+        enabled ? 1 : 0,
+        input.keyId
+      )
+    );
+  }
+
+  const current = await activeVersionOf(db, input.keyId);
+  if (token) {
+    const envelope = await seal(token);
+    appendRotateWrites(writes, input.keyId, envelope, current);
+  }
+
+  writes.push(
+    bumpWrite(),
+    auditWrite("update", key.provider_id, input.keyId, key.label)
+  );
+  try {
+    await db.commit(writes);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AdminStoreError(
+        409,
+        `key ${input.keyId} changed concurrently; retry the save`
+      );
+    }
+    throw error;
+  }
+  // Echo the stored row rather than the pre-commit snapshot: a concurrent save
+  // that touched another field has committed its own change by then, and the
+  // snapshot would report that field as unchanged. A present token is this
+  // request's own insert, so its version is already exact; without one the
+  // highest recorded version is re-read for the same reason.
+  const after = await keyRowFull(db, input.keyId);
+  if (!after) {
+    throw new AdminStoreError(
+      500,
+      `key ${input.keyId} is missing after update`
+    );
+  }
+  // Always re-read after the commit: a rotation committing after this batch
+  // would make the version this request inserted the superseded one, so only
+  // the ledger's current answer is safe to echo. (rotateProviderKey reports its
+  // own insert instead — there the created version is the point of the call.)
+  const echoedVersion = await activeVersionOf(db, input.keyId);
+  return {
+    id: input.keyId,
+    label: after.label,
+    providerId: after.provider_id,
+    activeVersion: echoedVersion,
+    weight: num(after.weight),
+    enabled: num(after.enabled) === 1,
+    accountId: after.external_account_id,
+  };
 }
