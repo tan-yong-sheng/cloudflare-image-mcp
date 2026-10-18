@@ -9,7 +9,8 @@ Drive the real Worker through its HTTP surface with `curl`. The instance runs
 locally under `wrangler dev --local` with miniflare-emulated D1 + R2 and
 **zero real credentials** — that empty-credential state is a designed,
 ADR-001-documented condition, and several verifications below assert against
-it. Nothing here makes a paid inference call.
+it. Nothing here makes a paid inference call: the probes that would need a
+credential run only when the store reports it has none (see Doctor).
 
 ## Launch
 
@@ -27,10 +28,14 @@ command), or in a terminal you keep open. It then:
 2. copies `workers/wrangler.toml.example` → `workers/wrangler.toml` and
    `workers/.dev.vars.example` → `workers/.dev.vars` (only if missing —
    existing local config is never overwritten);
-3. applies `wrangler d1 migrations apply PROVIDER_DB --local` (8 commands,
-   idempotent) so the provider store schema exists from an empty data dir;
+3. applies `wrangler d1 migrations apply PROVIDER_DB --local
+--persist-to .verify/state` (8 commands, idempotent) against **this
+   instance's own** persistence dir, so verification never reads or writes the
+   shared `workers/.wrangler/state/` store — a key seeded there by hand cannot
+   turn a verification probe into a real provider call;
 4. records `{pid, port, startedAt}` in `.verify/instance.json`;
-5. `exec`s `wrangler dev --local --port $VERIFY_PORT` in the foreground.
+5. `exec`s `wrangler dev --local --port $VERIFY_PORT --persist-to .verify/state`
+   in the foreground.
 
 Ready means usable, not just listening: the log prints
 `Ready on http://localhost:VERIFY_PORT` **and** `GET /health` returns
@@ -49,19 +54,28 @@ Run first whenever anything looks off, and before trusting a running instance.
 VERIFY_PORT=8788 .agents/skills/verify-cloudflare-image-mcp/scripts/doctor.sh
 ```
 
-One read-only pass, all checks must print `ok`:
+One read-only pass. Every check prints `ok`, or `fail` (which sets the exit
+code); a check that cannot run safely prints `skip` and does not fail the run.
+Nothing is probed until ownership is established:
 
-- **Ownership** — the pid in `.verify/instance.json` is alive and its cmdline
-  is `wrangler dev`. This instance was started by this verification run; a
-  same-port listener without our pidfile is a foreign instance (see Gotchas).
+- **Ownership** — the pid in `.verify/instance.json` is alive, is a
+  `wrangler dev`, and still carries the recorded `--port`. This instance was
+  started by this verification run; a same-port listener without our pidfile,
+  or a pid recycled by another worktree's server, is a foreign instance (see
+  Gotchas). When this check fails, doctor prints `skip` for the HTTP probes and
+  exits non-zero instead of probing a target it cannot vouch for.
 - **Ready + version** — `/health` returns `status:healthy` and `version`
   matches `workers/package.json`'s `version`.
 - **Auth gate armed** — `/v1/models` without a key returns `401`; with
   `local-dev-user-key` returns `200`.
 - **Empty-credential path** — an authenticated
   `POST /v1/images/generations` returns the ADR-001 error naming
-  `cloudflare-rest`. This is expected on a fresh local store and proves both
-  that the generator ran and that no foreign credential source leaked in.
+  `cloudflare-rest`. This is expected on a store with no servable credential
+  and proves both that the generator ran and that no foreign credential source
+  leaked in. It runs **only** when `/api/admin/health` reports
+  `hasServableCredential:false`; with a servable credential the same POST would
+  reach the provider and spend real usage, so doctor prints `skip` and says
+  how to get back to a fresh store (delete the key, or drop `.verify/state`).
 
 ## Drive
 
@@ -115,11 +129,13 @@ inference, report the missing precondition instead of faking it.
 ```
 
 Reads `.verify/instance.json` and kills **only** that recorded pid, after
-confirming its cmdline still is `wrangler dev` — never kill by process name:
-other worktrees run their own instances. Then removes
+confirming its cmdline still is a `wrangler dev` on the recorded port — never
+kill by process name, and never kill a pid that another worktree's server has
+since recycled. Then removes
 `.verify/instance.json` and confirms the port no longer listens. It never
-touches `evidence/verify/`, `workers/.wrangler/state/` (local D1/R2 data
-survives for the next run), or the copied `wrangler.toml`/`.dev.vars`.
+touches `evidence/verify/`, the instance's own `.verify/state/` store (local
+D1/R2 data survives for the next run), or the copied
+`wrangler.toml`/`.dev.vars`.
 
 Order matters for a tracked launch: this sandbox only allows signaling your
 own descendants, so a pid launched through `bg_task`/pueue returns EPERM to
@@ -144,8 +160,12 @@ All executable, all shown above; run them from the worktree root with
 - **Never drive an instance you did not launch.** This repo runs one
   worktree per feature; a listener on the default port may be another
   session's server with seeded (real) credentials, and its 200s — even
-  successful image generations — prove nothing about your instance. The
-  doctor's ownership check exists for exactly this.
+  successful image generations — prove nothing about your instance. Doctor's
+  ownership check exists for exactly this and now gates every probe it makes.
+- The instance's store is `.verify/state/`, not `workers/.wrangler/state/`.
+  It survives across verification runs, so a key added by an earlier battery is
+  still there as a disabled row; that is why the empty-credential probes check
+  `hasServableCredential` instead of assuming a fresh database.
 - `npm run dev:local` pins port 8787; when using it directly, check the port
   first and prefer `launch.sh` with `VERIFY_PORT`.
 - `wrangler dev --remote` (the `dev` npm script) targets real Cloudflare

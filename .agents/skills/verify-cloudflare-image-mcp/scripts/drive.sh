@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Full HTTP battery against the local verification instance: health, model
 # listing, auth matrix, generation error contract, MCP initialize + tools,
-# admin two-gate matrix, frontend pages, plus a real image round-trip when
-# provider credentials have been seeded via the admin API (skipped
-# otherwise, with the reason). Every probe's request line, status, and body
-# is captured to evidence/verify/<run-id>/battery.txt.
+# admin two-gate matrix, frontend pages. Every probe's request line, status,
+# and body is captured to evidence/verify/<run-id>/battery.txt. The generation
+# probe asserts the ADR-001 empty-credential contract, so it only runs when the
+# store is proven to have no servable credential — otherwise that POST would
+# reach the provider and spend real usage; the skip is printed with its reason.
 #
 # Env:
 #   VERIFY_PORT  port the instance listens on (default 8788)
@@ -19,11 +20,15 @@ RUN_ID="$(date -u +%Y-%m-%dT%H%M%SZ)"
 EVIDENCE_DIR="$WORKTREE_ROOT/evidence/verify/$RUN_ID"
 mkdir -p "$EVIDENCE_DIR"
 OUT="$EVIDENCE_DIR/battery.txt"
+# Bodies land in a private temp file: a fixed /tmp path is predictable, so a
+# pre-created symlink there would make curl overwrite an arbitrary file.
+BODY_FILE="$(mktemp)"
+trap 'rm -f "$BODY_FILE"' EXIT
 failures=0
 
 probe() { # label method path [(-H "K: V")...] [--data JSON]
   local label="$1" method="$2" path="$3"; shift 3
-  local -a args=(-s -o /tmp/verify-body.$$ -w '%{http_code}' --max-time 30 -X "$method")
+  local -a args=(-s -o "$BODY_FILE" -w '%{http_code}' --max-time 30 -X "$method")
   while [ $# -gt 0 ]; do
     case "$1" in
       -H) args+=(-H "$2"); shift 2 ;;
@@ -35,7 +40,7 @@ probe() { # label method path [(-H "K: V")...] [--data JSON]
   {
     echo "### $label"
     echo "req: $method $path -> $code"
-    head -c 600 /tmp/verify-body.$$; echo; echo
+    head -c 600 "$BODY_FILE"; echo; echo
   } >>"$OUT"
   echo "$code"
 }
@@ -58,15 +63,26 @@ expect "models with key is 200" \
   "$(probe 'GET /v1/models (bearer)' GET /v1/models -H "Authorization: Bearer $API_KEY")" 200
 
 # ADR-001 error contract: the generator runs and reports the empty store.
-gen_code="$(probe 'POST /v1/images/generations (bearer, empty store)' POST /v1/images/generations \
-  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  --data '{"model":"@cf/black-forest-labs/flux-1-schnell","prompt":"battery probe","n":1}')"
-expect "generation reports empty credential store" "$gen_code" 500
-if grep -q 'No AI provider credentials configured for transport' "$OUT" &&
-  grep -q 'cloudflare-rest' "$OUT"; then
-  echo "ok    generation error names cloudflare-rest (ADR-001 message)"
+# Gated on the store's own readiness flag — with a servable credential present
+# this POST would reach the provider and spend real usage. An unreadable admin
+# endpoint means no proof of emptiness, so the probe is skipped there too.
+store="$(curl -s --max-time 5 -H "Authorization: Bearer $API_KEY" \
+  -H "X-Admin-Key: $ADMIN_KEY" "$BASE/api/admin/health")"
+if printf '%s' "$store" | tr -d '[:space:]' | grep -q '"hasServableCredential":false'; then
+  gen_code="$(probe 'POST /v1/images/generations (bearer, empty store)' POST /v1/images/generations \
+    -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+    --data '{"model":"@cf/black-forest-labs/flux-1-schnell","prompt":"battery probe","n":1}')"
+  expect "generation reports empty credential store" "$gen_code" 500
+  if grep -q 'No AI provider credentials configured for transport' "$OUT" &&
+    grep -q 'cloudflare-rest' "$OUT"; then
+    echo "ok    generation error names cloudflare-rest (ADR-001 message)"
+  else
+    echo "fail  generation error does not carry the ADR-001 message"; failures=$((failures + 1))
+  fi
 else
-  echo "fail  generation error does not carry the ADR-001 message"; failures=$((failures + 1))
+  echo "skip  generation probe: store is not proven empty (a servable credential"
+  echo "      would make this POST a real provider call). Delete the key or drop"
+  echo "      .verify/state to assert the empty-credential contract on a fresh store."
 fi
 
 # MCP: streamable HTTP transport answers initialize inside an SSE frame.
@@ -90,7 +106,6 @@ else
   echo "fail  admin API contract — see $OUT"; failures=$((failures + 1))
 fi
 
-rm -f /tmp/verify-body.$$
 echo
 echo "battery done: $failures failure(s); evidence in $EVIDENCE_DIR"
 exit "$((failures > 0 ? 1 : 0))"
