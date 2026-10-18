@@ -16,6 +16,7 @@ import {
 } from "./transports.js";
 import { ProviderPool } from "./provider-pool.js";
 import { ProviderPools } from "./provider-pools.js";
+import { OpenAITransport } from "./openai-transport.js";
 import type { AITransport } from "./generation-adapters.js";
 import { MODEL_CONFIGS } from "../config/models.js";
 import type { ModelConfig } from "../types.js";
@@ -93,6 +94,13 @@ describe("transport registry", () => {
   test("the cloudflare entry builds a REST transport from the pool", () => {
     const transport = TRANSPORT_FACTORIES[CF](pool("cf-token"));
     expect(typeof transport.run).toBe("function");
+  });
+
+  test("the openai-compat entry builds an OpenAI transport from the pool", () => {
+    // The Agnes provider row (migration 0005) is what puts credentials
+    // behind this key; the entry itself only binds class and endpoint.
+    const transport = TRANSPORT_FACTORIES["openai-compat"](pool("agnes-token"));
+    expect(transport).toBeInstanceOf(OpenAITransport);
   });
 });
 

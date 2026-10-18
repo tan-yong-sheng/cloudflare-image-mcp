@@ -208,10 +208,12 @@ or logout — never persisted.
   with 409; unknown providers with 400. Cloudflare keys require
   `accountId` (inference addresses `/accounts/{account_id}/ai/run`).
   `providerId` rides on every write, so a second provider needs no API
-  change — today `"cloudflare"` is the only row in the catalog. Each
-  `providers` row names its seam by protocol in `transport`, and a model
-  reaches that provider's credentials by declaring the same string as its
-  `inferenceProvider` (ADR-002).
+  change — the catalog seeds `"cloudflare"` (migration 0001) and `"agnes"`
+  (migration 0005). Each `providers` row names its seam by protocol in
+  `transport`, and a model reaches that provider's credentials by declaring
+  the same string as its `inferenceProvider` (ADR-002). An Agnes key needs
+  no `accountId`: that field is a Cloudflare account reference, and the
+  OpenAI-compatible transport authenticates with the bearer key alone.
 - **Edit / rotate-on-save** — `PATCH /api/admin/keys/:id` with any of
   `{ "accountId", "weight", "enabled", "apiToken" }`. A present
   token revokes the active version and inserts the next one in the same

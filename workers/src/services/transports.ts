@@ -18,6 +18,7 @@ import type { ModelConfig } from "../types.js";
 import type { ProviderPool } from "./provider-pool.js";
 import { MODEL_CONFIGS } from "../config/models.js";
 import { RestAITransport, type AITransport } from "./generation-adapters.js";
+import { AGNES_API_BASE_URL, OpenAITransport } from "./openai-transport.js";
 
 /** Builds the transport for one registry key from that provider's pool. */
 export type TransportFactory = (pool: ProviderPool) => AITransport;
@@ -36,6 +37,11 @@ export const TRANSPORT_FACTORIES: Readonly<Record<string, TransportFactory>> = {
         .map((e) => ({ account_id: e.accountId, api_token: e.apiToken })),
       pool
     ),
+  // OpenAI Images wire format (R3-Agnes). The keys of `providers.transport`
+  // and this registry are one vocabulary, so the provider row seeded by
+  // migration 0005 is what puts credentials behind this entry.
+  "openai-compat": (pool) =>
+    new OpenAITransport({ pool, baseUrl: AGNES_API_BASE_URL }),
 };
 
 /** A model asked for a transport the registry does not know. Config bug. */

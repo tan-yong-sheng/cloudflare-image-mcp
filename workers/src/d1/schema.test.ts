@@ -152,16 +152,26 @@ describe("provider schema migrations (R1a)", () => {
     expect(row.id).toBe(4);
   });
 
-  test("provider catalog is seeded with Cloudflare only", () => {
+  test("provider catalog is seeded with Cloudflare and Agnes", () => {
+    // 0005 seeds the Agnes row (R3-Agnes, #75). Its transport value is the
+    // registry key TRANSPORT_FACTORIES serves (ADR-002), which is what makes
+    // a published Agnes credential reachable by the dispatcher.
     const db = freshDb();
     const rows = db
-      .prepare("SELECT id, display_name, transport FROM providers")
+      .prepare(
+        "SELECT id, display_name, transport FROM providers ORDER BY rowid"
+      )
       .all() as { id: string; display_name: string; transport: string }[];
     expect(rows).toEqual([
       {
         id: "cloudflare",
         display_name: "Cloudflare Workers AI",
         transport: "cloudflare-rest",
+      },
+      {
+        id: "agnes",
+        display_name: "Agnes AI",
+        transport: "openai-compat",
       },
     ]);
   });
