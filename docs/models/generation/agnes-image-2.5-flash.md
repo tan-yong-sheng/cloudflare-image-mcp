@@ -91,7 +91,8 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 
   The generated image encoded as a Base64 string (`b64_json`). If the
   provider returns a public URL instead, the service downloads it and returns
-  the bytes, so the seam output is the same either way.
+  the bytes, so the seam output is the same either way. A URL that is not a
+  public `https` location is refused rather than fetched.
 
 ## Size Reference
 
