@@ -17,6 +17,7 @@ import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
   AdminStoreError,
+  deleteProviderKey,
   disableProviderKey,
   getAdminHealth,
   MAX_WEIGHT,
@@ -310,6 +311,12 @@ export async function handleAdmin(
       if (id === null) return errorJson(400, "key id is not a safe integer");
       return await handleUpdateKey(request, env, active, id);
     }
+    const remove = path.match(/^\/api\/admin\/keys\/(\d+)\/delete$/);
+    if (request.method === "POST" && remove) {
+      const id = parseKeyId(remove[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleDeleteKey(request, env, active, id);
+    }
     return errorJson(404, "Not found");
   } catch (error) {
     return storeError(error);
@@ -524,6 +531,20 @@ async function handleUpdateKey(
       }
     );
     return json(summary);
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+/** POST /api/admin/keys/:id/delete — hard delete the key and its versions. */
+async function handleDeleteKey(
+  request: Request,
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  try {
+    return json(await deleteProviderKey(store, keyId));
   } catch (error) {
     return storeError(error);
   }

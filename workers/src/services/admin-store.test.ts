@@ -15,6 +15,7 @@ import { freshDb } from "../test-utils/migration-fixtures.js";
 import {
   addProviderKey,
   AdminStoreError,
+  deleteProviderKey,
   disableProviderKey,
   getAdminHealth,
   MAX_WEIGHT,
@@ -593,5 +594,65 @@ describe("admin health exposure rows (S2)", () => {
       scopes: ["s1", "s2"],
     });
     expect(byModel.get("@cf/model-b")?.scopes).toEqual([null]);
+  });
+});
+
+describe("deleteProviderKey (hard delete)", () => {
+  test("delete removes key and credential versions atomically", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "delete-me",
+      apiToken: "token-to-delete",
+      accountId: "acct-delete",
+    });
+
+    const result = await deleteProviderKey(d1, added.id);
+    expect(result).toEqual({ id: added.id, deleted: true });
+
+    // Key row is gone
+    const keyRow = db
+      .prepare("SELECT * FROM provider_keys WHERE id = ?")
+      .get(added.id);
+    expect(keyRow).toBeUndefined();
+
+    // Credential versions are gone
+    const credRows = db
+      .prepare("SELECT * FROM credential_versions WHERE provider_key_id = ?")
+      .all(added.id) as unknown[];
+    expect(credRows).toEqual([]);
+
+    // Config version was bumped (add + delete = 2 bumps)
+    expect(versionOf(db)).toBe(3);
+
+    // Audit log has delete action
+    expect(auditRows(db).map((r) => r.action)).toEqual(["add", "delete"]);
+  });
+
+  test("delete of unknown key returns 404", async () => {
+    const db = freshDb();
+    await expect(deleteProviderKey(asD1(db), 999)).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(versionOf(db)).toBe(1);
+  });
+
+  test("delete is idempotent-safe: second call returns 404", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cloudflare",
+      label: "once",
+      apiToken: "t",
+      accountId: "acct-once",
+    });
+
+    await deleteProviderKey(d1, added.id);
+
+    // Second delete should fail with 404
+    await expect(deleteProviderKey(d1, added.id)).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });
