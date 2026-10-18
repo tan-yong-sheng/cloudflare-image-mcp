@@ -67,14 +67,14 @@ One read-only pass, all checks must print `ok`:
 
 Harness: `curl` against `http://127.0.0.1:$VERIFY_PORT`. Real handles only:
 
-| Surface       | Route                                                                  | Auth                                              |
-| ------------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
-| Health        | `GET /health`                                                          | none                                              |
-| OpenAI models | `GET /v1/models`                                                       | `Authorization: Bearer local-dev-user-key`        |
-| OpenAI images | `POST /v1/images/generations` \| `edits` \| `variations`               | bearer                                            |
-| MCP           | `POST /mcp`, `/mcp/message`, `/mcp/smart`, `/mcp/simple?model=@cf/...` | bearer                                            |
-| Admin API     | `GET/POST/PATCH /api/admin/keys[...]`, `GET /api/admin/health`         | bearer **and** `X-Admin-Key: local-dev-admin-key` |
-| Frontend      | `GET /`, `GET /admin`                                                  | none                                              |
+| Surface       | Route                                                                             | Auth                                              |
+| ------------- | --------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Health        | `GET /health`                                                                     | none                                              |
+| OpenAI models | `GET /v1/models`                                                                  | `Authorization: Bearer local-dev-user-key`        |
+| OpenAI images | `POST /v1/images/generations` \| `edits` \| `variations`                          | bearer                                            |
+| MCP           | `POST /mcp`, `/mcp/message`, `/mcp/smart`, `/mcp/simple?model=@cf/...`            | bearer                                            |
+| Admin API     | `GET /api/admin/health`, `POST /api/admin/keys[...]`, `PATCH /api/admin/keys/:id` | bearer **and** `X-Admin-Key: local-dev-admin-key` |
+| Frontend      | `GET /`, `GET /admin`                                                             | none                                              |
 
 MCP responses are SSE frames: send
 `Accept: application/json, text/event-stream` and unwrap the first

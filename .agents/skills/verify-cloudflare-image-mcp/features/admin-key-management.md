@@ -30,15 +30,18 @@ Preconditions:
 
 - **Contract battery (reads + writes).** `BASE_URL=http://127.0.0.1:$VERIFY_PORT API_KEY=local-dev-user-key ADMIN_KEY=local-dev-admin-key WRITES=1 scripts/verify-admin-api.sh`.
   Exit `0`; the script
-  checks the 401/403 ladder, creates a `crosscheck-<epoch>` key, rotates,
-  disables, reads back, and deletes it. Every response body is grepped for
-  secret leakage.
+  checks the 401/403 ladder, creates a `crosscheck-<epoch>` key, rotates it,
+  and disables it (parked but kept). It does **not** remove the row — it
+  prints a `NOTE` saying the throwaway key is disabled and leaves the deletion
+  to you (`POST /api/admin/keys/:id/delete`). Every response body is grepped
+  for secret leakage.
 - **Gate ladder by hand (spot check).** `curl -s -o /dev/null -w '%{http_code}\n' $B/api/admin/health` → `401`; add `-H "Authorization: Bearer local-dev-user-key"` → `403`; add `-H "X-Admin-Key: local-dev-admin-key"` → `200` with pool counts.
 - **Read-back after write.** After the script's create step (or your own
-  `POST /api/admin/keys`), `GET /api/admin/keys` with both keys lists the
-  key by label and identity — never by token value. A leaked token in any
-  response body is a failure, not a documentation note.
-- **Proof.** The script's transcript plus the `GET /api/admin/keys` body go
+  `POST /api/admin/keys`), `GET /api/admin/health` with both keys lists the
+  key by label and identity — never by token value. There is no
+  `GET /api/admin/keys` route; health is the read-back surface. A leaked token
+  in any response body is a failure, not a documentation note.
+- **Proof.** The script's transcript plus the `GET /api/admin/health` body go
   to `evidence/verify/<run-id>/admin.txt` (drive.sh already appends the
   script transcript to battery.txt).
 
