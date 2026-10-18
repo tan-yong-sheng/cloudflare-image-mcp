@@ -34,7 +34,9 @@ Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contra
 
 ### Model Configuration (Source of Truth)
 
-**Source of truth:** `workers/src/config/models.json`
+**Source of truth:** `workers/src/config/models.json`, projected into
+`workers/src/config/models.generated.ts` by `scripts/generate-models.mjs`
+(`npm run models:gen`; `npm run check` fails when the projection is stale).
 
 To add a model, follow the `add-cf-models` skill in `.agents/skills/`;
 the frontend dropdown and MCP model discovery both read from this configuration.

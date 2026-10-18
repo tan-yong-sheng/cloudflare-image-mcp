@@ -10,6 +10,8 @@
     "prepare": "npx lefthook install",
     "build": "npm run build:workers",
     "build:workers": "cd workers && npm ci && npm run check",
+    "models:gen": "node scripts/generate-models.mjs",
+    "models:check": "node scripts/generate-models.mjs --check",
     "test": "npm run test:e2e",
     "test:unit": "cd workers && npm test",
     "test:e2e": "cd e2e && npm test",
