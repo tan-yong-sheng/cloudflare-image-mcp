@@ -13,6 +13,8 @@ import {
   classifyOpenAIFailure,
   mapSizeToTier,
   OpenAITransport,
+  OpenAITransportError,
+  publicImageUrl,
 } from "./openai-transport.js";
 import { ProviderPool } from "./provider-pool.js";
 import { MODEL_CONFIGS } from "../config/models.js";
@@ -142,6 +144,29 @@ describe("buildAgnesRequestBody", () => {
   });
 });
 
+describe("publicImageUrl", () => {
+  test("accepts a public https image URL", () => {
+    expect(publicImageUrl("https://cdn.example/out.png")).toBe(
+      "https://cdn.example/out.png"
+    );
+  });
+
+  test("refuses schemes and hosts a response must not reach", () => {
+    for (const target of [
+      "http://cdn.example/out.png",
+      "data:image/png;base64,AAAA",
+      "file:///etc/passwd",
+      "https://127.0.0.1/out.png",
+      "https://[::1]/out.png",
+      "https://localhost/out.png",
+      "https://images.local/out.png",
+      "not a url",
+    ]) {
+      expect(() => publicImageUrl(target)).toThrow(OpenAITransportError);
+    }
+  });
+});
+
 describe("OpenAITransport.run", () => {
   test("returns base64 from a b64_json response with bearer auth", async () => {
     const fetchMock = vi.fn(async () =>
@@ -207,6 +232,29 @@ describe("OpenAITransport.run", () => {
     expect(result.image).toBeInstanceOf(Uint8Array);
     expect([...result.image]).toEqual([1, 2, 3]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("refuses to download from a target a response must not reach", async () => {
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const href = String(input);
+      if (href.endsWith("/v1/images/generations")) {
+        return Response.json({
+          data: [{ url: "http://169.254.169.254/latest/meta-data" }],
+        });
+      }
+      throw new Error(`unexpected fetch to ${href}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool: oneKeyPool("k"),
+    });
+
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).rejects.toThrow("not a public https location");
+    // Only the API call went out: the internal target was never fetched.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test("pool: a retryable failure parks the key and tries the next", async () => {

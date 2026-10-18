@@ -269,9 +269,6 @@ export class OpenAITransport implements AITransport {
         }
         lastError = error;
         this.pool.reportFailure(pick.label, Date.now());
-        console.warn(
-          `Agnes request failed [credential: ${pick.label}], parking key and trying another`
-        );
       }
     }
 
@@ -331,7 +328,7 @@ export class OpenAITransport implements AITransport {
       return { image: item.b64_json };
     }
     if (typeof item.url === "string" && item.url.length > 0) {
-      const imageResponse = await fetch(item.url);
+      const imageResponse = await fetch(publicImageUrl(item.url));
       if (!imageResponse.ok) {
         throw new OpenAITransportError(
           `Agnes image download failed (${imageResponse.status})`,
@@ -369,4 +366,38 @@ export class OpenAITransport implements AITransport {
     }
     return out;
   }
+}
+
+/**
+ * The image URL comes from the provider's response, so it is only fetched
+ * when it names a public https location: a malformed or compromised response
+ * must not be able to point this Worker at an internal host or a non-http
+ * scheme (data:, file:), and neither is a legitimate image CDN location.
+ */
+export function publicImageUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new OpenAITransportError(
+      "Agnes API returned an unparseable image URL",
+      "retry"
+    );
+  }
+
+  const host = url.hostname;
+  const isIpLiteral =
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || /^\[[0-9a-f:]+\]$/i.test(host);
+  const isLocalName =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local");
+  if (url.protocol !== "https:" || isIpLiteral || isLocalName) {
+    throw new OpenAITransportError(
+      `Agnes API returned an image URL that is not a public https location (${url.protocol}//${host})`,
+      "retry"
+    );
+  }
+
+  return url.toString();
 }
