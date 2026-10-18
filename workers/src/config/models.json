@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Cloudflare Workers AI Image Generation Models Configuration",
+  "$comment": "Model registry, projected into workers/src/config/models.generated.ts by scripts/generate-models.mjs. Provenance notes (docs-verified Oct 2026):\n- step: 64 appears on NO official Cloudflare page, but it feeds the MCP schema step hint and the UI falls back to 64 for w/h regardless, so it stays as an inert default rather than churning the API surface.\n- flux-2 dims bounds are functional but unverified (Cloudflare publishes an opaque multipart schema); BFL's own 4MP ceiling suggests ours may be conservative. Live size probing deferred to post-0.2.0.\n- flux-1-schnell limits are inert: it declares no width/height params, so toCFPayload drops dims and the UI hides size; the shape stays because ModelConfig.limits requires all bounds plus supportedSizes.\n- modelAliases is read by no code path: resolveModelId resolves an alias from the model's own exposure.alias block. Kept until a decision is taken to drop it.",
   "models": {
     "@cf/black-forest-labs/flux-1-schnell": {
       "id": "@cf/black-forest-labs/flux-1-schnell",
@@ -46,6 +47,7 @@
       }
     },
     "@cf/black-forest-labs/flux-2-klein-4b": {
+      "$comment": "Live probe 2026-10-12: klein-4b returns 1024x1024 for every requested size - provider accepts w/h, ignores them.",
       "id": "@cf/black-forest-labs/flux-2-klein-4b",
       "name": "FLUX.2 [klein]",
       "description": "Ultra-fast distilled model unifying image generation and editing",
@@ -114,6 +116,7 @@
       }
     },
     "@cf/black-forest-labs/flux-2-dev": {
+      "$comment": "Declares the same single 1024x1024 output as flux-2-klein-4b; see that entry for the 2026-10-12 probe note.",
       "id": "@cf/black-forest-labs/flux-2-dev",
       "name": "FLUX.2 [dev]",
       "description": "High-quality image model with multi-reference support",
@@ -182,6 +185,7 @@
       }
     },
     "@cf/black-forest-labs/flux-2-klein-9b": {
+      "$comment": "Declares the same single 1024x1024 output as flux-2-klein-4b; see that entry for the 2026-10-12 probe note.",
       "id": "@cf/black-forest-labs/flux-2-klein-9b",
       "name": "FLUX.2 [klein] 9B",
       "description": "Ultra-fast, distilled 9B image model with enhanced quality, unifying generation and editing",
@@ -250,6 +254,7 @@
       }
     },
     "@cf/stabilityai/stable-diffusion-xl-base-1.0": {
+      "$comment": "Live probes 2026-10-13: provider returns 1024x1024 for every requested size (incl. 1024x1792 portrait) - sizes accepted, ignored.",
       "id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
       "name": "Stable Diffusion XL Base 1.0",
       "description": "High-quality diffusion model by Stability AI",
@@ -512,6 +517,7 @@
       }
     },
     "@cf/leonardo/lucid-origin": {
+      "$comment": "Live probe 2026-10-13: 1280x720 request returned 1120x1120 (the default) - provider ignores requested size. Docs-verified minima (Cloudflare pages): a width/height lower bound of 0 is accepted, as on the other Leonardo model.",
       "id": "@cf/leonardo/lucid-origin",
       "name": "Lucid Origin",
       "description": "Leonardo.AI's most adaptable and prompt-responsive model",
@@ -581,6 +587,7 @@
       }
     },
     "@cf/leonardo/phoenix-1.0": {
+      "$comment": "Live probes 2026-10-13: 512/1024/1280 requests all returned 1024x1024 - provider ignores requested size. Docs-verified minima (Cloudflare pages): phoenix-1.0 accepts width/height down to 0 (no schema lower bound); every other dims block keeps the 256 floor.",
       "id": "@cf/leonardo/phoenix-1.0",
       "name": "Phoenix 1.0",
       "description": "Leonardo.AI model with exceptional prompt adherence and coherent text",
@@ -754,6 +761,7 @@
       }
     },
     "agnes-image-2.5-flash": {
+      "$comment": "R3-Agnes (#75): the first non-Cloudflare provider, riding the same seam as the Cloudflare models. inferenceProvider selects the registry entry registered under openai-compat, so the generator never learns that Agnes exists. The id is the upstream model name, not a @provider/ mirror, so the registry key and the wire value cannot drift apart.",
       "id": "agnes-image-2.5-flash",
       "name": "Agnes Image 2.5 Flash",
       "description": "Agnes AI text-to-image and image-composition model with 1K-4K output tiers and aspect-ratio control",

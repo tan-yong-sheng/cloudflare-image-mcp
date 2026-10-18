@@ -37,9 +37,9 @@ A model declares which transport serves it, and one registry turns that key
 into client code.
 
 1. **Model config names its transport.** `ModelConfig.inferenceProvider`
-   (required, present on every entry in `models.json` and its mirror
-   `models.ts`) holds the transport key. It is distinct from `provider`, which
-   stays the model author (`black-forest-labs`, `meta`).
+   (required, present on every entry in `models.json`, which is projected into
+   `models.generated.ts` per ADR-003) holds the transport key. It is distinct
+   from `provider`, which stays the model author (`black-forest-labs`, `meta`).
 2. **The key is the database's key.** `inferenceProvider` values are
    `providers.transport` values — one vocabulary across config and database,
    so neither can invent a name the other does not know.
@@ -106,10 +106,11 @@ could drift from one another.
 ### Positive
 
 - Adding a provider is a registry entry plus a D1 `providers` row plus a
-  `models.json`/`models.ts` entry — no change to `ImageGeneratorService`.
-- Config and database share one transport vocabulary, so the
-  `.opencodereview` "models.json / models.ts drift" rule now also covers the
-  transport field via a parity test.
+  `models.json` entry (regenerated into `models.generated.ts`) — no change to
+  `ImageGeneratorService`.
+- Config and database share one transport vocabulary; since ADR-003 the
+  transport field is part of the generated projection, so a model declared
+  with one transport and executed with another fails `npm run check`.
 - Readiness is per provider, so a provider with only parked keys is not
   routable and is not reported as servable.
 
@@ -142,8 +143,9 @@ ADR-001 forbids. Rebasing #75 onto this decision means adding one
 
 After implementation:
 
-- [x] Every entry in `models.json` and `models.ts` declares
-      `inferenceProvider`, and the mirror test asserts parity
+- [x] Every entry in `models.json` declares
+      `inferenceProvider`, the projection is typechecked against `ModelConfig`
+      (ADR-003), and the parity test pins it
 - [x] A fake second transport, injected under a test key, is selected by
       `inferenceProvider` alone
 - [x] An unknown key throws at module init and `UnknownTransportError` at
@@ -157,6 +159,8 @@ After implementation:
 
 - ADR-001: database-only credential management (the fallback this decision
   keeps out of transport selection)
+- ADR-003: model config codegen (the projection that carries
+  `inferenceProvider` into the executed registry)
 - `src/services/transports.ts`, `src/services/provider-pools.ts`,
   `src/services/pool-loader.ts`, `src/services/pool-cache.ts`
 - `.agents/skills/add-cf-models/SKILL.md` — adding a model, now with a
