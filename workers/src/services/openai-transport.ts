@@ -352,6 +352,21 @@ export class OpenAITransport implements AITransport {
    * responses and logs), so a key echoed by the provider must die here.
    */
   private scrub(text: string, apiKey: string): string {
-    return apiKey ? text.split(apiKey).join("[redacted]") : text;
+    if (!apiKey) return text;
+    // The upstream body reaches callers, so redact every form a provider
+    // could echo back: the literal value, its URL-encoded form, its
+    // JSON-escaped form (quotes and backslashes), and the escaped slash some
+    // serializers emit where JSON.stringify leaves the slash alone.
+    let out = text;
+    const variants = [
+      apiKey,
+      encodeURIComponent(apiKey),
+      JSON.stringify(apiKey).slice(1, -1),
+      apiKey.replace(/\//g, "\\/"),
+    ];
+    for (const variant of variants) {
+      out = out.split(variant).join("[redacted]");
+    }
+    return out;
   }
 }

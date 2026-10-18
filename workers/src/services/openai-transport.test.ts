@@ -275,4 +275,40 @@ describe("OpenAITransport.run", () => {
       transport.run(MODEL.id, { prompt: "x" }, MODEL)
     ).rejects.toThrow("token [redacted] rejected");
   });
+
+  test("encoded forms of the credential are scrubbed too", async () => {
+    // Upstream error bodies are surfaced to callers, so a credential the
+    // provider echoes back must not survive as an encoded variant of itself.
+    const key = 'ab"cd/ef==';
+    const urlEncoded = encodeURIComponent(key);
+    const jsonEscaped = JSON.stringify(key).slice(1, -1);
+    const slashEscaped = key.replace(/\//g, "\\/");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            `raw ${key} | url ${urlEncoded} | json ${jsonEscaped} | slash ${slashEscaped}`,
+            { status: 401 }
+          )
+      )
+    );
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool: oneKeyPool(key),
+    });
+
+    let message = "";
+    try {
+      await transport.run(MODEL.id, { prompt: "x" }, MODEL);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain("[redacted]");
+    expect(message).not.toContain(key);
+    expect(message).not.toContain(urlEncoded);
+    expect(message).not.toContain(jsonEscaped);
+    expect(message).not.toContain(slashEscaped);
+  });
 });
