@@ -530,6 +530,7 @@ describe("admin health exposure rows (S2)", () => {
     });
     expect(health.providers).toEqual([
       { id: "cloudflare", displayName: "Cloudflare Workers AI" },
+      { id: "agnes", displayName: "Agnes AI" },
     ]);
     expect(health.keys).toEqual([
       {

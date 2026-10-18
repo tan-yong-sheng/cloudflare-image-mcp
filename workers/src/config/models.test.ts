@@ -16,11 +16,29 @@ import {
 import modelsJson from "./models.json" with { type: "json" };
 
 describe("model registry validity", () => {
-  test("every model id matches its @cf/provider/name key", () => {
+  test("every model id matches its registry key", () => {
     for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
       expect(config.id).toBe(key);
-      expect(key.startsWith("@cf/")).toBe(true);
     }
+  });
+
+  test("the @cf/ namespace is exactly the Cloudflare transport's models", () => {
+    // R3-Agnes (#75) added a non-Cloudflare provider, so the namespace now
+    // scopes the models the Cloudflare REST transport serves rather than
+    // "every model": a @cf/* id on another transport would be a misread of
+    // which credentials pay for it.
+    for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
+      expect(key.startsWith("@cf/")).toBe(
+        config.inferenceProvider === "cloudflare-rest"
+      );
+    }
+  });
+
+  test("the non-Cloudflare provider is namespaced apart (R3-Agnes)", () => {
+    const agnes = MODEL_CONFIGS["@agnes/agnes-image-2.5-flash"];
+    expect(agnes).toBeDefined();
+    expect(agnes.provider).toBe("agnes");
+    expect(agnes.inferenceProvider).toBe("openai-compat");
   });
 
   test("every model declares prompt, tasks, and width/height limits", () => {
