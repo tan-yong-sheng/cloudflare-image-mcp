@@ -103,4 +103,7 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 | 4K   | 4096²  | —        | —        | —        | —        | —        | —        | —        |
 
 Any requested `WxH` is accepted and normalized; the table lists the published
-tier/ratio dimensions the mapping targets.
+tier/ratio dimensions the mapping targets. A `—` cell is a tier whose
+non-square dimensions the provider docs do not publish: the request still
+sends that tier with the mapped ratio, and the exact pixels are the
+provider's to choose.
