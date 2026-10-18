@@ -62,8 +62,10 @@ Nothing is probed until ownership is established:
   `wrangler dev`, and still carries the recorded `--port`. This instance was
   started by this verification run; a same-port listener without our pidfile,
   or a pid recycled by another worktree's server, is a foreign instance (see
-  Gotchas). When this check fails, doctor prints `skip` for the HTTP probes and
-  exits non-zero instead of probing a target it cannot vouch for.
+  Gotchas). A pidfile that records no usable port fails this check as well:
+  without the port there is nothing tying the pid to this instance. When this
+  check fails, doctor prints `skip` for the HTTP probes and exits non-zero
+  instead of probing a target it cannot vouch for.
 - **Ready + version** — `/health` returns `status:healthy` and `version`
   matches `workers/package.json`'s `version`.
 - **Auth gate armed** — `/v1/models` without a key returns `401`; with
@@ -72,10 +74,14 @@ Nothing is probed until ownership is established:
   `POST /v1/images/generations` returns the ADR-001 error naming
   `cloudflare-rest`. This is expected on a store with no servable credential
   and proves both that the generator ran and that no foreign credential source
-  leaked in. It runs **only** when `/api/admin/health` reports
-  `hasServableCredential:false`; with a servable credential the same POST would
-  reach the provider and spend real usage, so doctor prints `skip` and says
-  how to get back to a fresh store (delete the key, or drop `.verify/state`).
+  leaked in. It runs **only** when the store is proven to hold no servable
+  credential: the check reads the live key rows from `/api/admin/health` (any
+  enabled row with weight > 0 refutes emptiness) and not merely
+  `hasServableCredential`, which is served from the pool cache behind a 5s TTL
+  and therefore still reads `false` for a credential enabled a moment ago. With
+  a servable credential the POST would reach the provider and spend real usage,
+  so doctor prints `skip` instead and says how to get back to a fresh store
+  (delete the key, or drop `.verify/state`).
 
 ## Drive
 
@@ -99,6 +105,11 @@ The full battery (every route above, 401/403 matrix included) is one command:
 ```bash
 VERIFY_PORT=8788 .agents/skills/verify-cloudflare-image-mcp/scripts/drive.sh
 ```
+
+`drive.sh` refuses to run at all unless `.verify/instance.json` describes a
+live `wrangler dev` on `$VERIFY_PORT`. The admin section of the battery writes
+— it creates, rotates and disables a throwaway key — so it must never run
+against a listener this worktree did not launch.
 
 Per-feature recipes and proof standards live in `features/`. Drive the mapped
 feature you need; a proof that exercises one route is incomplete when the map
@@ -132,7 +143,11 @@ Reads `.verify/instance.json` and kills **only** that recorded pid, after
 confirming its cmdline still is a `wrangler dev` on the recorded port — never
 kill by process name, and never kill a pid that another worktree's server has
 since recycled. Then removes
-`.verify/instance.json` and confirms the port no longer listens. It never
+`.verify/instance.json` and confirms the port no longer listens. Both the
+pre-kill identity check and the post-kill listener check fail closed: a pidfile
+without a usable port, a pid that is no longer a `wrangler dev`, and a host
+carrying none of `ss`/`lsof`/`netstat` all refuse and leave the pidfile in
+place rather than report an instance as stopped without proof. It never
 touches `evidence/verify/`, the instance's own `.verify/state/` store (local
 D1/R2 data survives for the next run), or the copied
 `wrangler.toml`/`.dev.vars`.
@@ -146,14 +161,19 @@ it cannot signal, instead of pretending the instance stopped.
 
 ## Helpers
 
-All executable, all shown above; run them from the worktree root with
-`VERIFY_PORT` exported when overriding the port:
+All executable and shown above, except `lib.sh`, which the others source; run
+them from the worktree root with `VERIFY_PORT` exported when overriding the
+port:
 
 - `scripts/launch.sh` — guarded launch (port check, templates, migrations,
   pidfile, server in foreground).
 - `scripts/doctor.sh` — read-only instance health/ownership/auth probe.
 - `scripts/drive.sh` — full HTTP battery, evidence-capturing.
 - `scripts/cleanup.sh` — kill-by-recorded-pid teardown, evidence-preserving.
+- `scripts/lib.sh` — sourced, never executed: `port_in_use` (ss → lsof →
+  netstat, else "cannot tell") and `instance_problem` (the shared ownership
+  check). Both fail closed, so launch, doctor, drive and cleanup refuse a
+  target they cannot prove is theirs.
 
 ## Gotchas
 
@@ -161,11 +181,22 @@ All executable, all shown above; run them from the worktree root with
   worktree per feature; a listener on the default port may be another
   session's server with seeded (real) credentials, and its 200s — even
   successful image generations — prove nothing about your instance. Doctor's
-  ownership check exists for exactly this and now gates every probe it makes.
+  and drive.sh's ownership check exists for exactly this; both refuse a target
+  they cannot vouch for instead of probing it.
+- Requests use the placeholder keys published in `workers/.dev.vars.example`
+  (`local-dev-user-key` / `local-dev-admin-key`) — published values, not
+  secrets. When a worktree's `.dev.vars` has been customised, export
+  `VERIFY_API_KEY` / `VERIFY_ADMIN_KEY` for `doctor.sh` and `drive.sh` rather
+  than editing the scripts.
 - The instance's store is `.verify/state/`, not `workers/.wrangler/state/`.
   It survives across verification runs, so a key added by an earlier battery is
-  still there as a disabled row; that is why the empty-credential probes check
-  `hasServableCredential` instead of assuming a fresh database.
+  still there as a disabled row; that is why the empty-credential probes prove
+  emptiness from the live key rows instead of assuming a fresh database.
+- `hasServableCredential` in `/api/admin/health` is not a live reading: it comes
+  from the provider-pool snapshot, which is version-polled behind a 5s TTL,
+  while the `keys` array beside it is a live D1 read. A credential enabled
+  seconds ago is therefore already in `keys` while the flag still says `false`
+  — never treat the flag on its own as proof that the store is empty.
 - `npm run dev:local` pins port 8787; when using it directly, check the port
   first and prefer `launch.sh` with `VERIFY_PORT`.
 - `wrangler dev --remote` (the `dev` npm script) targets real Cloudflare

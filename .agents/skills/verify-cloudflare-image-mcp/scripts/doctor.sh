@@ -13,49 +13,42 @@
 # prints `skip` and is not counted as a failure.
 #
 # Env:
-#   VERIFY_PORT  port the instance listens on (default 8788)
+#   VERIFY_PORT       port the instance listens on (default 8788)
+#   VERIFY_API_KEY    bearer key for local requests (default: the placeholder
+#                     published in workers/.dev.vars.example)
+#   VERIFY_ADMIN_KEY  admin key, same default source
 set -uo pipefail
 
-WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE_ROOT="$(cd "$SKILL_DIR/../../../.." && pwd)"
+# shellcheck source=lib.sh
+. "$SKILL_DIR/lib.sh"
 VERIFY_PORT="${VERIFY_PORT:-8788}"
 INSTANCE_FILE="$WORKTREE_ROOT/.verify/instance.json"
 BASE="http://127.0.0.1:$VERIFY_PORT"
-API_KEY="local-dev-user-key"
-ADMIN_KEY="local-dev-admin-key"
+# Placeholder keys from workers/.dev.vars.example, published in the repo and
+# documented in CONTRIB.md — not secrets. They are overridable because a
+# worktree whose .dev.vars was customised would otherwise fail every check with
+# a 401 that says nothing about the cause.
+API_KEY="${VERIFY_API_KEY:-local-dev-user-key}"
+ADMIN_KEY="${VERIFY_ADMIN_KEY:-local-dev-admin-key}"
 failures=0
 
 ok()   { echo "ok    $1"; }
 fail() { echo "fail  $1"; failures=$((failures + 1)); }
 skip() { echo "skip  $1"; }
 
-# 1. Ownership: the recorded pid is alive (ps, not kill — cross-session kill is
-# EPERM in this sandbox), is a wrangler dev, and still carries the recorded
-# port. The --port argument is what ties this pid to the instance this pidfile
-# describes; a recycled pid now running another worktree's wrangler dev has a
-# different one.
-pid="$(sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$INSTANCE_FILE" 2>/dev/null)"
-recorded_port="$(sed -n 's/.*"port":\([0-9]*\).*/\1/p' "$INSTANCE_FILE" 2>/dev/null)"
-args="$(ps -o args= -p "$pid" 2>/dev/null)"
+# 1. Ownership: the pidfile describes a live wrangler dev on this port. This
+# shares instance_problem with launch/cleanup/drive, so a pidfile with no
+# recorded port, a recycled pid, and another worktree's instance all fail
+# closed here rather than skipping the check.
 owned=0
-if [ -z "$pid" ]; then
-  fail "no instance recorded in $INSTANCE_FILE (launch.sh not run)"
-elif [ -z "$args" ]; then
-  fail "recorded pid $pid is not running (stale pidfile — run cleanup.sh)"
-elif [ -n "$recorded_port" ] && [ "$recorded_port" != "$VERIFY_PORT" ]; then
-  fail "pidfile records port $recorded_port but VERIFY_PORT is $VERIFY_PORT"
+problem="$(instance_problem "$INSTANCE_FILE" "$VERIFY_PORT")"
+if [ -z "$problem" ]; then
+  owned=1
+  ok "instance pid $(pidfile_field "$INSTANCE_FILE" pid) is ours and alive"
 else
-  case " $args " in
-    *wrangler*" dev "*)
-      case " $args " in
-        *" --port $VERIFY_PORT "*)
-          owned=1
-          ok "instance pid $pid is ours and alive" ;;
-        *)
-          fail "pid $pid is a wrangler dev on another port (no --port $VERIFY_PORT): ${args:0:80}" ;;
-      esac ;;
-    *)
-      fail "pid $pid is not a wrangler dev (got: ${args:0:80})" ;;
-  esac
+  fail "$problem"
 fi
 
 if [ "$owned" != 1 ]; then
@@ -90,13 +83,13 @@ fi
 
 # 4. Empty-credential path: generation fails with the ADR-001 message — the
 # expected state of a store with no servable credential, proving the generator
-# ran and no foreign credential source leaked in. Gated on the store's own
-# readiness flag: with a servable credential present this POST would reach the
-# provider and spend real usage, so it is reported as skipped instead. The same
-# guard covers an unreadable admin endpoint (no proof of emptiness, no probe).
-store="$(curl -s --max-time 5 -H "Authorization: Bearer $API_KEY" \
-  -H "X-Admin-Key: $ADMIN_KEY" "$BASE/api/admin/health")"
-if printf '%s' "$store" | tr -d '[:space:]' | grep -q '"hasServableCredential":false'; then
+# ran and no foreign credential source leaked in. Gated on store_proven_empty
+# (lib.sh): the readiness flag lags a write by up to its 5s TTL, so a
+# credential seeded a moment earlier still reads false while its row is already
+# enabled, and this POST would then reach the provider and spend real usage.
+# An unreadable admin endpoint is the same refusal — no proof of emptiness, no
+# probe.
+if store_proven_empty "$BASE" "$API_KEY" "$ADMIN_KEY"; then
   gen="$(curl -s --max-time 30 -X POST -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -d '{"model":"@cf/black-forest-labs/flux-1-schnell","prompt":"doctor probe","n":1}' \

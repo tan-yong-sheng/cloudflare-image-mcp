@@ -6,16 +6,37 @@
 # probe asserts the ADR-001 empty-credential contract, so it only runs when the
 # store is proven to have no servable credential — otherwise that POST would
 # reach the provider and spend real usage; the skip is printed with its reason.
+# The whole battery is refused until ownership of the target is established:
+# the admin section writes (it creates, rotates and disables a throwaway key),
+# so it must never run against a listener this worktree did not launch.
 #
 # Env:
-#   VERIFY_PORT  port the instance listens on (default 8788)
+#   VERIFY_PORT       port the instance listens on (default 8788)
+#   VERIFY_API_KEY    bearer key for local requests (default: the placeholder
+#                     published in workers/.dev.vars.example)
+#   VERIFY_ADMIN_KEY  admin key, same default source
 set -uo pipefail
 
-WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE_ROOT="$(cd "$SKILL_DIR/../../../.." && pwd)"
+# shellcheck source=lib.sh
+. "$SKILL_DIR/lib.sh"
 VERIFY_PORT="${VERIFY_PORT:-8788}"
+INSTANCE_FILE="$WORKTREE_ROOT/.verify/instance.json"
 BASE="http://127.0.0.1:$VERIFY_PORT"
-API_KEY="local-dev-user-key"
-ADMIN_KEY="local-dev-admin-key"
+# Placeholder keys from workers/.dev.vars.example, published in the repo and
+# documented in CONTRIB.md — not secrets. Overridable so a worktree with a
+# customised .dev.vars does not fail every probe with an unexplained 401.
+API_KEY="${VERIFY_API_KEY:-local-dev-user-key}"
+ADMIN_KEY="${VERIFY_ADMIN_KEY:-local-dev-admin-key}"
+
+problem="$(instance_problem "$INSTANCE_FILE" "$VERIFY_PORT")"
+if [ -n "$problem" ]; then
+  echo "refusing: $problem" >&2
+  echo "drive.sh only drives the instance launch.sh started (its admin section" >&2
+  echo "writes keys) — start one, or stop the foreign listener on $VERIFY_PORT" >&2
+  exit 1
+fi
 RUN_ID="$(date -u +%Y-%m-%dT%H%M%SZ)"
 EVIDENCE_DIR="$WORKTREE_ROOT/evidence/verify/$RUN_ID"
 mkdir -p "$EVIDENCE_DIR"
@@ -63,12 +84,11 @@ expect "models with key is 200" \
   "$(probe 'GET /v1/models (bearer)' GET /v1/models -H "Authorization: Bearer $API_KEY")" 200
 
 # ADR-001 error contract: the generator runs and reports the empty store.
-# Gated on the store's own readiness flag — with a servable credential present
-# this POST would reach the provider and spend real usage. An unreadable admin
-# endpoint means no proof of emptiness, so the probe is skipped there too.
-store="$(curl -s --max-time 5 -H "Authorization: Bearer $API_KEY" \
-  -H "X-Admin-Key: $ADMIN_KEY" "$BASE/api/admin/health")"
-if printf '%s' "$store" | tr -d '[:space:]' | grep -q '"hasServableCredential":false'; then
+# Gated on store_proven_empty (lib.sh) — the readiness flag lags a write by up
+# to its 5s TTL, so a credential seeded a moment earlier could still read as
+# empty while its row is already enabled, and this POST would reach the provider
+# and spend real usage. Unreadable health output is the same refusal.
+if store_proven_empty "$BASE" "$API_KEY" "$ADMIN_KEY"; then
   gen_code="$(probe 'POST /v1/images/generations (bearer, empty store)' POST /v1/images/generations \
     -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
     --data '{"model":"@cf/black-forest-labs/flux-1-schnell","prompt":"battery probe","n":1}')"

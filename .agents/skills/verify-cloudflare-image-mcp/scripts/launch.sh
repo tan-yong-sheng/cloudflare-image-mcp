@@ -12,7 +12,10 @@
 #                another worktree's instance in this repo)
 set -euo pipefail
 
-WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE_ROOT="$(cd "$SKILL_DIR/../../../.." && pwd)"
+# shellcheck source=lib.sh
+. "$SKILL_DIR/lib.sh"
 WORKERS_DIR="$WORKTREE_ROOT/workers"
 VERIFY_PORT="${VERIFY_PORT:-8788}"
 INSTANCE_FILE="$WORKTREE_ROOT/.verify/instance.json"
@@ -32,11 +35,22 @@ fi
 
 # Any local address counts: a listener on 0.0.0.0 or [::] owns the port too,
 # and wrangler would then fail to bind after the pidfile was already written.
-if ss -ltn 2>/dev/null | grep -q ":$VERIFY_PORT "; then
-  echo "refusing: port $VERIFY_PORT is already listening" >&2
-  echo "another worktree's instance may own it — pick VERIFY_PORT=<free port>" >&2
-  exit 1
-fi
+# A host where the check cannot be run refuses the same way: binding anyway
+# would leave a pidfile pointing at a process that never served anything.
+port_rc=0
+port_in_use "$VERIFY_PORT" || port_rc=$?
+case "$port_rc" in
+  0)
+    echo "refusing: port $VERIFY_PORT is already listening" >&2
+    echo "another worktree's instance may own it — pick VERIFY_PORT=<free port>" >&2
+    exit 1
+    ;;
+  2)
+    echo "refusing: cannot check whether port $VERIFY_PORT is free" >&2
+    echo "no ss, lsof, or netstat on PATH — install one, or pick a port you know is free" >&2
+    exit 1
+    ;;
+esac
 
 [ -f wrangler.toml ] || cp wrangler.toml.example wrangler.toml
 [ -f .dev.vars ] || cp .dev.vars.example .dev.vars

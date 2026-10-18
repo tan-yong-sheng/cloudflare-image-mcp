@@ -9,18 +9,26 @@ then use the matching feature file as the recipe.
 - Launch from the worktree root via
   `.agents/skills/verify-cloudflare-image-mcp/scripts/launch.sh` (run through
   a background-task facility or a kept-open terminal) with `VERIFY_PORT` set
-  to a free port (default 8788).
+  to a free port (default 8788). It refuses a busy port, and a host where the
+  port cannot be checked at all, rather than leave a pidfile behind a server
+  that never bound.
 - Run `.agents/skills/verify-cloudflare-image-mcp/scripts/doctor.sh` and
-  require every check to print `ok`: instance ownership, `/health` healthy +
+  require every check to print `ok`: instance ownership (a pidfile that
+  records no usable port fails it), `/health` healthy +
   version match, 401/200 auth gate, ADR-001 empty-credential error. A `skip`
   line means that check could not run against a target doctor can vouch for —
   resolve it (start your own instance, or drop `.verify/state`) rather than
   treating the run as proof.
 - Bearer key for the whole run: `local-dev-user-key` (from the copied
-  `.dev.vars`). Admin management key: `local-dev-admin-key`.
+  `.dev.vars`). Admin management key: `local-dev-admin-key`. Both are
+  placeholders published in `.dev.vars.example`, not secrets; export
+  `VERIFY_API_KEY` / `VERIFY_ADMIN_KEY` when a worktree's `.dev.vars` was
+  customised.
 - Never drive an instance that was not started by this verification run —
   other worktrees in this repo run their own servers, sometimes with seeded
-  real credentials.
+  real credentials. `drive.sh` enforces this: it refuses unless
+  `.verify/instance.json` describes a live `wrangler dev` on `$VERIFY_PORT`,
+  because the admin section of its battery writes keys.
 
 ## Driving conventions
 
