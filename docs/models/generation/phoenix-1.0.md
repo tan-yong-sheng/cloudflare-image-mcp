@@ -4,9 +4,9 @@
 
 **Mode**: Text-to-Image
 
-**Origin**: Leonardo
+**Origin**: Leonardo.AI
 
-**Model Info**: Phoenix 1.0 is a model by Leonardo.Ai that generates images with exceptional prompt adherence and coherent text.
+**Model Info**: Phoenix 1.0 is a model by Leonardo.AI that generates images with exceptional prompt adherence and coherent text.
 
 **Partner**: Yes
 
@@ -15,6 +15,7 @@
 ## Usage
 
 - Workers - TypeScript
+
 ```ts
 export interface Env {
   AI: Ai;
@@ -22,15 +23,11 @@ export interface Env {
 
 export default {
   async fetch(request, env): Promise<Response> {
-
     const inputs = {
       prompt: "cyberpunk cat",
     };
 
-    const response = await env.AI.run(
-      "@cf/leonardo/phoenix-1.0",
-      inputs
-    );
+    const response = await env.AI.run("@cf/leonardo/phoenix-1.0", inputs);
 
     return new Response(response, {
       headers: {
@@ -42,6 +39,7 @@ export default {
 ```
 
 - curl
+
 ```curl
 curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/leonardo/phoenix-1.0  \
   -X POST  \
@@ -49,51 +47,50 @@ curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run
   -d '{ "prompt": "cyberpunk cat" }'
 ```
 
-
 ## Parameters
 
-`*`  indicates a required field
+`*` indicates a required field
 
 ### Input
 
--   `prompt`  required  min 1
-    
-    A text description of the image you want to generate.
-    
--   `guidance`  default 2  min 2  max 10
-    
-    Controls how closely the generated image should adhere to the prompt; higher values make the image more aligned with the prompt
-    
--   `seed`  min 0
-    
-    Random seed for reproducibility of the image generation
-    
--   `height`  default 1024  min 0  max 2048
-    
-    The height of the generated image in pixels
-    
--   `width`  default 1024  min 0  max 2048
-    
-    The width of the generated image in pixels
-    
--   `num_steps`  default 25  min 1  max 50
-    
-    The number of diffusion steps; higher values can improve quality but take longer
-    
--   `negative_prompt`  min 1
-    
-    Specify what to exclude from the generated images
-    
+- `prompt` required min 1
+
+  A text description of the image you want to generate.
+
+- `guidance` default 2 min 2 max 10
+
+  Controls how closely the generated image should adhere to the prompt; higher values make the image more aligned with the prompt
+
+- `seed` min 0
+
+  Random seed for reproducibility of the image generation
+
+- `height` default 1024 min 0 max 2048
+
+  The height of the generated image in pixels
+
+- `width` default 1024 min 0 max 2048
+
+  The width of the generated image in pixels
+
+- `num_steps` default 25 min 1 max 50
+
+  The number of diffusion steps; higher values can improve quality but take longer
+
+- `negative_prompt` min 1
+
+  Specify what to exclude from the generated images
 
 ### Output
 
-The binding returns a  `ReadableStream`  with the image in JPEG or PNG format (check the model's output schema).
+The binding returns a `ReadableStream` with the image in JPEG or PNG format (check the model's output schema).
 
 ## API Schemas
 
 The following schemas are based on JSON Schema
 
--   Input
+- Input
+
 ```
 {
     "type": "object",
@@ -148,7 +145,8 @@ The following schemas are based on JSON Schema
 }
 ```
 
--   Output
+- Output
+
 ```
 {
     "type": "string",

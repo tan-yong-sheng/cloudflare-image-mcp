@@ -195,8 +195,8 @@ Open your worker URL in a browser for an interactive UI.
 | SDXL Base 1.0         | text-to-image, image-to-image (img2img + masked edits) | Stability AI      | Cloudflare |
 | SDXL Lightning        | text-to-image                                          | ByteDance         | Cloudflare |
 | Dreamshaper 8 LCM     | text-to-image, image-to-image (img2img)                | Lykon             | Cloudflare |
-| Lucid Origin          | text-to-image                                          | Leonardo          | Cloudflare |
-| Phoenix 1.0           | text-to-image                                          | Leonardo          | Cloudflare |
+| Lucid Origin          | text-to-image                                          | Leonardo.AI       | Cloudflare |
+| Phoenix 1.0           | text-to-image                                          | Leonardo.AI       | Cloudflare |
 | SD 1.5 Img2Img        | image-to-image (img2img)                               | Runway ML         | Cloudflare |
 | SD 1.5 Inpainting     | image-to-image (requires mask)                         | Runway ML         | Cloudflare |
 | Agnes Image 2.5 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
