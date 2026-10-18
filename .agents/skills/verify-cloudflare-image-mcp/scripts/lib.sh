@@ -66,8 +66,14 @@ port_in_use() {
 # recycled pid can belong to another worktree's wrangler dev, and probing or
 # signalling that one is exactly the mistake this prevents. A pidfile that
 # records no usable port therefore fails closed instead of skipping the check.
+#
+# The state dir is what ties the process to *this* worktree. launch.sh always
+# starts its server with `--persist-to <worktree>/.verify/state`, so requiring
+# that path (derived from the pidfile's own directory, no extra argument)
+# rejects another worktree's wrangler dev even when a recycled pid happens to
+# land on the port this record names.
 instance_problem() {
-  local file="$1" want_port="$2" pid port args
+  local file="$1" want_port="$2" pid port args state_dir
   pid="$(pidfile_field "$file" pid)"
   port="$(pidfile_field "$file" port)"
   if [ -z "$pid" ]; then
@@ -103,6 +109,14 @@ instance_problem() {
     *" --port $want_port "*) ;;
     *)
       echo "pid $pid is a wrangler dev on another port (no --port $want_port in: ${args:0:80})"
+      return 0
+      ;;
+  esac
+  state_dir="$(dirname "$file")/state"
+  case " $args " in
+    *" --persist-to $state_dir "*) ;;
+    *)
+      echo "pid $pid is not the instance launch.sh started here (no --persist-to $state_dir in: ${args:0:80})"
       return 0
       ;;
   esac

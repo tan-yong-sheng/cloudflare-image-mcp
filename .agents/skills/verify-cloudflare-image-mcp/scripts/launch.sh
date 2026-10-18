@@ -26,6 +26,14 @@ case "$VERIFY_PORT" in
     echo "refusing: VERIFY_PORT must be a numeric TCP port (got: $VERIFY_PORT)" >&2
     exit 1
     ;;
+  0*)
+    # Numeric, but not canonical: 08795 would be written as `"port":08795`,
+    # which is not valid JSON, and it never string-matches the port wrangler
+    # binds — so a live record would look stale and be replaced, stranding the
+    # instance it describes.
+    echo "refusing: VERIFY_PORT must not have leading zeros (got: $VERIFY_PORT)" >&2
+    exit 1
+    ;;
 esac
 if [ "$VERIFY_PORT" -lt 1 ] || [ "$VERIFY_PORT" -gt 65535 ]; then
   echo "refusing: VERIFY_PORT must be between 1 and 65535 (got: $VERIFY_PORT)" >&2

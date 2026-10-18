@@ -59,10 +59,11 @@ code); a check that cannot run safely prints `skip` and does not fail the run.
 Nothing is probed until ownership is established:
 
 - **Ownership** — the pid in `.verify/instance.json` is alive, is a
-  `wrangler dev`, and still carries the recorded `--port`. This instance was
-  started by this verification run; a same-port listener without our pidfile,
-  or a pid recycled by another worktree's server, is a foreign instance (see
-  Gotchas). A pidfile that records no usable port fails this check as well:
+  `wrangler dev`, and still carries the recorded `--port` and this worktree's
+  `--persist-to` state dir. This instance was started by this verification run;
+  a same-port listener without our pidfile, a pid recycled by another
+  worktree's server, is a foreign instance (see Gotchas). A pidfile that records
+  no usable port fails this check as well:
   without the port there is nothing tying the pid to this instance. When this
   check fails, doctor prints `skip` for the HTTP probes and exits non-zero
   instead of probing a target it cannot vouch for.
@@ -174,7 +175,9 @@ port checks report "cannot tell" and the scripts refuse rather than guess:
 - `scripts/cleanup.sh` — kill-by-recorded-pid teardown, evidence-preserving.
 - `scripts/lib.sh` — sourced, never executed: `port_in_use` (ss → lsof →
   netstat, else "cannot tell") and `instance_problem` (the shared ownership
-  check). Both fail closed, so launch, doctor, drive and cleanup refuse a
+  check: recorded port, live pid, a `wrangler dev`, and this worktree's
+  `--persist-to` state dir — a recycled pid or another worktree's server cannot
+  pass it). Both fail closed, so launch, doctor, drive and cleanup refuse a
   target they cannot prove is theirs.
 
 ## Gotchas
