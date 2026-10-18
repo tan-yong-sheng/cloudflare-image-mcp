@@ -107,6 +107,51 @@ describe("provider schema migrations (R1a)", () => {
     expect(row.id).toBe(4);
   });
 
+  test("0004 admits the delete action and keeps the audit key index (#102)", () => {
+    // The hard-delete path records action 'delete'; 0003's CHECK does not
+    // admit it, so the widening has to survive as its own forward-only
+    // migration (a database that already ran 0003 never re-reads that file).
+    const db = freshDb();
+    db.exec(
+      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label)" +
+        " VALUES ('op', 'delete', 'cloudflare', NULL, 'gone')"
+    );
+    expect(indexesOf(db, "admin_audit")).toContain("idx_admin_audit_key");
+  });
+
+  test("0004 rejects an action outside the ledger vocabulary (#102)", () => {
+    const db = freshDb();
+    expect(() =>
+      db.exec(
+        "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label)" +
+          " VALUES ('op', 'purge', 'cloudflare', NULL, 'gone')"
+      )
+    ).toThrow();
+  });
+
+  test("0004's rebuild keeps the audit autoincrement high-water mark (#102)", () => {
+    // Same no-reuse guarantee 0003 had to preserve: 0004 rebuilds the table
+    // again, so an id deleted above the surviving rows must still not be
+    // reissued.
+    const db = freshDb("0003_admin_audit_update_action.sql");
+    db.exec(
+      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label)" +
+        " VALUES ('op', 'add', 'cloudflare', NULL, 'a')," +
+        " ('op', 'add', 'cloudflare', NULL, 'b')," +
+        " ('op', 'add', 'cloudflare', NULL, 'c')"
+    );
+    db.exec("DELETE FROM admin_audit WHERE id = 3");
+    db.exec(migrationSql("0004_audit_delete_action.sql"));
+    db.exec(
+      "INSERT INTO admin_audit (actor, action, provider_id, key_id, key_label)" +
+        " VALUES ('op', 'delete', 'cloudflare', NULL, 'd')"
+    );
+    const row = db.prepare("SELECT MAX(id) AS id FROM admin_audit").get() as {
+      id: number;
+    };
+    expect(row.id).toBe(4);
+  });
+
   test("provider catalog is seeded with Cloudflare only", () => {
     const db = freshDb();
     const rows = db
