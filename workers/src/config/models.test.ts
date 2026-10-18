@@ -229,23 +229,25 @@ describe("model registry validity", () => {
   });
 });
 
-describe("models.json mirror", () => {
-  test("TypeScript registry matches the JSON source of truth", () => {
-    const jsonIds = Object.keys(
-      (modelsJson as { models: Record<string, unknown> }).models
-    ).sort();
-    expect(Object.keys(MODEL_CONFIGS).sort()).toEqual(jsonIds);
-  });
-
+describe("models.json source of truth", () => {
+  // The field-by-field mirror tests that used to live here were retired along
+  // with the hand-written registry. scripts/generate-models.mjs copies every
+  // key of every model verbatim and round-trips the printed literal back to
+  // the JSON it came from, and `npm run check` (CI + deploy) fails when
+  // models.generated.ts is stale. Together those cover strictly more than the
+  // mirror did: limits, min/max/step, provider, apiVersion, and the rest.
+  // What is left here are invariants of the JSON itself.
   test("every entry declares the transport that serves it (C4)", () => {
-    // The registry key is config-driven (models.json drives models.ts), so
-    // the mirror must cover it too: a missing or drifting inferenceProvider
-    // silently routes a model to the wrong transport, which no other test
-    // observes. Load-time validation (services/transports.ts) rejects a key
-    // that is not in the registry; this pins the mirror itself.
+    // A missing or drifting inferenceProvider silently routes a model to the
+    // wrong transport, which no other test observes, so the source of truth
+    // is pinned directly and projected through to the registry. Load-time
+    // validation (services/transports.ts) rejects a key with no factory.
     const json = modelsJson as {
       models: Record<string, { inferenceProvider?: string }>;
     };
+    expect(Object.keys(MODEL_CONFIGS).sort()).toEqual(
+      Object.keys(json.models).sort()
+    );
     for (const [id, jcfg] of Object.entries(json.models)) {
       expect(typeof jcfg.inferenceProvider).toBe("string");
       expect(jcfg.inferenceProvider).not.toBe("");
@@ -259,6 +261,8 @@ describe("models.json mirror", () => {
     // inputFormat/responseFormat/supportedTasks/maxInputImages free to
     // drift. Compare every JSON field both ways so a data edit cannot
     // change what the API or the picker offers without this test failing.
+    // Parameter-level detail is caught by models:check (the generator's
+    // --check flag), so this test focuses on the per-model top-level fields.
     const json = modelsJson as {
       models: Record<string, Record<string, unknown>>;
     };
@@ -282,27 +286,5 @@ describe("models.json mirror", () => {
       }
     }
     expect(drift).toEqual([]);
-  });
-
-  test("parameter metadata mirrors the JSON source of truth (#53)", () => {
-    // listModels() exposes the parameter table to drive UI controls,
-    // so descriptions, defaults, and key names must match the JSON:
-    // invisible drift here becomes silent UI misbehavior.
-    const json = modelsJson as {
-      models: Record<string, { parameters: Record<string, any> }>;
-    };
-    for (const [id, jcfg] of Object.entries(json.models)) {
-      const tcfg = MODEL_CONFIGS[id];
-      expect(Object.keys(tcfg.parameters).sort()).toEqual(
-        Object.keys(jcfg.parameters).sort()
-      );
-      for (const [key, jp] of Object.entries(jcfg.parameters)) {
-        const tp = tcfg.parameters[key] as any;
-        if (jp.description) expect(tp.description).toBe(jp.description);
-        if ("default" in jp)
-          expect(tp.default ?? null).toBe(jp.default ?? null);
-        if ("required" in jp) expect(tp.required ?? false).toBe(jp.required);
-      }
-    }
   });
 });

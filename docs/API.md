@@ -195,24 +195,26 @@ Masked edits (inpainting) are a specialized form of image-to-image editing: it u
 
 ### Model Exposure (operator config)
 
-The runtime registry is `workers/src/config/models.ts` (the JSON file
-mirrors model tables; exposure lives in the TS entries the worker
-reads). Each entry accepts an optional `exposure` block, and the file
-exports the generations default:
+Each entry in `workers/src/config/models.json` accepts an optional `exposure`
+block. That file is the only place to declare it: it is projected into the
+runtime registry (`workers/src/config/models.generated.ts`, via
+`npm run models:gen`), and a D1 `exposure_overrides` row still wins over it at
+runtime.
 
-```ts
-// workers/src/config/models.ts
-export const DEFAULT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
-
+```json
 "@cf/example/model": {
-  // ...
-  exposure: {
-    enabled: false,
-    alias: "example",
-    excludedScopes: ["public"],
-  },
-},
+  "id": "@cf/example/model",
+  "name": "Example",
+  "exposure": {
+    "enabled": false,
+    "alias": "example",
+    "excludedScopes": ["public"]
+  }
+}
 ```
+
+The generations default (`DEFAULT_MODEL`) stays hand-written in
+`workers/src/config/models.ts`.
 
 - `enabled: false` hides the model from `list_models`, `GET /v1/models`,
   the frontend dropdown, and makes `describe_model` report unknown model.

@@ -9,7 +9,9 @@
     "dev:local": "wrangler dev --local --port 8787",
     "deploy": "wrangler deploy",
     "build": "tsc",
-    "check": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "models:gen": "node ../scripts/generate-models.mjs",
+    "models:check": "node ../scripts/generate-models.mjs --check",
+    "check": "npm run models:check && tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run"
   },
   "dependencies": {

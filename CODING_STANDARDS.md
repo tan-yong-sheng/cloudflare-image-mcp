@@ -90,7 +90,9 @@ Node types). Test-only files reach Node builtins (the D1 migration harness
 reads SQL from disk and opens a database); keeping them out of the
 production config is deliberate, so a Node API in shipped code still fails
 the gate.
-`models.json` source of truth mirrored in `models.ts`;
+`models.json` source of truth, projected by `scripts/generate-models.mjs`
+into `models.generated.ts` (`npm run models:gen`; `npm run check` fails when
+stale — never edit the generated file);
 release version single-sourced in `src/version.ts` (never hardcode a
 version string in runtime code; bump with `workers/package.json`);
 secrets only via `wrangler secret put`, never committed;
