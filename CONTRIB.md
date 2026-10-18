@@ -76,7 +76,7 @@ cd workers && npx wrangler dev --remote
 
 # Cross-check a running Worker's /api/admin/* contract (local or deployed)
 BASE_URL=http://127.0.0.1:8787 API_KEY=local-dev-user-key \
-  ADMIN_API_KEY=local-dev-admin-key scripts/verify-admin-api.sh
+  ADMIN_KEY=local-dev-admin-key scripts/verify-admin-api.sh
 ```
 
 ## Adding New Models
