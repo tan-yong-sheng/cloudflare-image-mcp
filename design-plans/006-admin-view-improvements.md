@@ -49,8 +49,8 @@
 
 **What changed:**
 
-- Added red trash icon button to each row
-- Calls `POST /api/admin/keys/:id/disable` endpoint
+- Added red trash icon button to each row, beside the edit button
+- Calls `POST /api/admin/keys/:id/delete` — a **hard delete**, distinct from the row's enable/disable toggle
 - Confirmation dialog before deletion
 - Shows success notification after deletion
 
@@ -60,15 +60,19 @@
 function deleteButton(k) {
   // Returns <button> with fa-trash icon
   // Confirms: "Delete key #42 (account_id)? This cannot be undone."
-  // Calls: disableKey(keyId)
+  // Calls: removeKey(keyId)
 }
 
-async function disableKey(keyId) {
-  // POST /api/admin/keys/{id}/disable
+async function removeKey(keyId) {
+  // POST /api/admin/keys/{id}/delete
   // Shows notification on success
   // Reloads health data
 }
 ```
+
+**Not the same as disable:** the toggle parks a key (kept, unserved, recoverable);
+delete removes the key row and its sealed credential versions permanently. Both
+audit; only delete cannot be undone from the UI.
 
 ### 4. "New Key" Button Moved to Header ✅
 
@@ -125,7 +129,7 @@ ALTER TABLE provider_keys ADD COLUMN token_prefix TEXT;
 ✅ TypeScript compilation passes  
 ✅ Hash routing works (tested manually: `/#admin`, back button, direct URL)  
 ✅ Management key security: still memory-only, cleared on navigation  
-✅ Delete button confirms before disabling  
+✅ Delete button confirms before deleting  
 ✅ "+ New key" button positioned correctly in header
 
 ## Testing Checklist (Manual Browser)
@@ -135,7 +139,7 @@ ALTER TABLE provider_keys ADD COLUMN token_prefix TEXT;
 - [ ] Browser back/forward navigation works
 - [ ] Management key clears when leaving admin view
 - [ ] Delete button shows confirmation dialog
-- [ ] Delete button disables key and shows notification
+- [ ] Delete button removes the key and its versions, then shows a notification
 - [ ] "+ New key" button opens sheet
 - [ ] "+ New key" button hidden when locked
 - [ ] Status chips show correct counts

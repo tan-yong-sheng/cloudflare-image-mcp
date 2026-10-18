@@ -639,6 +639,116 @@ describe("admin PATCH (R2 follow-up, #91)", () => {
   });
 });
 
+describe("admin DELETE (hard delete, #102)", () => {
+  async function handle(request: Request, store?: unknown): Promise<Response> {
+    const { handleAdmin } = await import("./admin.js");
+    const response = await handleAdmin(
+      request,
+      new URL(request.url).pathname,
+      env(),
+      store ? { adminStore: store as never } : undefined
+    );
+    if (!response) throw new Error("no admin route matched");
+    return response;
+  }
+
+  function deleteRequest(path: string, adminKey = "admin-key"): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "POST",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": adminKey }),
+        "Content-Type": "application/json",
+      },
+    });
+  }
+
+  const keyRow = {
+    id: 1,
+    provider_id: "cloudflare",
+    label: "test-key",
+    weight: 1,
+    enabled: 1,
+    external_account_id: "acct-1",
+  };
+
+  /** Recording stub: the S2 seam owns SQL truth; this pins wiring. */
+  function stubStore() {
+    const commits: { sql: string; params: readonly unknown[] }[] = [];
+    const row: Record<string, unknown> = { ...keyRow };
+    const stmt = (sql: string) => {
+      const value = { ...row };
+      const bound = {
+        first: async () => value,
+        all: async () => ({ results: [] as unknown[] }),
+        run: async () => ({ meta: { changes: 1 } }),
+        bind: () => bound,
+      };
+      return bound;
+    };
+    return {
+      commits,
+      store: {
+        prepare: (sql: string) => stmt(sql),
+        commit: async (
+          writes: readonly { sql: string; params: readonly unknown[] }[]
+        ) => {
+          commits.push(...writes);
+        },
+      },
+    };
+  }
+
+  test("delete without a store is a 500, never a silent no-op", async () => {
+    const response = await worker.fetch(
+      deleteRequest("/api/admin/keys/1/delete"),
+      env()
+    );
+    expect(response.status).toBe(500);
+  });
+
+  test("delete with a wrong admin key is a 403", async () => {
+    const { store } = stubStore();
+    const response = await handle(
+      deleteRequest("/api/admin/keys/1/delete", "wrong-key"),
+      store
+    );
+    expect(response.status).toBe(403);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+  });
+
+  test("delete commits the key, its versions, the config bump and the audit row in one batch", async () => {
+    const { store, commits } = stubStore();
+    const response = await handle(
+      deleteRequest("/api/admin/keys/1/delete"),
+      store
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { id: number; deleted: boolean };
+    expect(body.id).toBe(1);
+    expect(body.deleted).toBe(true);
+    // One atomic batch: delete versions, delete key, config bump, audit.
+    expect(commits.length).toBeGreaterThanOrEqual(3);
+    const sqls = commits.map((w) => w.sql);
+    expect(
+      sqls.some((s) => s.includes("DELETE FROM credential_versions"))
+    ).toBe(true);
+    expect(sqls.some((s) => s.includes("DELETE FROM provider_keys"))).toBe(
+      true
+    );
+    expect(sqls.some((s) => s.includes("INSERT INTO admin_audit"))).toBe(true);
+  });
+
+  test("a key id beyond a safe integer is a 400, not a 500", async () => {
+    const { store, commits } = stubStore();
+    const response = await handle(
+      deleteRequest("/api/admin/keys/99999999999999999999/delete"),
+      store
+    );
+    expect(response.status).toBe(400);
+    expect(commits).toEqual([]);
+  });
+});
+
 describe("admin health readiness (ADR-001)", () => {
   // Readiness must be the pool's servable predicate (enabled, weighted,
   // envelope opens), not re-derived from the key list. A key can be listed,

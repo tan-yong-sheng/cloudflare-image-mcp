@@ -98,6 +98,25 @@ export function getFrontendHTML(options?: {
             transform: translateY(-1px);
         }
 
+        .btn-danger {
+            background-color: transparent;
+            color: var(--error);
+            border: 1px solid var(--border);
+        }
+
+        .btn-danger:hover {
+            background-color: var(--error);
+            color: white;
+            border-color: var(--error);
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .card {
             background-color: var(--card-bg);
             border: 1px solid var(--border);
@@ -1314,6 +1333,44 @@ export function getFrontendHTML(options?: {
                 return edit;
             }
 
+            // Hard delete, distinct from the enable/disable toggle: the row and
+            // its sealed versions are gone for good. A confirmation naming the
+            // key is the only guard, so it must never be skipped.
+            function deleteButton(k) {
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'btn btn-danger text-xs py-1 px-2';
+                del.setAttribute('aria-label', 'Delete key #' + k.id);
+                del.title = 'Delete key #' + k.id;
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-trash';
+                del.appendChild(icon);
+                del.addEventListener('click', async () => {
+                    const who = k.accountId || k.label || ('#' + k.id);
+                    if (!window.confirm('Delete key #' + k.id + ' (' + who + ')? This cannot be undone.')) return;
+                    // Serialize per row: a second click while the first is in
+                    // flight could delete a key id the refresh has already
+                    // reassigned to a different row.
+                    del.disabled = true;
+                    try {
+                        const res = await api('POST', ADMIN_KEYS + '/' + k.id + '/delete');
+                        if (res.stale) return;
+                        if (!res.ok) {
+                            showError(errorLine, errorMessage(res));
+                            return;
+                        }
+                        hideError(errorLine);
+                        showNotice('Deleted key #' + k.id + '.');
+                        loadHealth();
+                    } catch (error) {
+                        showError(errorLine, error instanceof Error ? error.message : String(error));
+                    } finally {
+                        del.disabled = false;
+                    }
+                });
+                return del;
+            }
+
             function renderTable(providers, keys) {
                 const family = providers.find((p) => p.id === selected);
                 familyName.textContent = '';
@@ -1348,7 +1405,7 @@ export function getFrontendHTML(options?: {
                     wrap.className = 'inline-flex gap-2 items-center';
                     wrap.appendChild(keyToggle(k));
                     wrap.appendChild(editButton(k));
-                    // TODO: Add delete button once DELETE endpoint exists (see design-plans/007-delete-and-masked-keys.md)
+                    wrap.appendChild(deleteButton(k));
                     actions.appendChild(wrap);
 
                     tr.appendChild(acctCell);
