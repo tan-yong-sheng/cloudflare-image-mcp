@@ -1,0 +1,32 @@
+# Local development manifest.
+#
+# `wrangler.toml` is gitignored on purpose: CI is the deploy authority and
+# generates the real manifest from GitHub Secrets at deploy time
+# (.github/workflows/deploy-workers.yml), then deletes it. Copy this file to
+# `wrangler.toml` for local work — it is never read by a deploy:
+#
+#     cd workers && cp wrangler.toml.example wrangler.toml
+#
+# Seeded values come from `.dev.vars.example` (copy that to `.dev.vars`).
+# Binding names must stay in step with the generated manifest;
+# src/dev-config.test.ts fails if they drift.
+
+name = "cloudflare-image-mcp-local"
+compatibility_date = "2025-01-01"
+main = "src/index.ts"
+
+# R2 bucket for generated images. `--local` emulates it on disk.
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "cloudflare-image-mcp-images"
+
+# D1 provider store (R1a/R1b). `--local` keeps a SQLite file under
+# workers/.wrangler/state, so the id only has to be present, not real:
+#   npx wrangler d1 migrations apply PROVIDER_DB --local
+[[d1_databases]]
+binding = "PROVIDER_DB"
+database_name = "cloudflare-image-mcp-provider-local"
+database_id = "local"
+
+[vars]
+IMAGE_EXPIRY_HOURS = "24"
