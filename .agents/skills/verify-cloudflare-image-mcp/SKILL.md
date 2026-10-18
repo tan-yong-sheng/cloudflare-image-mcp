@@ -163,7 +163,9 @@ it cannot signal, instead of pretending the instance stopped.
 
 All executable and shown above, except `lib.sh`, which the others source; run
 them from the worktree root with `VERIFY_PORT` exported when overriding the
-port:
+port. They need `curl`, `node` (already required by the workers toolchain),
+`ps`, and at least one of `ss`/`lsof`/`netstat` — with none of those three the
+port checks report "cannot tell" and the scripts refuse rather than guess:
 
 - `scripts/launch.sh` — guarded launch (port check, templates, migrations,
   pidfile, server in foreground).
@@ -183,6 +185,15 @@ port:
   successful image generations — prove nothing about your instance. Doctor's
   and drive.sh's ownership check exists for exactly this; both refuse a target
   they cannot vouch for instead of probing it.
+- A stale `.verify/instance.json` — one whose pid is gone, recycled, or on a
+  port this run is not using — is replaced by the next `launch.sh`, which says
+  so and signals nothing. `cleanup.sh` goes the other way and refuses to act on
+  any record it cannot verify (including one with no usable port), because
+  confirming the port is down is the only proof it can offer that an instance
+  stopped; re-run `launch.sh` to get past a record like that.
+- `VERIFY_PORT` must be a numeric TCP port: `launch.sh` refuses a non-numeric or
+  out-of-range value before it copies templates or runs migrations, because the
+  pidfile is written before wrangler binds.
 - Requests use the placeholder keys published in `workers/.dev.vars.example`
   (`local-dev-user-key` / `local-dev-admin-key`) — published values, not
   secrets. When a worktree's `.dev.vars` has been customised, export

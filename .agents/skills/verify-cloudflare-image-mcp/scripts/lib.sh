@@ -13,24 +13,47 @@ pidfile_field() {
   sed -n "s/.*\"$2\":\([0-9]*\).*/\1/p" "$1" 2>/dev/null || true
 }
 
+# _in_listing LISTING PORT -> 0 when LISTING has a listener on PORT, 1 when it
+# has none, 2 when the listing could not be searched (a grep failure is not an
+# absent listener).
+_in_listing() {
+  local rc=0
+  printf '%s\n' "$1" | grep -q ":$2 " || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
 # port_in_use PORT -> 0 listening, 1 free, 2 cannot tell.
 # Any local address counts: 0.0.0.0 and [::] own the port as much as loopback
-# does. ss is Linux-only, so lsof and netstat are tried before giving up.
+# does. ss is Linux-only, so lsof and netstat are tried before giving up, and a
+# query that fails is "cannot tell" rather than "free" — callers treat 1 as
+# proof, so a tool that could not look must not produce it.
 port_in_use() {
-  local port="$1" listing
+  local port="$1" listing rc=0
   if command -v ss >/dev/null 2>&1; then
-    ss -ltn 2>/dev/null | grep -q ":$port " && return 0
-    return 1
+    listing="$(ss -ltn 2>/dev/null)" || return 2
+    rc=0
+    _in_listing "$listing" "$port" || rc=$?
+    return "$rc"
   fi
   if command -v lsof >/dev/null 2>&1; then
-    listing="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null)" || true
+    listing="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null)" || rc=$?
+    [ "$rc" -ge 2 ] && return 2
     [ -n "$listing" ] && return 0
+    # lsof exits 1 both for "no match" and for a query it could not complete;
+    # the two are indistinguishable, and on a host where it is the only tool
+    # the alternative is refusing every launch. An lsof row always carries the
+    # port, so an empty listing is taken as "nothing listening".
     return 1
   fi
   if command -v netstat >/dev/null 2>&1; then
-    listing="$(netstat -ltn 2>/dev/null)" || true
-    printf '%s\n' "$listing" | grep -q ":$port " && return 0
-    return 1
+    listing="$(netstat -ltn 2>/dev/null)" || return 2
+    rc=0
+    _in_listing "$listing" "$port" || rc=$?
+    return "$rc"
   fi
   return 2
 }

@@ -18,19 +18,44 @@ WORKTREE_ROOT="$(cd "$SKILL_DIR/../../../.." && pwd)"
 . "$SKILL_DIR/lib.sh"
 WORKERS_DIR="$WORKTREE_ROOT/workers"
 VERIFY_PORT="${VERIFY_PORT:-8788}"
+# Validate before anything has side effects: a non-numeric port would write
+# invalid JSON into the pidfile and then fail to bind, leaving a record no
+# later run can use.
+case "$VERIFY_PORT" in
+  '' | *[!0-9]*)
+    echo "refusing: VERIFY_PORT must be a numeric TCP port (got: $VERIFY_PORT)" >&2
+    exit 1
+    ;;
+esac
+if [ "$VERIFY_PORT" -lt 1 ] || [ "$VERIFY_PORT" -gt 65535 ]; then
+  echo "refusing: VERIFY_PORT must be between 1 and 65535 (got: $VERIFY_PORT)" >&2
+  exit 1
+fi
 INSTANCE_FILE="$WORKTREE_ROOT/.verify/instance.json"
 VERIFY_STATE="$WORKTREE_ROOT/.verify/state"
 
 cd "$WORKERS_DIR"
 mkdir -p "$WORKTREE_ROOT/.verify" "$VERIFY_STATE"
 
+stale_record=""
 if [ -f "$INSTANCE_FILE" ]; then
-  prev_pid="$(sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$INSTANCE_FILE")"
-  if [ -n "$(ps -o args= -p "$prev_pid" 2>/dev/null)" ]; then
-    echo "refusing: an instance recorded in $INSTANCE_FILE (pid $prev_pid) is still running" >&2
-    echo "run cleanup.sh first, or VERIFY_PORT=<free port> to run a second" >&2
+  recorded_pid="$(pidfile_field "$INSTANCE_FILE" pid)"
+  recorded_port="$(pidfile_field "$INSTANCE_FILE" port)"
+  # Same predicate cleanup.sh uses, evaluated against the *recorded* port: an
+  # empty result means the record still describes a live wrangler dev of this
+  # worktree, so starting another would strand it and cleanup.sh is the way out.
+  # Anything else describes nothing of ours — a dead pid, a recycled one, a
+  # port this run is not using, an unusable record — and is replaced below with
+  # a note. Refusing there would leave a stale pidfile with no way forward,
+  # since cleanup.sh also refuses to act on a record it cannot verify.
+  if [ -n "$recorded_pid" ] &&
+    [ -z "$(instance_problem "$INSTANCE_FILE" "$recorded_port")" ]; then
+    echo "refusing: an instance recorded in $INSTANCE_FILE is still running" >&2
+    echo "(pid $recorded_pid, port $recorded_port) — run cleanup.sh first (it reads" >&2
+    echo "that port), or launch on a port no recorded instance owns" >&2
     exit 1
   fi
+  stale_record="pid ${recorded_pid:-<none>}, port ${recorded_port:-<none>}"
 fi
 
 # Any local address counts: a listener on 0.0.0.0 or [::] owns the port too,
@@ -62,6 +87,10 @@ esac
 # and the .bin/wrangler shebang chain (env -> node) does not fork either, so the
 # pid recorded here is the process cleanup.sh later finds — verified with
 # `ps -o args= -p <pid>` after a launch: `node .../.bin/wrangler dev ...`.
+if [ -n "$stale_record" ]; then
+  echo "note: replacing $INSTANCE_FILE, which records $stale_record — not a live"
+  echo "      wrangler dev of this worktree on its recorded port"
+fi
 printf '{"pid":%d,"port":%s,"startedAt":"%s"}\n' \
   "$$" "$VERIFY_PORT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$INSTANCE_FILE"
 

@@ -9,6 +9,11 @@
 # silently ignored. Evidence under evidence/verify/ is never touched.
 #
 # Env: none
+#
+# Refuses, without signalling anything, when the record cannot be verified: no
+# usable port, a pid that is not a wrangler dev, a wrangler dev on another port,
+# or a host where the listener check cannot run. launch.sh replaces such a
+# record; this script never deletes one it cannot account for.
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,12 +31,23 @@ pid="$(pidfile_field "$INSTANCE_FILE" pid)"
 port="$(pidfile_field "$INSTANCE_FILE" port)"
 args="$(ps -o args= -p "$pid" 2>/dev/null || true)"
 
+# The recorded port is the only handle on the listener, and confirming the port
+# is down is the only proof this script can offer that an instance stopped. A
+# record without one is therefore refused in both branches below: deleting it
+# while an unknown port may still be serving would be the opposite of the
+# fail-closed rule everywhere else. launch.sh replaces such a record.
+if [ -z "$port" ]; then
+  echo "refusing: $INSTANCE_FILE records no usable port, so no listener can be" >&2
+  echo "confirmed down — re-run launch.sh (it replaces a record that describes" >&2
+  echo "nothing of ours) or delete that file once you know the port is free" >&2
+  exit 1
+fi
+
 if [ -n "$args" ]; then
-  # Identity before signalling, through the shared check: it refuses a pidfile
-  # with no usable port (nothing would then tie this pid to this instance), a
-  # pid that is not a wrangler dev, and a wrangler dev on another port — the
-  # recycled-pid case, where the recorded number now belongs to a different
-  # worktree's instance.
+  # Identity before signalling, through the shared check: it refuses a pid that
+  # is not a wrangler dev and a wrangler dev on another port — the recycled-pid
+  # case, where the recorded number now belongs to a different worktree's
+  # instance. (The recorded port itself was required above.)
   problem="$(instance_problem "$INSTANCE_FILE" "$port")"
   if [ -n "$problem" ]; then
     echo "$problem; refusing to kill" >&2
@@ -60,24 +76,22 @@ else
   echo "recorded pid $pid already gone"
 fi
 
-if [ -n "$port" ]; then
-  # Fail closed when the listener check cannot run: a host with none of ss,
-  # lsof or netstat cannot prove the port came down, and treating that as "down"
-  # would delete the only record of an instance that may still be serving.
-  port_rc=0
-  port_in_use "$port" || port_rc=$?
-  case "$port_rc" in
-    0)
-      echo "WARNING: port $port still listens — something other than the recorded pid owns it" >&2
-      exit 1
-      ;;
-    2)
-      echo "WARNING: cannot check whether port $port is down (no ss, lsof, or netstat);" >&2
-      echo "not claiming the instance is stopped — pidfile left in place" >&2
-      exit 1
-      ;;
-  esac
-fi
+# Fail closed when the listener check cannot run: a host with none of ss, lsof
+# or netstat cannot prove the port came down, and treating that as "down" would
+# delete the only record of an instance that may still be serving.
+port_rc=0
+port_in_use "$port" || port_rc=$?
+case "$port_rc" in
+  0)
+    echo "WARNING: port $port still listens — something other than the recorded pid owns it" >&2
+    exit 1
+    ;;
+  2)
+    echo "WARNING: cannot check whether port $port is down (no ss, lsof, or netstat);" >&2
+    echo "not claiming the instance is stopped — pidfile left in place" >&2
+    exit 1
+    ;;
+esac
 
 rm -f "$INSTANCE_FILE"
 echo "cleanup done (evidence/verify/ and .verify/state/ preserved)"
