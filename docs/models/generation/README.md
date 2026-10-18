@@ -20,6 +20,7 @@ This document describes all available image generation models in the Cloudflare 
 | `@cf/leonardo/lucid-origin`                     | Lucid Origin                 | Leonardo.AI       | Most adaptable and prompt-responsive model                               |      ✅       |       ❌       |      ❌      |
 | `@cf/leonardo/phoenix-1.0`                      | Phoenix 1.0                  | Leonardo.AI       | Model with exceptional prompt adherence and coherent text                |      ✅       |       ❌       |      ❌      |
 | `@cf/runwayml/stable-diffusion-v1-5-inpainting` | SD 1.5 Inpainting            | Runway ML         | Stable Diffusion for masked edits (requires mask)                        |      ❌       |       ✅       |   Required   |
+| `@agnes/agnes-image-2.5-flash`                  | Agnes Image 2.5 Flash        | Agnes AI          | Text-to-image and image-composition with 1K-4K tiers and ratios          |      ✅       |       ✅       |      ❌      |
 
 ---
 
@@ -370,6 +371,7 @@ Models returning Base64-encoded images:
 
 - All FLUX models (`@cf/black-forest-labs/*`)
 - Lucid Origin (`@cf/leonardo/lucid-origin`)
+- Agnes Image 2.5 Flash (`@agnes/agnes-image-2.5-flash`)
 
 The response includes the image data as a base64 string in the JSON response body.
 
@@ -402,6 +404,7 @@ Models accepting JSON payloads:
 - Phoenix 1.0
 - SD 1.5 Img2Img
 - SD 1.5 Inpainting
+- Agnes Image 2.5 Flash
 
 Send parameters as a JSON object in the request body.
 
@@ -414,6 +417,51 @@ Models accepting multipart/form-data:
 - FLUX.2 [klein] 9B
 
 These models support uploading multiple reference images (up to 4) along with text parameters.
+
+---
+
+## Non-Cloudflare Providers
+
+### Agnes AI
+
+#### Agnes Image 2.5 Flash
+
+Agnes AI's text-to-image and image-composition model. Unlike the Cloudflare
+models it is served through the OpenAI-compatible transport, and its
+credentials are published for the `agnes` provider in the admin workbench
+(see [Credentials Setup](../../CREDENTIALS_SETUP.md)) — no Worker secret
+carries them.
+
+| Attribute             | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| **Model ID**          | `@agnes/agnes-image-2.5-flash`                           |
+| **Upstream Model**    | `agnes-image-2.5-flash`                                  |
+| **Input Format**      | JSON                                                     |
+| **Response Format**   | Base64                                                   |
+| **API Version**       | 1                                                        |
+| **Max Prompt Length** | 2048 characters                                          |
+| **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
+| **Output Tiers**      | 1K, 2K, 3K, 4K                                           |
+| **Aspect Ratios**     | 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9                |
+
+**Parameters:**
+
+| Parameter | Type   | Required | Default     | Description                                                                   |
+| --------- | ------ | -------- | ----------- | ----------------------------------------------------------------------------- |
+| `prompt`  | string | ✅       | —           | Text description of the image                                                 |
+| `size`    | string | ❌       | `1024x1024` | Output size as `WxH`; mapped to the nearest 1K/2K/3K/4K tier and aspect ratio |
+
+**Size mapping.** The requested `WxH` is normalized to a published tier (by
+area) and aspect ratio (by log-distance) before the upstream call. For example
+`2048x2048` → `2K` `1:1` and `1312x736` → `1K` `16:9`. Input images may be
+public URLs or data-URI base64; both pass through unchanged.
+
+**Unit pricing** (re-checked 2026-10-16; source
+[`agnes-ai.com/en/docs/agnes-image-25-flash`](https://agnes-ai.com/en/docs/agnes-image-25-flash)
+and [`wiki.agnes-ai.com/en/docs/pricing`](https://wiki.agnes-ai.com/en/docs/pricing)):
+$0.010 (1K), $0.018 (2K), $0.021 (3K), $0.024 (4K) per image list price, plus
+$0.003 per input reference from the fourth onward. The provider currently
+charges $0 for this model; pricing is not hardcoded in the service.
 
 ---
 

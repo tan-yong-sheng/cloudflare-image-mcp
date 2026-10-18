@@ -53,7 +53,8 @@ export const RunModelMultiShape = {
   model_id: z
     .string()
     .describe(
-      "Exact model_id from list_models output (format: @cf/{provider}/{model_name})."
+      "Exact model_id from list_models output. Cloudflare models use the " +
+        "@cf/{provider}/{model_name} namespace; other providers use their own."
     ),
 };
 
