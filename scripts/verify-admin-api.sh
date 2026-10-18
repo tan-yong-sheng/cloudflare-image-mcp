@@ -22,11 +22,12 @@
 #   PROVIDER_ID provider id              (default cloudflare)
 #
 # Secrets come from the environment only and are never printed. Every response
-# body is grepped for the three secrets; a hit is reported as a leak and that
-# body is withheld from the transcript instead of printed. ACCOUNT_ID is not
-# scanned: GET /api/admin/health lists it per key as identity metadata, so a
-# response carrying it is the contract working, not a leak. curl + grep/sed
-# only; jq is used when present.
+# body is grepped for the configured secrets (plus the rotated token derived
+# from TOKEN); a hit is reported as a leak and that body is withheld from the
+# transcript instead of printed. ACCOUNT_ID is not scanned: GET
+# /api/admin/health lists it per key as identity metadata, so a response
+# carrying it is the contract working, not a leak. curl + grep/sed only; jq is
+# used when present.
 
 set -u
 
@@ -45,12 +46,22 @@ json_escape() { # value -> the body of a JSON string (backslash and quote escape
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
-# The line-based escape above cannot represent a newline, and a malformed body
-# would make these checks test something other than the values supplied:
-# refuse the value instead of sending it.
-for var in PROVIDER_ID LABEL TOKEN ACCOUNT_ID; do
+# JSON forbids raw control characters inside a string and the line-based
+# escape above cannot represent them: refuse such a value instead of sending a
+# body that makes these checks test something other than the value supplied.
+for var in PROVIDER_ID LABEL TOKEN ACCOUNT_ID API_KEY ADMIN_KEY; do
   case "${!var}" in
-    *$'\n'*) echo "refusing: $var must not contain a newline" >&2; exit 2 ;;
+    *[[:cntrl:]]*) echo "refusing: $var must not contain a control character (tab, newline, carriage return)" >&2; exit 2 ;;
+  esac
+done
+
+# The tripwire greps responses for these as literal bytes. A value holding a
+# quote or a backslash comes back JSON-escaped, so the literal grep would miss
+# it and the body would be printed anyway — a tripwire that silently does not
+# fire is worse than none, so refuse the value instead.
+for var in TOKEN API_KEY ADMIN_KEY; do
+  case "${!var}" in
+    *'"'* | *\\*) echo "refusing: $var contains a quote or a backslash, which cannot be scanned reliably in a response" >&2; exit 2 ;;
   esac
 done
 
@@ -68,7 +79,7 @@ trap 'rm -f "$BODY" "$LEAKS"' EXIT
 # Prints the first configured secret present in $BODY, else nothing.
 leaked_secret() {
   local secret
-  for secret in "$TOKEN" "$API_KEY" "$ADMIN_KEY"; do
+  for secret in "$TOKEN" "$TOKEN-rotated" "$API_KEY" "$ADMIN_KEY"; do
     if [ -n "$secret" ] && grep -qF -- "$secret" "$BODY"; then
       printf '%s' "$secret"; return 0
     fi
@@ -221,7 +232,7 @@ if [ -s "$LEAKS" ]; then
   printf '      (a body carrying one of them is printed as <withheld> above)\n'
   fail=$((fail + 1))
 else
-  printf 'PASS  %-56s none of the three secrets appeared in any response\n' "secret tripwire"
+  printf 'PASS  %-56s no configured secret appeared in any response\n' "secret tripwire"
   pass=$((pass + 1))
 fi
 printf '\nchecks: %s passed, %s failed\n' "$pass" "$fail"
