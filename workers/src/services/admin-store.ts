@@ -298,7 +298,7 @@ function bumpWrite(): AdminWrite {
 }
 
 function auditWrite(
-  action: "add" | "rotate" | "disable" | "update",
+  action: "add" | "rotate" | "disable" | "update" | "delete",
   providerId: string,
   keyId: number | null,
   label: string
@@ -681,4 +681,21 @@ export async function updateProviderKey(
     enabled: num(after.enabled) === 1,
     accountId: after.external_account_id,
   };
+}
+
+/** Hard delete a key: removes key and credential versions, audited, cache-bumped. */
+export async function deleteProviderKey(
+  db: AdminD1,
+  keyId: number
+): Promise<{ id: number; deleted: true }> {
+  const key = await keyRow(db, keyId);
+  if (!key) throw new AdminStoreError(404, `unknown provider key ${keyId}`);
+  await db.commit([
+    // Must delete credential_versions first due to ON DELETE RESTRICT
+    write("DELETE FROM credential_versions WHERE provider_key_id = ?", keyId),
+    write("DELETE FROM provider_keys WHERE id = ?", keyId),
+    bumpWrite(),
+    auditWrite("delete", key.provider_id, null, key.label),
+  ]);
+  return { id: keyId, deleted: true as const };
 }
