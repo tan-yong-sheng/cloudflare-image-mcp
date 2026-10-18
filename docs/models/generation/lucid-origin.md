@@ -2,9 +2,9 @@
 
 **Model ID**: @cf/leonardo/@cf/leonardo/lucid-origin
 
-**Mode**: Text-to-Image 
+**Mode**: Text-to-Image
 
-**Origin**: Leonardo
+**Origin**: Leonardo.AI
 
 **Model Info**: Lucid Origin from Leonardo.AI is their most adaptable and prompt-responsive model to date. Whether you're generating images with sharp graphic design, stunning full-HD renders, or highly specific creative direction, it adheres closely to your prompts, renders text with accuracy, and supports a wide array of visual styles and aesthetics – from stylized concept art to crisp product mockups.
 
@@ -15,6 +15,7 @@
 ## Usage
 
 - Workers - TypeScript
+
 ```ts
 export interface Env {
   AI: Ai;
@@ -22,7 +23,6 @@ export interface Env {
 
 export default {
   async fetch(request, env): Promise<Response> {
-
     const inputs = {
       prompt: "cyberpunk cat",
     };
@@ -41,8 +41,8 @@ export default {
 } satisfies ExportedHandler<Env>;
 ```
 
-
 - curl
+
 ```curl
 curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/leonardo/@cf/leonardo/lucid-origin  \
   -X POST  \
@@ -50,50 +50,48 @@ curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run
   -d '{ "prompt": "cyberpunk cat" }'
 ```
 
-
 ## Parameters
 
-`*`  indicates a required field
+`*` indicates a required field
 
 ### Input
 
--   `prompt`  required  min 1
-    
-    A text description of the image you want to generate.
-    
--   `guidance`  default 4.5  min 0  max 10
-    
-    Controls how closely the generated image should adhere to the prompt; higher values make the image more aligned with the prompt
-    
--   `seed`  min 0
-    
-    Random seed for reproducibility of the image generation
-    
--   `height`  default 1120  min 0  max 2500
-    
-    The height of the generated image in pixels
-    
--   `width`  default 1120  min 0  max 2500
-    
-    The width of the generated image in pixels
-    
--   `num_steps`  default 4  min 1  max 40
-    
-    The number of diffusion steps; higher values can improve quality but take longer
-    
+- `prompt` required min 1
+
+  A text description of the image you want to generate.
+
+- `guidance` default 4.5 min 0 max 10
+
+  Controls how closely the generated image should adhere to the prompt; higher values make the image more aligned with the prompt
+
+- `seed` min 0
+
+  Random seed for reproducibility of the image generation
+
+- `height` default 1120 min 0 max 2500
+
+  The height of the generated image in pixels
+
+- `width` default 1120 min 0 max 2500
+
+  The width of the generated image in pixels
+
+- `num_steps` default 4 min 1 max 40
+
+  The number of diffusion steps; higher values can improve quality but take longer
 
 ### Output
 
--   `image`
-    
-    The generated image in Base64 format.
-    
+- `image`
+
+  The generated image in Base64 format.
 
 ## API Schemas
 
 The following schemas are based on JSON Schema
 
--   Input
+- Input
+
 ```
 {
     "type": "object",
@@ -143,7 +141,8 @@ The following schemas are based on JSON Schema
 }
 ```
 
--   Output
+- Output
+
 ```
 {
     "type": "object",
