@@ -197,6 +197,19 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     expect(html).toContain('max="' + MAX_WEIGHT + '"');
   });
 
+  test("each key row offers a confirmed hard delete", async () => {
+    // The delete control is the only irreversible action in the workbench:
+    // it must reach the delete route, not the disable one, and it must ask
+    // first. Pinning the markers keeps a refactor from quietly dropping the
+    // confirmation or re-pointing it at the enable/disable toggle.
+    const response = await worker.fetch(get("/"), env());
+    const html = await response.text();
+    expect(html).toContain("api('POST', ADMIN_KEYS + '/' + k.id + '/delete')");
+    expect(html).toContain("fa-solid fa-trash");
+    expect(html).toContain("This cannot be undone.");
+    expect(html).toContain("window.confirm(");
+  });
+
   test("GET /admin routes to the frontend", async () => {
     const response = await worker.fetch(get("/admin"), env());
     expect(response.status).toBe(200);
