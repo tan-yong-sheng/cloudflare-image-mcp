@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --remote",
+    "dev:local": "wrangler dev --local --port 8787",
     "deploy": "wrangler deploy",
     "build": "tsc",
     "check": "tsc --noEmit && tsc -p tsconfig.test.json",

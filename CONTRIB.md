@@ -7,12 +7,19 @@ For code conventions when editing `workers/src` see `CODING_STANDARDS.md`.
 
 ### workers/
 
-| Script                          | Description                                 |
-| ------------------------------- | ------------------------------------------- |
-| `npx wrangler dev`              | Start local dev server                      |
-| `npx wrangler dev --remote`     | Dev server with remote Cloudflare resources |
-| `npx wrangler deploy`           | Deploy to Cloudflare                        |
-| `npx wrangler deploy --dry-run` | Test deployment without publishing          |
+| Script                           | Description                                 |
+| -------------------------------- | ------------------------------------------- |
+| `npx wrangler dev`               | Start local dev server                      |
+| `npm run dev:local` (in workers) | Same as `wrangler dev --local --port 8787`  |
+| `npx wrangler dev --remote`      | Dev server with remote Cloudflare resources |
+| `npx wrangler deploy`            | Deploy to Cloudflare                        |
+| `npx wrangler deploy --dry-run`  | Test deployment without publishing          |
+
+### scripts/
+
+| Script                        | Description                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/verify-admin-api.sh` | Cross-check the `/api/admin/*` contract of a running Worker. Takes `BASE_URL`, `API_KEY`, `ADMIN_KEY`; `WRITES=0` is read-only. |
 
 ## Development Workflow
 
@@ -26,14 +33,34 @@ cd workers && npm ci && cd ..
 cd e2e && npm ci && cd ..
 ```
 
-### 2. Set Up Environment Variables
+### 2. Configure the Worker
 
-For local development (wrangler):
+`workers/wrangler.toml` and `workers/.dev.vars` are gitignored — CI generates
+the manifest from GitHub Secrets at deploy time and deletes it afterwards, and
+`.dev.vars` is the file wrangler reads for local secrets. Each checkout builds
+its own pair from the templates:
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+```bash
+cd workers
+cp wrangler.toml.example wrangler.toml
+cp .dev.vars.example .dev.vars
+```
 
-R2 + AI are configured via `workers/wrangler.toml` bindings for local development. In CI, `workers/wrangler.toml` is generated dynamically by `.github/workflows/deploy-workers.yml`.
+Both templates hold throwaway placeholders and are checked by
+`src/dev-config.test.ts`: the manifest must keep the binding names the deploy
+workflow generates, and no value in the secrets template may look like a real
+credential. Never put a real credential in either copied file.
+
+Apply the D1 schema locally, then start the dev server:
+
+```bash
+cd workers
+npx wrangler d1 migrations apply PROVIDER_DB --local
+npx wrangler dev            # local bindings, local D1 under workers/.wrangler/
+```
+
+`wrangler dev --remote` runs against real Cloudflare resources instead, which
+needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
 ### 3. Develop and Test
 
@@ -41,8 +68,15 @@ R2 + AI are configured via `workers/wrangler.toml` bindings for local developmen
 # Type check
 cd workers && npm ci && npm run check
 
+# Unit tests
+cd workers && npm test
+
 # Dev (remote bindings)
 cd workers && npx wrangler dev --remote
+
+# Cross-check a running Worker's /api/admin/* contract (local or deployed)
+BASE_URL=http://127.0.0.1:8787 API_KEY=local-dev-user-key \
+  ADMIN_API_KEY=local-dev-admin-key scripts/verify-admin-api.sh
 ```
 
 ## Adding New Models

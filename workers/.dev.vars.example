@@ -1,0 +1,29 @@
+# Local secrets for `npx wrangler dev`.
+#
+# `.dev.vars` is gitignored — it is the file wrangler reads for local secrets,
+# so a real credential placed here is one `git add` away from history. Copy the
+# template and keep every value a throwaway:
+#
+#     cd workers && cp .dev.vars.example .dev.vars
+#
+# Real values live in GitHub Secrets (deploy) or `npx wrangler secret put`
+# (a deployed Worker), never in this file.
+
+# Gate 1: comma-separated bearer keys for the API. The admin routes also
+# require this to be set at all (see docs/CREDENTIALS_SETUP.md).
+API_KEYS=local-dev-user-key
+
+# Gate 2: management key for /api/admin/*, sent as the X-Admin-Key header.
+ADMIN_API_KEY=local-dev-admin-key
+
+# AES-GCM data key that seals provider tokens in D1 (R1b). Local value only:
+# rows sealed with it cannot be opened by any other environment.
+PROVIDER_DATA_KEY=local-dev-provider-data-key
+
+# Inference credentials are database-only (ADR-001): add provider accounts via
+# the admin UI at /#admin once the server is up. The old CLOUDFLARE_API_TOKEN /
+# CLOUDFLARE_ACCOUNT_ID / AI_ACCOUNTS env fallbacks are gone — nothing reads
+# them, so a line here would document a switch that does not exist.
+
+# Optional: IANA timezone for logging and image folder names (default UTC).
+# TZ=UTC
