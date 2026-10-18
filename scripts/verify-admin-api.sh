@@ -22,8 +22,11 @@
 #   PROVIDER_ID provider id              (default cloudflare)
 #
 # Secrets come from the environment only and are never printed. Every response
-# body is grepped for all three secrets; a hit is reported as a leak and the
-# body is withheld. curl + grep/sed only; jq is used when present.
+# body is grepped for the three secrets; a hit is reported as a leak and that
+# body is withheld from the transcript instead of printed. ACCOUNT_ID is not
+# scanned: GET /api/admin/health lists it per key as identity metadata, so a
+# response carrying it is the contract working, not a leak. curl + grep/sed
+# only; jq is used when present.
 
 set -u
 
@@ -38,8 +41,40 @@ TOKEN="${TOKEN:-synthetic-crosscheck-token-abcdefghijklmnop}"
 ACCOUNT_ID="${ACCOUNT_ID:-synthetic-crosscheck-account-id}"
 HAVE_JQ="$(command -v jq || true)"
 
-pass=0; fail=0; leaked=""
-BODY="$(mktemp)"; trap 'rm -f "$BODY"' EXIT
+json_escape() { # value -> the body of a JSON string (backslash and quote escaped)
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+# The line-based escape above cannot represent a newline, and a malformed body
+# would make these checks test something other than the values supplied:
+# refuse the value instead of sending it.
+for var in PROVIDER_ID LABEL TOKEN ACCOUNT_ID; do
+  case "${!var}" in
+    *$'\n'*) echo "refusing: $var must not contain a newline" >&2; exit 2 ;;
+  esac
+done
+
+# Escaped once for the request bodies; the leak tripwire below keeps using the
+# raw values, because those are what a response would echo.
+ESC_PROVIDER_ID="$(json_escape "$PROVIDER_ID")"
+ESC_LABEL="$(json_escape "$LABEL")"
+ESC_TOKEN="$(json_escape "$TOKEN")"
+ESC_ACCOUNT_ID="$(json_escape "$ACCOUNT_ID")"
+
+pass=0; fail=0
+BODY="$(mktemp)"; LEAKS="$(mktemp)"
+trap 'rm -f "$BODY" "$LEAKS"' EXIT
+
+# Prints the first configured secret present in $BODY, else nothing.
+leaked_secret() {
+  local secret
+  for secret in "$TOKEN" "$API_KEY" "$ADMIN_KEY"; do
+    if [ -n "$secret" ] && grep -qF -- "$secret" "$BODY"; then
+      printf '%s' "$secret"; return 0
+    fi
+  done
+  return 1
+}
 
 # raw METHOD PATH [--bearer V|--no-bearer] [--admin V|--no-admin] [--body JSON]
 # Prints the HTTP status on stdout; the body lands in $BODY.
@@ -61,13 +96,13 @@ raw() {
   [ -n "$bearer" ] && args+=(-H "Authorization: Bearer $bearer")
   [ -n "$admin" ]  && args+=(-H "X-Admin-Key: $admin")
   curl "${args[@]}"
-  # Tripwire on every response, whatever it was.
-  local secret
-  for secret in "$TOKEN" "$API_KEY" "$ADMIN_KEY"; do
-    if [ -n "$secret" ] && grep -qF -- "$secret" "$BODY"; then
-      leaked="$leaked $method $path"
-    fi
-  done
+  # Tripwire on every response, whatever it was. The hit is appended to $LEAKS
+  # (a file, not a variable): most callers run raw inside $(...), so a variable
+  # written here would die with the subshell and the report would come back
+  # empty no matter what leaked.
+  if leaked_secret >/dev/null; then
+    printf '%s %s\n' "$method" "$path" >>"$LEAKS"
+  fi
 }
 
 check() { # label expected actual
@@ -78,8 +113,12 @@ check() { # label expected actual
   fi
 }
 
-show() { # one-line, truncated view of $BODY (safe: no secrets reached here)
-  printf '      %s\n' "$(tr -d '\n' < "$BODY" | cut -c1-220)"
+show() { # one-line, truncated view of $BODY; withheld when it carries a secret
+  if leaked_secret >/dev/null; then
+    printf '      %s\n' "<withheld: this body contained a configured secret>"
+  else
+    printf '      %s\n' "$(tr -d '\n' < "$BODY" | cut -c1-220)"
+  fi
 }
 
 compact() { tr -d '[:space:]' < "$BODY"; }
@@ -112,7 +151,7 @@ if [ "$WRITES" = "1" ]; then
   echo
   echo "== add a throwaway key (label $LABEL) =="
   check "add is a 201" 201 "$(raw POST /api/admin/keys --body \
-    "{\"providerId\":\"$PROVIDER_ID\",\"label\":\"$LABEL\",\"apiToken\":\"$TOKEN\",\"accountId\":\"$ACCOUNT_ID\"}")"
+    "{\"providerId\":\"$ESC_PROVIDER_ID\",\"label\":\"$ESC_LABEL\",\"apiToken\":\"$ESC_TOKEN\",\"accountId\":\"$ESC_ACCOUNT_ID\"}")"
   show
   if [ -n "$HAVE_JQ" ]; then
     NEWID="$(jq -r '.id // empty' < "$BODY" 2>/dev/null)"
@@ -120,7 +159,7 @@ if [ "$WRITES" = "1" ]; then
     NEWID="$(sed -n 's/.*"id":[[:space:]]*\([0-9]\+\).*/\1/p' "$BODY" | head -1)"
   fi
   case "$(compact)" in
-    *"\"label\":\"$LABEL\""*)
+    *"\"label\":\"$ESC_LABEL\""*)
       printf 'PASS  %-56s %s\n' "add echoes the label, not the token" "$LABEL"; pass=$((pass + 1)) ;;
     *) printf 'FAIL  %-56s body did not echo label %s\n' "add echoes the label" "$LABEL"; fail=$((fail + 1)) ;;
   esac
@@ -128,28 +167,30 @@ if [ "$WRITES" = "1" ]; then
   echo
   echo "== validation =="
   check "duplicate label is a 409" 409 "$(raw POST /api/admin/keys --body \
-    "{\"providerId\":\"$PROVIDER_ID\",\"label\":\"$LABEL\",\"apiToken\":\"$TOKEN\",\"accountId\":\"$ACCOUNT_ID\"}")"
+    "{\"providerId\":\"$ESC_PROVIDER_ID\",\"label\":\"$ESC_LABEL\",\"apiToken\":\"$ESC_TOKEN\",\"accountId\":\"$ESC_ACCOUNT_ID\"}")"
   check "unknown provider is a 400" 400 "$(raw POST /api/admin/keys --body \
-    "{\"providerId\":\"nope\",\"label\":\"$LABEL-x\",\"apiToken\":\"$TOKEN\"}")"
+    "{\"providerId\":\"nope\",\"label\":\"$ESC_LABEL-x\",\"apiToken\":\"$ESC_TOKEN\"}")"
   check "missing apiToken is a 400" 400 "$(raw POST /api/admin/keys --body \
-    "{\"providerId\":\"$PROVIDER_ID\",\"label\":\"$LABEL-y\"}")"
-  LONG="$(printf 'x%.0s' $(seq 1 5000))"
+    "{\"providerId\":\"$ESC_PROVIDER_ID\",\"label\":\"$ESC_LABEL-y\"}")"
+  # Built with printf, not seq: seq is absent by default on macOS/BSD, where an
+  # empty LONG would make the length check pass for the wrong reason.
+  LONG="$(printf '%*s' 5000 '' | tr ' ' x)"
   check "token over 4096 chars is a 400" 400 "$(raw POST /api/admin/keys --body \
-    "{\"providerId\":\"$PROVIDER_ID\",\"label\":\"$LABEL-z\",\"apiToken\":\"$LONG\"}")"
-  BIG="$(printf 'y%.0s' $(seq 1 20000))"
+    "{\"providerId\":\"$ESC_PROVIDER_ID\",\"label\":\"$ESC_LABEL-z\",\"apiToken\":\"$LONG\"}")"
+  BIG="$(printf '%*s' 20000 '' | tr ' ' y)"
   check "body over 16 KiB is a 413" 413 "$(raw POST /api/admin/keys --body \
-    "{\"providerId\":\"$PROVIDER_ID\",\"label\":\"$LABEL-big\",\"apiToken\":\"$BIG\"}")"
+    "{\"providerId\":\"$ESC_PROVIDER_ID\",\"label\":\"$ESC_LABEL-big\",\"apiToken\":\"$BIG\"}")"
 
   if [ -n "$NEWID" ]; then
     echo
     echo "== rotate and disable key $NEWID =="
     check "rotate is a 200" 200 "$(raw POST "/api/admin/keys/$NEWID/rotate" --body \
-      "{\"apiToken\":\"$TOKEN-rotated\"}")"
+      "{\"apiToken\":\"$ESC_TOKEN-rotated\"}")"
     show
     check "rotate reports the next version" 2 "$(field '.activeVersion' activeVersion)"
     check "rotate to an unknown id is a 404" 404 "$(raw POST /api/admin/keys/999999999/rotate --body \
-      "{\"apiToken\":\"$TOKEN\"}")"
-    HUGE_ID_STATUS="$(raw POST /api/admin/keys/99999999999999999999/rotate --body "{\"apiToken\":\"$TOKEN\"}")"
+      "{\"apiToken\":\"$ESC_TOKEN\"}")"
+    HUGE_ID_STATUS="$(raw POST /api/admin/keys/99999999999999999999/rotate --body "{\"apiToken\":\"$ESC_TOKEN\"}")"
     printf 'NOTE  rotate with an id past a safe integer: HTTP %s\n' "$HUGE_ID_STATUS"
     check "disable is a 200" 200 "$(raw POST "/api/admin/keys/$NEWID/disable")"
     raw GET /api/admin/health >/dev/null
@@ -158,7 +199,7 @@ if [ "$WRITES" = "1" ]; then
       check "health shows the key parked" "false" "$parked"
     else
       case "$(compact)" in
-        *"\"label\":\"$LABEL\",\"weight\""*"\"enabled\":false"*)
+        *"\"label\":\"$ESC_LABEL\",\"weight\""*"\"enabled\":false"*)
           printf 'PASS  %-56s false\n' "health shows a parked key"; pass=$((pass + 1)) ;;
         *) printf 'FAIL  %-56s no parked key visible (install jq for a precise check)\n' \
              "health shows the key parked"; fail=$((fail + 1)) ;;
@@ -174,8 +215,10 @@ else
 fi
 
 echo
-if [ -n "$leaked" ]; then
-  printf 'FAIL  secrets appeared in a response body for:%s\n' "$leaked"
+if [ -s "$LEAKS" ]; then
+  printf 'FAIL  secrets appeared in a response body for:\n'
+  sed 's/^/        /' "$LEAKS"
+  printf '      (a body carrying one of them is printed as <withheld> above)\n'
   fail=$((fail + 1))
 else
   printf 'PASS  %-56s none of the three secrets appeared in any response\n' "secret tripwire"
