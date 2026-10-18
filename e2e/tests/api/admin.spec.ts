@@ -35,7 +35,16 @@ function managementKey(): string {
 
 test.describe("Admin gates", () => {
   test("health without any bearer is 401", async ({ request }) => {
-    const response = await request.get("/api/admin/health");
+    const response = await request.get("/api/admin/health", {
+      headers: {
+        // Playwright injects auth headers globally (playwright.config.ts
+        // extraHTTPHeaders); strip them to test the unauthenticated path,
+        // the same way tests/api/mcp/auth.spec.ts does. Without this the
+        // request carries a valid bearer and reaches the management-key gate,
+        // which answers 403 — so the test could never assert the 401 gate.
+        Authorization: "",
+      },
+    });
     expect(response.status()).toBe(401);
   });
 
