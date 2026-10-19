@@ -27,6 +27,14 @@ import type { AdminHealth } from "./types";
 export const healthQueryKey = (sessionId: number) =>
   ["admin", "health", sessionId] as const;
 
+/**
+ * The family every session's health payload belongs to.
+ *
+ * The payload is stored per session, but a key change has to be
+ * published to whichever payload is on screen.
+ */
+export const HEALTH_QUERY_FAMILY = ["admin", "health"] as const;
+
 /** An error the admin API returned, with the status and code it carried. */
 export class AdminApiError extends Error {
   readonly status: number;
@@ -161,7 +169,11 @@ export function useAdminMutations(session: AdminSession) {
   const healthKey = healthQueryKey(session.sessionId);
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: healthKey });
+    // The whole health family is invalidated, not one session's entry.
+    // A lock and an unlock during an in-flight mutation start a new
+    // session, and the answer has to reach the payload that is on
+    // screen, whichever session the request was sent under.
+    queryClient.invalidateQueries({ queryKey: HEALTH_QUERY_FAMILY });
     queryClient.invalidateQueries({ queryKey: modelsQueryKey });
   };
 

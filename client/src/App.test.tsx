@@ -158,6 +158,29 @@ describe("the client shell", () => {
     expect(document.getElementById("generatorView")).toBeNull();
   });
 
+  it("re-syncs the route on a history navigation that announces no hash change", async () => {
+    // The legacy shell listened to both events. A history navigation
+    // can announce the new URL through popstate alone, and the route
+    // has to follow it.
+    stubFetch(() => jsonResponse(true, { data: [] }));
+    // A hash change left over from the previous test would answer the
+    // question for us: it is delivered with whatever the hash is by
+    // then, so it is flushed while the hash is still empty.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    render(<App />);
+
+    expect(document.getElementById("generatorView")).not.toBeNull();
+
+    // replaceState announces nothing; the popstate does.
+    window.history.replaceState(null, "", "/#admin");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await waitFor(() =>
+      expect(document.getElementById("adminView")).not.toBeNull()
+    );
+    expect(document.getElementById("generatorView")).toBeNull();
+  });
+
   it("leaves the workbench when the operator came in on the /admin path", async () => {
     // The path is an entry alias. If it kept pinning the route, the
     // Back button would be dead: the hash never changes, so nothing

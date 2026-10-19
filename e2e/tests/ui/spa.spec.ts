@@ -322,6 +322,43 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminKeys tr")).toHaveCount(0);
   });
 
+  test("a refused key says why and leaves the drawer open", async ({
+    page,
+  }) => {
+    // A duplicate label is a conflict. The operator has to see what the
+    // server refused, and the drawer has to stay open so the label can
+    // be corrected.
+    await page.route("**/api/admin/keys", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { message: "label 'key-1' already exists" },
+        }),
+      });
+    });
+
+    await signIn(page);
+    await page.click("#adminWorkbenchButton");
+    await unlock(page);
+    await page.click("#adminAddKey");
+    await expect(page.locator("#adminSheet")).toBeVisible();
+    await page.fill("#adminSheetAcct", `${SWEEP_PREFIX}${Date.now()}`);
+    await page.fill("#adminSheetToken", "ui-e2e-token-value");
+    await page.click("#adminSheetSave");
+
+    await expect(page.locator("#adminSheetError")).toBeVisible();
+    await expect(page.locator("#adminSheetError")).toContainText(
+      "label 'key-1' already exists"
+    );
+    // The drawer is still open, so the label can be corrected.
+    await expect(page.locator("#adminSheet")).toBeVisible();
+  });
+
   test("a key can be added, toggled, rotated and deleted", async ({
     page,
     request,

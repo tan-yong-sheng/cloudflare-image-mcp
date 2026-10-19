@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { HEALTH_QUERY_FAMILY } from "../api/admin";
 import { useAuth } from "./auth";
 
 /**
@@ -51,14 +52,14 @@ export function AdminKeyProvider({ children }: { children: ReactNode }) {
     setAdminKey(null);
     // The credential metadata the panel fetched goes with the key: a
     // locked panel must leave nothing behind to read.
-    queryClient.removeQueries({ queryKey: ["admin", "health"] });
+    queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
   }, [queryClient]);
 
   // Teardown: neither the key nor the payload outlives the provider.
   useEffect(() => {
     return () => {
       keyRef.current = null;
-      queryClient.removeQueries({ queryKey: ["admin", "health"] });
+      queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
     };
   }, [queryClient]);
 

@@ -41,7 +41,14 @@ export function useHashRoute(): Route {
     }
     const onHashChange = () => setRoute(parseRoute(window.location.hash));
     window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    // The legacy shell listened to both. A history navigation that
+    // changes only the path fires no hash change, and the route would
+    // otherwise stay where it was.
+    window.addEventListener("popstate", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("popstate", onHashChange);
+    };
   }, []);
 
   return route;
