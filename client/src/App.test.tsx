@@ -17,9 +17,10 @@ function jsonResponse(ok: boolean, body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
-function stubFetch(impl: (url: string) => Response) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
-    impl(typeof input === "string" ? input : input.toString())
+function stubFetch(impl: (url: string, init?: RequestInit) => Response) {
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) =>
+      impl(typeof input === "string" ? input : input.toString(), init)
   );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -155,6 +156,36 @@ describe("the client shell", () => {
 
     expect(document.getElementById("generatorView")).not.toBeNull();
     expect(document.getElementById("adminView")).toBeNull();
+  });
+
+  it("does not send the management key again after the workbench is left", async () => {
+    // The management key must not travel after the admin session ended.
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin";
+    let healthCalls = 0;
+    stubFetch((url) => {
+      if (url === "/api/admin/health") {
+        healthCalls += 1;
+        return jsonResponse(true, HEALTH);
+      }
+      if (url === "/api/internal/models") return jsonResponse(true, []);
+      return jsonResponse(true, { data: [] });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+    await waitFor(() => expect(healthCalls).toBe(1));
+
+    // Leave the workbench: no further credentialed request goes out.
+    await user.click(
+      screen.getByRole("button", { name: /Back to Image Generator/i })
+    );
+    await waitFor(() =>
+      expect(document.getElementById("generatorView")).not.toBeNull()
+    );
+    expect(healthCalls).toBe(1);
   });
 
   it("asks for the management key again after the workbench is left", async () => {
