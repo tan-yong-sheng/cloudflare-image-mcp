@@ -90,6 +90,11 @@ export function useHealth(session: AdminSession) {
     // The health route is only readable with a management key, so the
     // query is off until the operator unlocks the panel.
     enabled: session.adminKey !== null,
+    // The payload is fetched when it is missing, not when it is stale:
+    // the generator reads the same query, and a mount there would
+    // otherwise send the management key once more after the operator
+    // left the workbench.
+    refetchOnMount: false,
     retry: false,
   });
 }
