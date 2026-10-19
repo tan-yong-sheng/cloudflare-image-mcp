@@ -322,7 +322,7 @@ export function getFrontendHTML(options?: {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left opacity-60 border-b border-gray-800">
-                                <th class="p-3 font-medium">Account ID</th>
+                                <th id="adminKeysHead" class="p-3 font-medium">Account ID</th>
                                 <th class="p-3 font-medium"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
@@ -341,7 +341,7 @@ export function getFrontendHTML(options?: {
             <h3 id="adminSheetTitle" class="text-lg font-bold mb-1"></h3>
             <p id="adminSheetNote" class="text-xs opacity-60 mb-3"></p>
             <div class="space-y-3 flex-1">
-                <div>
+                <div id="adminSheetAcctField">
                     <label for="adminSheetAcct" class="block text-xs opacity-60 mb-1">Cloudflare account ID</label>
                     <input id="adminSheetAcct" class="w-full" placeholder="e.g. abc123def456" autocomplete="off" autocapitalize="off" spellcheck="false">
                     <p class="text-xs opacity-60 mt-1">Required — inference calls <code>/accounts/{account_id}/ai/run/…</code>. Stored alongside the key (not sealed).</p>
@@ -1037,6 +1037,7 @@ export function getFrontendHTML(options?: {
             const rail = document.getElementById('adminRail');
             const familyName = document.getElementById('adminFamilyName');
             const keysBody = document.getElementById('adminKeys');
+            const keysHead = document.getElementById('adminKeysHead');
             const emptyLine = document.getElementById('adminEmpty');
             const addKeyBtn = document.getElementById('adminAddKey');
             const chipsActive = document.getElementById('adminChipsActive');
@@ -1045,6 +1046,7 @@ export function getFrontendHTML(options?: {
             const sheetEyebrow = document.getElementById('adminSheetEyebrow');
             const sheetTitle = document.getElementById('adminSheetTitle');
             const sheetNote = document.getElementById('adminSheetNote');
+            const sheetAcctField = document.getElementById('adminSheetAcctField');
             const sheetAcct = document.getElementById('adminSheetAcct');
             const sheetToken = document.getElementById('adminSheetToken');
             const sheetTokenHint = document.getElementById('adminSheetTokenHint');
@@ -1239,6 +1241,28 @@ export function getFrontendHTML(options?: {
                 renderTable(providers, keys);
             }
 
+            // Only cloudflare-rest addresses keys through /accounts/{id}/ai/run,
+            // so external_account_id is a field of that transport, not of a
+            // provider name. Routing it off the transport (ADR-002) keeps a
+            // future non-Cloudflare provider from inheriting the field.
+            function needsAccountId(providerId) {
+                const family = (lastHealth && lastHealth.providers || []).find((p) => p.id === providerId);
+                return !!family && family.transport === 'cloudflare-rest';
+            }
+
+            // Cloudflare ships a brand mark in Font Awesome; Agnes does not, so
+            // its family gets a neutral glyph rather than a logo fetched from a
+            // third-party origin on every page load.
+            const FAMILY_ICONS = { cloudflare: 'fa-brands fa-cloudflare', agnes: 'fa-solid fa-wand-magic-sparkles' };
+            function familyIcon(providerId) {
+                const className = FAMILY_ICONS[providerId];
+                if (!className) return null;
+                const icon = document.createElement('i');
+                icon.className = className + ' mr-2';
+                icon.setAttribute('aria-hidden', 'true');
+                return icon;
+            }
+
             function renderRail(providers, keys) {
                 rail.textContent = '';
                 providers.forEach((p) => {
@@ -1256,12 +1280,8 @@ export function getFrontendHTML(options?: {
                     });
                     const title = document.createElement('div');
                     title.className = 'flex items-center text-sm font-medium';
-                    if (p.id === 'cloudflare') {
-                        const icon = document.createElement('i');
-                        icon.className = 'fa-brands fa-cloudflare mr-2';
-                        icon.setAttribute('aria-hidden', 'true');
-                        title.appendChild(icon);
-                    }
+                    const icon = familyIcon(p.id);
+                    if (icon) title.appendChild(icon);
                     title.appendChild(document.createTextNode(p.displayName || p.id));
                     const familyKeys = keys.filter((k) => k.providerId === p.id);
                     const meta = document.createElement('div');
@@ -1373,14 +1393,14 @@ export function getFrontendHTML(options?: {
 
             function renderTable(providers, keys) {
                 const family = providers.find((p) => p.id === selected);
+                // The account-ID column belongs to the transport, not the family:
+                // an openai-compat provider has no Cloudflare account behind it.
+                const hasAcct = !!family && family.transport === 'cloudflare-rest';
+                keysHead.textContent = hasAcct ? 'Account ID' : 'Key';
                 familyName.textContent = '';
                 if (family) {
-                    if (family.id === 'cloudflare') {
-                        const icon = document.createElement('i');
-                        icon.className = 'fa-brands fa-cloudflare mr-2';
-                        icon.setAttribute('aria-hidden', 'true');
-                        familyName.appendChild(icon);
-                    }
+                    const icon = familyIcon(family.id);
+                    if (icon) familyName.appendChild(icon);
                     familyName.appendChild(document.createTextNode(family.displayName || family.id));
                 }
                 const rows = keys.filter((k) => k.providerId === selected);
@@ -1391,7 +1411,7 @@ export function getFrontendHTML(options?: {
 
                     const acctCell = document.createElement('td');
                     acctCell.className = 'p-3 font-mono text-sm';
-                    acctCell.textContent = k.accountId || '—';
+                    acctCell.textContent = hasAcct ? (k.accountId || '—') : ('#' + k.id);
                     if (k.activeVersion !== null && k.activeVersion !== undefined) {
                         const ver = document.createElement('span');
                         ver.className = 'opacity-60 text-xs ml-2';
@@ -1429,6 +1449,8 @@ export function getFrontendHTML(options?: {
                     ? 'Leave the token blank to keep the current version. Filling it rotates as part of save.'
                     : 'The key will be sealed server-side on save.';
                 sheetAcct.value = isEdit ? (key.accountId || '') : '';
+                const wantsAcct = needsAccountId(selected);
+                sheetAcctField.classList.toggle('hidden', !wantsAcct);
                 sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined ? '(blank = keep v' + key.activeVersion + ')' : '';
                 sheetToken.value = '';
                 sheetToken.type = 'password';
@@ -1440,7 +1462,8 @@ export function getFrontendHTML(options?: {
                 sheetSave.disabled = false;
                 hideError(sheetError);
                 sheet.classList.remove('hidden');
-                sheetAcct.focus();
+                // Focus the first field the operator can actually fill.
+                if (wantsAcct) sheetAcct.focus(); else sheetToken.focus();
             }
 
             function closeSheet() {
@@ -1466,7 +1489,7 @@ export function getFrontendHTML(options?: {
                 const token = sheetToken.value.trim();
                 const weightRaw = sheetWeight.value.trim();
                 const weight = weightRaw === '' ? 1 : Number(weightRaw);
-                if (selected === 'cloudflare' && !accountId) {
+                if (needsAccountId(selected) && !accountId) {
                     showError(sheetError, 'Cloudflare account ID is required.');
                     sheetAcct.focus();
                     return;

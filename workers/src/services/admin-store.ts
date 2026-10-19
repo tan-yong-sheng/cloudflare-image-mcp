@@ -66,6 +66,10 @@ export class AdminStoreError extends Error {
 export interface AdminProviderSummary {
   id: string;
   displayName: string;
+  // The registry key ADR-002 binds to a transport. The workbench reads it to
+  // decide which key fields apply: external_account_id is meaningful only for
+  // cloudflare-rest, which addresses /accounts/{id}/ai/run.
+  transport: string;
 }
 
 export interface AdminKeySummary {
@@ -190,11 +194,12 @@ export async function getAdminHealth(
   readiness: CredentialReadiness
 ): Promise<AdminHealthSummary> {
   const providerRows = rows<Record<string, unknown>>(
-    await db.prepare("SELECT id, display_name FROM providers").all()
+    await db.prepare("SELECT id, display_name, transport FROM providers").all()
   );
   const providers: AdminProviderSummary[] = providerRows.map((p) => ({
     id: String(p["id"]),
     displayName: String(p["display_name"]),
+    transport: String(p["transport"]),
   }));
 
   const keyRows = rows<Record<string, unknown>>(
