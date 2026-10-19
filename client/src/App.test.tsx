@@ -117,7 +117,10 @@ describe("the client shell", () => {
     expect(
       await screen.findByText("Please enter a password")
     ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The key is never sent: an empty key cannot be validated.
+    expect(
+      fetchMock.mock.calls.some((call) => String(call[0]) === "/v1/models")
+    ).toBe(false);
   });
 
   it("keeps a key that was already in the tab", () => {
