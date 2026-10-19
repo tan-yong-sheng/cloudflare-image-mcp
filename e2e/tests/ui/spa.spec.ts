@@ -264,6 +264,23 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminChipsFamilies")).toBeVisible();
   });
 
+  test("leaving the workbench ends the admin session", async ({ page }) => {
+    await signIn(page);
+    await page.click("#adminWorkbenchButton");
+    await page.fill("#adminKey", managementKey());
+    await page.click("#adminUnlock");
+    await expect(page.locator("#adminChipsActive")).toBeVisible();
+
+    // Back to the generator: the management key goes with it.
+    await page.click("#adminBackBtn");
+    await expect(page.locator("#generatorView")).toBeVisible();
+
+    // Coming back asks for the key again.
+    await page.click("#adminWorkbenchButton");
+    await expect(page.locator("#adminGate")).toBeVisible();
+    await expect(page.locator("#adminKeys tr")).toHaveCount(0);
+  });
+
   test("the wrong management key is refused", async ({ page }) => {
     await signIn(page);
     await page.click("#adminWorkbenchButton");
