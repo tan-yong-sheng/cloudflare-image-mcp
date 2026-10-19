@@ -506,7 +506,7 @@ it declares `sizeStrategy: "exact"` and the transport withholds `ratio` for it.
 | **API Version**       | 1                                                        |
 | **Max Prompt Length** | 2048 characters                                          |
 | **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
-| **Output Size**       | exact `WxH`, sent verbatim                               |
+| **Output Size**       | exact `WxH`, sent after the 512–4096 clamp               |
 | **Aspect Ratios**     | not supported by the model                               |
 
 **Published sizes.** The provider docs give `1024x1024`, `1024x768`, and

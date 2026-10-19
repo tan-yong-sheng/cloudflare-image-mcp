@@ -78,8 +78,14 @@ describe("router public paths", () => {
       "lastModelValue = modelSelect.value || lastModelValue;"
     );
     expect(html).toContain(
-      "submitButton.disabled = !credentialsConfigured || selectableModels === 0;"
+      "inFlight || !credentialsConfigured || selectableModels === 0;"
     );
+    // Overlapping refetches are sequenced: a slow older response must not
+    // reinstate the list a newer one already replaced.
+    expect(html).toContain("if (request !== modelRequest) return;");
+    // Models that declare a single `size` parameter (Agnes) get the same
+    // size control as models that declare width+height.
+    expect(html).toContain("|| has('size')");
   });
 
   test("login modal validates the key against an authenticated route", async () => {
