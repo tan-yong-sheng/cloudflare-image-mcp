@@ -98,6 +98,18 @@ expect "frontend / is public" \
 # cutover rather than a page that merely answers 200.
 expect_body "frontend / serves the React client shell" 'id="root"'
 expect_no_body "frontend / no longer serves the legacy template" 'id="loginModal"'
+# The built bundle must be public too: every browser downloads it, and
+# the asset binding is what serves it. The name is hashed, so it is read
+# out of the document the client just served.
+BUNDLE="$(grep -o '/assets/index-[A-Za-z0-9_-]*\.js' "$BODY_FILE" | head -1)"
+if [ -z "$BUNDLE" ]; then
+  echo "fail  the client document names no bundle"; failures=$((failures + 1))
+else
+  expect "the client bundle is public" \
+    "$(probe "GET $BUNDLE (public)" GET "$BUNDLE")" 200
+fi
+expect "/index.html serves the client" \
+  "$(probe 'GET /index.html (public)' GET /index.html)" 200
 expect "/admin page is public" \
   "$(probe 'GET /admin (public)' GET /admin)" 200
 expect_body "/admin serves the React client shell" 'id="root"'
