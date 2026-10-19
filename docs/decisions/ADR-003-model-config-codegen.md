@@ -48,16 +48,20 @@ a model is declared.
    `isModelExposed`, `getModelConfig`, `listModels`, and `DEFAULT_MODEL` stay
    hand-written; `models.ts` re-exports `MODEL_CONFIGS` from the generated
    module, so every import site is unchanged.
-4. **Two invariants, enforced by the generator itself.** `--check` fails when
-   the committed file differs from the rendering, and every run asserts the
-   printed literal evaluates back to the JSON it came from (`$comment`
-   excepted). The round trip is what catches a projection bug that drops an
-   optional field; `tsc` catches a missing required one or an excess key,
-   because the emitted literal is annotated `Record<string, ModelConfig>`.
-5. **The gate lives in `npm run check`.** CI's Fast checks and the deploy
-   workflow both already run it, so a stale or lossy projection reaches neither
-   `main` nor production. `models.generated.ts` is `.prettierignore`d: the
-   generator, not the formatter, owns its layout.
+4. **Two invariants, split across the gate.** The `models:check` script
+   (run by CI and the deploy workflow as part of `check`) fails when the
+   committed file differs from the rendering. Equivalence — a dropped,
+   renamed, or mis-escaped field — is asserted by the config test suite,
+   which deep-compares the imported registry to the JSON. That test replaced
+   a `new Function` round trip inside the generator, which the code-injection
+   rule disallows. `tsc` catches a missing required field or an excess key,
+   because the emitted literal carries a `Record<string, ModelConfig>` type
+   annotation.
+5. **The gates.** CI's Fast checks run `check` and the test suite, so a
+   stale or lossy projection reaches neither `main` nor production; the
+   deploy workflow runs `check`, which covers staleness and the type-level
+   schema. The generated file is `.prettierignore`d: the generator, not the
+   formatter, owns its layout.
 6. **Rationale moves into the JSON.** Model-level `$comment` strings carry the
    probe notes; a document-level one carries the notes that used to sit above
    the shared parameter fragments. `$comment` at any other depth is rejected
