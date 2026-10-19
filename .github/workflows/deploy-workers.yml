@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "workers/**"
+      - "client/**"
       - ".github/workflows/deploy-workers.yml"
 
   workflow_dispatch:
@@ -58,11 +59,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: workers/package-lock.json
+          cache-dependency-path: |
+            workers/package-lock.json
+            client/package-lock.json
 
       - name: Install dependencies
         working-directory: workers
         run: npm ci
+
+      - name: Build the React client
+        # The client is deployed as Workers Static Assets, so the build has
+        # to run before the manifest is generated: wrangler uploads the
+        # directory the manifest points at.
+        working-directory: client
+        run: |
+          npm ci
+          npm run build
+          test -f dist/index.html
 
       - name: Type check
         working-directory: workers
@@ -173,6 +186,16 @@ jobs:
           [vars]
           IMAGE_EXPIRY_HOURS = "24"
           # API_KEYS is set as secret via wrangler secret put
+
+          # The React client (client/) built by the step above. The Worker
+          # owns every route it serves and reaches the client's files
+          # through the ASSETS binding, so an unknown path still gets the
+          # Worker's own error envelope.
+          [assets]
+          directory = "../client/dist"
+          binding = "ASSETS"
+          not_found_handling = "none"
+          run_worker_first = true
           EOF
 
           echo "✅ wrangler.toml generated successfully"

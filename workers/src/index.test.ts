@@ -178,6 +178,96 @@ describe("router public paths", () => {
   });
 });
 
+describe("the React client's routes", () => {
+  /** An env whose asset binding answers like the asset worker. */
+  function clientEnv(
+    files: Record<string, string> = { "/": "<div id=root></div>" },
+    apiKeys?: string
+  ): Env {
+    return {
+      IMAGE_BUCKET: {},
+      CLOUDFLARE_ACCOUNT_ID: "account",
+      CLOUDFLARE_API_TOKEN: "token",
+      IMAGE_EXPIRY_HOURS: "24",
+      ...(apiKeys ? { API_KEYS: apiKeys } : {}),
+      ASSETS: {
+        fetch: async (request: Request) => {
+          const path = new URL(request.url).pathname;
+          const body = files[path];
+          if (body === undefined)
+            return new Response("Not found", { status: 404 });
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          });
+        },
+      },
+    } as unknown as Env;
+  }
+
+  test("the client document is served on the opt-in flag", async () => {
+    const response = await worker.fetch(get("/?spa=1"), clientEnv());
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("<div id=root></div>");
+    // The legacy page must not answer the opt-in route.
+    expect(html).not.toContain("<!DOCTYPE html>");
+  });
+
+  test("the legacy page still answers without the flag", async () => {
+    const response = await worker.fetch(get("/"), clientEnv());
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("<!DOCTYPE html>");
+  });
+
+  test("the legacy page answers when no client is deployed", async () => {
+    // No asset binding: the opt-in flag has nothing to serve, and the
+    // page a visitor gets must not become an error.
+    const response = await worker.fetch(get("/?spa=1"), env());
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("<!DOCTYPE html>");
+  });
+
+  test("the client's own files are served without a key", async () => {
+    const response = await worker.fetch(
+      get("/assets/index-abc123.js"),
+      clientEnv({ "/assets/index-abc123.js": "console.log(1)" }, "secret")
+    );
+
+    // The bundle is public: every browser downloads it, and the auth
+    // gate governs the API routes.
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("console.log(1)");
+  });
+
+  test("a client file the build does not have is a 404, not a 401", async () => {
+    const response = await worker.fetch(
+      get("/assets/missing.js"),
+      clientEnv({}, "secret")
+    );
+
+    // Falling through to the auth gate would call a missing bundle a
+    // credential problem.
+    expect(response.status).toBe(404);
+  });
+
+  test("the API routes are untouched by the client", async () => {
+    const response = await worker.fetch(
+      get("/v1/models"),
+      clientEnv({}, "secret")
+    );
+
+    // The asset lookup must not swallow the API routes: an unauthenticated
+    // API call still gets the 401 the auth gate produces.
+    expect(response.status).toBe(401);
+  });
+});
+
 describe("provider credentials workbench (R2 follow-up, #91)", () => {
   test("the workbench markup, gates, and endpoints exist on /", async () => {
     const response = await worker.fetch(get("/"), env());
