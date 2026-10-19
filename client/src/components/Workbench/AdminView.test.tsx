@@ -1,0 +1,355 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
+import { AdminKeyProvider } from "../../app/admin-key";
+import { AuthProvider } from "../../app/auth";
+import { ThemeProvider } from "../../app/theme";
+import { AdminView } from "./AdminView";
+
+/**
+ * The workbench.
+ *
+ * These are the operator-visible rules the legacy page kept: the panel
+ * is a gate until the management key is entered, the account field
+ * belongs to the transport, a blank token keeps the stored version, and
+ * the management key never reaches a storage backend.
+ */
+
+const HEALTH = {
+  providers: [
+    {
+      id: "cloudflare",
+      displayName: "Cloudflare Workers AI",
+      transport: "cloudflare-rest",
+    },
+    {
+      id: "agnes",
+      displayName: "Agnes",
+      transport: "openai-compat",
+    },
+  ],
+  keys: [
+    {
+      id: 1,
+      providerId: "cloudflare",
+      label: "key-1",
+      weight: 1,
+      enabled: true,
+      activeVersion: 3,
+      accountId: "acct-1",
+    },
+    {
+      id: 2,
+      providerId: "agnes",
+      label: "key-2",
+      weight: 2,
+      enabled: false,
+      activeVersion: 1,
+      accountId: null,
+    },
+  ],
+  exposure: [],
+  configVersion: 1,
+  hasServableCredential: true,
+  hasServableCredentialByProvider: { cloudflare: true, agnes: false },
+};
+
+function jsonResponse(ok: boolean, body: unknown, status = 200): Response {
+  return {
+    ok,
+    status,
+    text: async () => JSON.stringify(body),
+  } as unknown as Response;
+}
+
+type Route = { path: string; body: unknown; method: string };
+
+function stubApi(overrides: (route: Route) => Response | null = () => null) {
+  const calls: Route[] = [];
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const route = { path, body, method };
+      calls.push(route);
+      const override = overrides(route);
+      if (override) return override;
+      if (path === "/api/admin/health") return jsonResponse(true, HEALTH);
+      if (path === "/api/internal/models") return jsonResponse(true, []);
+      return jsonResponse(true, {});
+    }
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return calls;
+}
+
+function renderWorkbench() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <AuthProvider>
+          <AdminKeyProvider>{children}</AdminKeyProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const utils = render(<AdminView />, { wrapper });
+  return { ...utils, client };
+}
+
+async function unlock(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+  await user.click(screen.getByRole("button", { name: /Unlock/i }));
+  await waitFor(() =>
+    expect(document.getElementById("adminFamilyName")?.textContent).toContain(
+      "Cloudflare Workers AI"
+    )
+  );
+}
+
+describe("the provider credentials workbench", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the panel behind the gate until the management key is entered", async () => {
+    const calls = stubApi();
+    renderWorkbench();
+
+    expect(
+      screen.getByText("Unlock Provider Administration")
+    ).toBeInTheDocument();
+    // Nothing behind the gate is requested before the key is entered.
+    expect(calls.some((call) => call.path === "/api/admin/health")).toBe(false);
+  });
+
+  it("reads the health payload once the key is entered", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    const health = calls.find((call) => call.path === "/api/admin/health");
+    expect(health).toBeDefined();
+  });
+
+  it("never writes the management key to a storage backend", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    expect(window.sessionStorage.getItem("admin_key")).toBeNull();
+    expect(window.localStorage.getItem("admin_key")).toBeNull();
+    for (const storage of [window.sessionStorage, window.localStorage]) {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        expect(key === null ? "" : key).not.toMatch(/admin/i);
+        expect(key === null ? "" : key).not.toMatch(/management/i);
+      }
+    }
+    expect(document.cookie).not.toMatch(/management/i);
+  });
+
+  it("shows the families in the rail and picks the first one", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    const rail = document.getElementById("adminRail");
+    expect(rail?.textContent).toContain("Cloudflare Workers AI");
+    expect(rail?.textContent).toContain("Agnes");
+  });
+
+  it("asks for an account id only for a cloudflare-rest family", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The first family is cloudflare-rest, so the account column is the
+    // account id.
+    expect(screen.getByText("Account ID")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Agnes/i }));
+
+    // Agnes is openai-compat: it has no Cloudflare account behind it.
+    expect(screen.getByText("Key")).toBeInTheDocument();
+  });
+
+  it("refuses to save a cloudflare-rest key without an account id", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    expect(
+      await screen.findByText(/Cloudflare account ID is required/i)
+    ).toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/admin/keys")).toBe(false);
+  });
+
+  it("adds a key with the values the operator filled in", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.clear(screen.getByLabelText(/Weight/i));
+    await user.type(screen.getByLabelText(/Weight/i), "4");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/api/admin/keys")).toBe(true)
+    );
+    const add = calls.find((call) => call.path === "/api/admin/keys");
+    expect(add?.method).toBe("POST");
+    expect(add?.body).toMatchObject({
+      providerId: "cloudflare",
+      accountId: "acct-9",
+      apiToken: "a-long-enough-token",
+      weight: 4,
+    });
+  });
+
+  it("keeps the stored token version when the token is left blank", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+    expect(screen.getByText(/blank = keep v3/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/api/admin/keys/1")).toBe(true)
+    );
+    const update = calls.find((call) => call.path === "/api/admin/keys/1");
+    expect(update?.body).not.toHaveProperty("apiToken");
+  });
+
+  it("rotates the token when the operator fills the field in", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+    await user.type(screen.getByLabelText(/API token/i), "a-rotated-token");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/api/admin/keys/1")).toBe(true)
+    );
+    const update = calls.find((call) => call.path === "/api/admin/keys/1");
+    expect(update?.body).toMatchObject({ apiToken: "a-rotated-token" });
+  });
+
+  it("masks the token until the operator asks to see it", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+
+    const token = screen.getByLabelText(/API token/i) as HTMLInputElement;
+    expect(token.type).toBe("password");
+    await user.click(screen.getByRole("button", { name: /Show token/i }));
+    expect(token.type).toBe("text");
+  });
+
+  it("dismisses the drawer on Escape", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+  });
+
+  it("asks before deleting a key and then deletes it", async () => {
+    const calls = stubApi();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Delete key #1/i }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        calls.some((call) => call.path.endsWith("/api/admin/keys/1/delete"))
+      ).toBe(true)
+    );
+  });
+
+  it("keeps the key when the operator declines the delete", async () => {
+    const calls = stubApi();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Delete key #1/i }));
+
+    expect(
+      calls.some((call) => call.path.endsWith("/api/admin/keys/1/delete"))
+    ).toBe(false);
+  });
+
+  it("closes the panel and drops the cached payload when the operator locks", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    const { client } = renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Lock provider credentials/i })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Unlock Provider Administration")
+      ).toBeInTheDocument()
+    );
+    expect(client.getQueryData(["admin", "health"])).toBeUndefined();
+  });
+});
