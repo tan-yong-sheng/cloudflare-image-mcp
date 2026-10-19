@@ -1,11 +1,151 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { AdminApiError, useAdminMutations, useHealth } from "../../api/admin";
+import type { AdminKey } from "../../api/types";
+import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
+import { FamilyRail } from "./FamilyRail";
+import { KeySheet, type SheetValues } from "./KeySheet";
+import { KeyTable } from "./KeyTable";
+import { UnlockGate } from "./UnlockGate";
+
+type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
 
 /**
- * The provider credentials workbench. The unlock gate, the family rail
- * and the key table land in the next slice of the migration; this slice
- * proves the client builds, ships, and serves.
+ * The provider credentials workbench.
+ *
+ * The management key lives in memory only, so the panel is a gate until
+ * the operator unlocks it. Nothing behind the gate is requested before
+ * that: the health route is only read once a key is in hand.
  */
 export function AdminView() {
+  const session = useAdminSession();
+  const { adminKey, unlock, lock } = useAdminKey();
+  const health = useHealth(session);
+  const mutations = useAdminMutations(session);
+  const queryClient = useQueryClient();
+
+  const [selected, setSelected] = useState("");
+  const [sheet, setSheet] = useState<SheetState>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const handledError = useRef<unknown>(null);
+
+  const unlocked = adminKey !== null;
+  const providers = health.data?.providers ?? [];
+  const keys = health.data?.keys ?? [];
+  // The panel opens as soon as the operator unlocks, but the payload
+  // behind it is still in flight; until it lands there is nothing to
+  // count, so the chips stay hidden rather than claiming zero.
+  const healthLoaded = health.data !== undefined;
+
+  // The selected family stays selected while it exists; a family that
+  // disappears hands the selection to the first remaining one.
+  const selectedId = providers.some((provider) => provider.id === selected)
+    ? selected
+    : (providers[0]?.id ?? "");
+  const family =
+    providers.find((provider) => provider.id === selectedId) ?? null;
+
+  // A rejected key re-locks the panel and explains itself on the gate.
+  useEffect(() => {
+    if (!health.isError) {
+      handledError.current = null;
+      return;
+    }
+    if (handledError.current === health.error) return;
+    handledError.current = health.error;
+    const failure = health.error;
+    if (failure instanceof AdminApiError && failure.status === 403) {
+      // A disabled admin gate is not the operator's key being wrong, so
+      // the server's own reason is shown when it says which it was.
+      lock();
+      setGateError(
+        failure.code === "admin_disabled"
+          ? failure.message
+          : "Management key rejected."
+      );
+      return;
+    }
+    setGateError(failure instanceof Error ? failure.message : String(failure));
+  }, [health.isError, health.error, lock]);
+
+  // A notice fades on its own, the way the legacy page's did.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // Escape leaves the workbench for the generator. The add/edit drawer
+  // owns its own Escape, so an open drawer swallows it first.
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (sheetRef.current) return;
+      if (window.location.hash === "#admin") {
+        window.location.hash = "";
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleLock = () => {
+    lock();
+    setGateError(null);
+    setPanelError(null);
+    setSheet(null);
+    setSelected("");
+    // The cached payload names the configured credentials, so a locked
+    // panel does not keep it around.
+    queryClient.removeQueries({ queryKey: ["admin", "health"] });
+  };
+
+  const handleSave = async (values: SheetValues) => {
+    try {
+      if (sheet?.mode === "edit" && sheet.key) {
+        await mutations.updateKey.mutateAsync({
+          keyId: sheet.key.id,
+          accountId: values.accountId,
+          weight: values.weight,
+          enabled: values.enabled,
+          // A blank token keeps the stored version; a value rotates it.
+          ...(values.apiToken ? { apiToken: values.apiToken } : {}),
+        });
+      } else {
+        await mutations.addKey.mutateAsync({
+          providerId: family?.id ?? "",
+          label: "key-" + Date.now(),
+          apiToken: values.apiToken,
+          accountId: values.accountId,
+          weight: values.weight,
+          enabled: values.enabled,
+        });
+      }
+      setPanelError(null);
+      setSheet(null);
+    } catch (cause) {
+      setSheetError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const pendingKeyIds = [
+    ...(mutations.toggleKey.isPending && mutations.toggleKey.variables
+      ? [mutations.toggleKey.variables.keyId]
+      : []),
+    ...(mutations.deleteKey.isPending && mutations.deleteKey.variables
+      ? [mutations.deleteKey.variables]
+      : []),
+    ...(mutations.updateKey.isPending && mutations.updateKey.variables
+      ? [mutations.updateKey.variables.keyId]
+      : []),
+  ];
+
   return (
     <main
       id="adminView"
@@ -29,13 +169,29 @@ export function AdminView() {
           </button>
         </div>
         <div className="flex items-center space-x-2">
-          <span id="adminChipsActive" className="chip chip-ok hidden" />
-          <span id="adminChipsFamilies" className="chip hidden" />
+          <span
+            id="adminChipsActive"
+            className={`chip chip-ok${
+              unlocked && healthLoaded ? "" : " hidden"
+            }`}
+          >
+            {keys.filter((key) => key.enabled).length}/{keys.length} active keys
+          </span>
+          <span
+            id="adminChipsFamilies"
+            className={`chip${unlocked && healthLoaded ? "" : " hidden"}`}
+          >
+            {providers.length}{" "}
+            {providers.length === 1 ? "provider family" : "provider families"}
+          </span>
           <button
             id="adminLock"
             type="button"
-            className="btn btn-secondary p-2 h-10 flex items-center justify-center hidden"
+            className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
+              unlocked ? "" : " hidden"
+            }`}
             aria-label="Lock provider credentials"
+            onClick={handleLock}
           >
             <i className="fa-solid fa-lock mr-2" />
             Lock
@@ -44,22 +200,126 @@ export function AdminView() {
           <LogoutButton id="logoutButtonAdmin" />
         </div>
       </div>
-      <h1
-        id="adminViewTitle"
-        className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
+
+      <p
+        id="adminNotice"
+        className={`text-sm p-3 mb-4 rounded bg-green-900/30 text-green-300 border border-green-700${
+          notice ? "" : " hidden"
+        }`}
+        role="status"
       >
-        <i className="fa-solid fa-key mr-2" />
-        Provider Credentials Workbench
-      </h1>
-      <div className="card p-6 space-y-2">
-        <h2 className="text-lg font-semibold flex items-center">
-          <i className="fa-solid fa-shield-halved mr-2 text-primary" />
-          The React client is live
-        </h2>
-        <p className="text-sm opacity-75">
-          The credentials workbench arrives in the next slice of this migration.
-        </p>
+        {notice}
+      </p>
+
+      <p
+        id="adminPanelError"
+        className={`text-sm p-3 mb-4 rounded bg-red-900/30 text-red-300 border border-red-700${
+          panelError ? "" : " hidden"
+        }`}
+        role="alert"
+      >
+        {panelError}
+      </p>
+
+      <div id="adminPanel" className={`space-y-4${unlocked ? "" : " hidden"}`}>
+        <div className="flex flex-col md:flex-row gap-6">
+          <aside
+            className="card p-4 md:w-64 flex-shrink-0"
+            aria-label="Provider families"
+          >
+            <h1
+              id="adminViewTitle"
+              className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
+            >
+              <i className="fa-solid fa-server mr-2 text-primary" />
+              AI Providers
+            </h1>
+            <FamilyRail
+              providers={providers}
+              keys={keys}
+              selected={selectedId}
+              loading={health.isPending}
+              onSelect={setSelected}
+            />
+          </aside>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <KeyTable
+              family={family}
+              keys={keys}
+              loading={health.isPending}
+              pendingKeyIds={pendingKeyIds}
+              onEdit={(key) => {
+                setSheetError(null);
+                setSheet({ mode: "edit", key });
+              }}
+              onDelete={(key) => {
+                setPanelError(null);
+                mutations.deleteKey.mutate(key.id, {
+                  onSuccess: () => setNotice("Deleted key #" + key.id + "."),
+                  onError: (cause) =>
+                    setPanelError(
+                      cause instanceof Error ? cause.message : String(cause)
+                    ),
+                });
+              }}
+              onToggle={(key, enabled) => {
+                setPanelError(null);
+                mutations.toggleKey.mutate(
+                  { keyId: key.id, enabled },
+                  {
+                    onError: (cause) =>
+                      setPanelError(
+                        cause instanceof Error ? cause.message : String(cause)
+                      ),
+                  }
+                );
+              }}
+            />
+            <div className="mt-4 flex justify-end">
+              <button
+                id="adminAddKey"
+                type="button"
+                className={`btn btn-primary text-sm py-1.5 px-4${
+                  family ? "" : " hidden"
+                }`}
+                aria-label="Add new provider key"
+                onClick={() => {
+                  setSheetError(null);
+                  setSheet({ mode: "add", key: null });
+                }}
+              >
+                <i className="fa-solid fa-plus mr-1" />
+                New key
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <UnlockGate
+        key={unlocked ? "unlocked" : "locked"}
+        hidden={unlocked}
+        error={gateError}
+        onUnlock={(key) => {
+          setGateError(null);
+          unlock(key);
+        }}
+      />
+
+      {sheet ? (
+        <KeySheet
+          mode={sheet.mode}
+          provider={family}
+          editingKey={sheet.key}
+          saving={mutations.addKey.isPending || mutations.updateKey.isPending}
+          error={sheetError}
+          onClose={() => {
+            setSheetError(null);
+            setSheet(null);
+          }}
+          onSave={handleSave}
+        />
+      ) : null}
     </main>
   );
 }

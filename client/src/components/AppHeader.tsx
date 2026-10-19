@@ -1,3 +1,4 @@
+import { useAdminKey } from "../app/admin-key";
 import { useAuth } from "../app/auth";
 import { useTheme } from "../app/theme";
 
@@ -28,6 +29,7 @@ export function ThemeToggleButton({ id }: { id: string }) {
 
 export function LogoutButton({ id }: { id: string }) {
   const { isAuthenticated, logout } = useAuth();
+  const { lock } = useAdminKey();
   return (
     <button
       id={id}
@@ -36,7 +38,12 @@ export function LogoutButton({ id }: { id: string }) {
         isAuthenticated ? "" : " hidden"
       }`}
       aria-label="Logout"
-      onClick={logout}
+      onClick={() => {
+        // Logging out ends the admin session too: the management key
+        // must not outlive the operator's own session.
+        lock();
+        logout();
+      }}
     >
       <i className="fa-solid fa-sign-out-alt mr-2" />
       Logout
