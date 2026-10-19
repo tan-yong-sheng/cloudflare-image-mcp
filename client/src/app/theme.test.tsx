@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./theme";
@@ -108,5 +108,23 @@ describe("the theme", () => {
     // The system still says light, but the operator chose dark.
     renderTheme();
     expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+  });
+
+  it("answers a second press from the first one", async () => {
+    // Two presses that land in the same render must not both read the
+    // theme that was on screen before them: the second press is
+    // answered from the first one, so the theme returns to where it
+    // started.
+    systemPrefersDark(false);
+    renderTheme();
+
+    const button = screen.getByRole("button", { name: "toggle" });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
+    expect(window.localStorage.getItem("theme")).toBe("light");
   });
 });

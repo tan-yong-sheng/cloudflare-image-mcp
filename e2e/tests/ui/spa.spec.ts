@@ -322,6 +322,30 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminKeys tr")).toHaveCount(0);
   });
 
+  test("a refused credential read ends the session and says so", async ({
+    page,
+  }) => {
+    // A 401 on the credential read means the bearer key is no longer
+    // accepted. The whole session ends, the workbench goes down with
+    // it, and the operator is told why they are back at the prompt.
+    await page.route("**/api/admin/health", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Unauthorized" } }),
+      });
+    });
+
+    await signIn(page);
+    await page.click("#adminWorkbenchButton");
+    await page.fill("#adminKey", managementKey());
+    await page.click("#adminUnlock");
+
+    await expect(page.locator("#loginModal")).toBeVisible();
+    await expect(page.locator("#loginError")).toContainText("Session expired");
+    await expect(page.locator("#adminView")).toHaveCount(0);
+  });
+
   test("a refused key says why and leaves the drawer open", async ({
     page,
   }) => {

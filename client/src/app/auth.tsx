@@ -18,12 +18,29 @@ import { apiFetch } from "../api/client";
  */
 const STORAGE_KEY = "api_key";
 
+/**
+ * Shown when the server refuses the bearer key the session is using.
+ *
+ * The message belongs to the sign-in prompt rather than to the page
+ * that asked for the key: a refused session ends the whole session, so
+ * whatever asked for the key is torn down with it. A note left there
+ * would never be read.
+ */
+export const SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
+
 interface AuthContextValue {
   /** The bearer API key, or null when the operator is not signed in. */
   token: string | null;
   isAuthenticated: boolean;
+  /**
+   * Why the session ended, when it ended for a reason the operator
+   * should know. Null while the session is alive, and null after a
+   * sign-out the operator asked for.
+   */
+  endedReason: string | null;
   login: (apiKey: string) => Promise<void>;
-  logout: () => void;
+  /** End the session. The reason, if any, is shown at the sign-in prompt. */
+  logout: (reason?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -38,6 +55,7 @@ function readStoredToken(): string | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(readStoredToken);
+  const [endedReason, setEndedReason] = useState<string | null>(null);
 
   const login = useCallback(async (apiKey: string) => {
     const trimmed = apiKey.trim();
@@ -54,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setToken(trimmed);
+    setEndedReason(null);
     try {
       window.sessionStorage.setItem(STORAGE_KEY, trimmed);
     } catch {
@@ -61,8 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback((reason?: string) => {
     setToken(null);
+    setEndedReason(reason ?? null);
     try {
       window.sessionStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -71,8 +91,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ token, isAuthenticated: token !== null, login, logout }),
-    [token, login, logout]
+    () => ({
+      token,
+      isAuthenticated: token !== null,
+      endedReason,
+      login,
+      logout,
+    }),
+    [token, endedReason, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

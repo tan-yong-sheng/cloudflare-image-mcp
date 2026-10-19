@@ -7,7 +7,7 @@ import { useAuth } from "../../app/auth";
  * a key that the server does not require still signs the operator in.
  */
 export function LoginDialog() {
-  const { login } = useAuth();
+  const { login, endedReason } = useAuth();
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -25,6 +25,11 @@ export function LoginDialog() {
       setBusy(false);
     }
   };
+
+  // A refused attempt is the most recent word, but a session that ended
+  // on its own still has to be explained: the operator was sent back
+  // here, and the prompt is where they land.
+  const message = error ?? endedReason;
 
   return (
     <div
@@ -58,10 +63,10 @@ export function LoginDialog() {
           </div>
           <div
             id="loginError"
-            className={`text-sm text-red-500${error ? "" : " hidden"}`}
+            className={`text-sm text-red-500${message ? "" : " hidden"}`}
             role="alert"
           >
-            {error ?? ""}
+            {message ?? ""}
           </div>
           <button
             id="loginButton"

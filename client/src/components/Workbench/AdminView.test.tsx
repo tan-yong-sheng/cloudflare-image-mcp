@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { AdminKeyProvider } from "../../app/admin-key";
-import { AuthProvider } from "../../app/auth";
+import { AuthProvider, useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { AdminView } from "./AdminView";
 
@@ -86,21 +86,45 @@ function stubApi(overrides: (route: Route) => Response | null = () => null) {
   return calls;
 }
 
+/**
+ * Reports why the session ended. The workbench is torn down with the
+ * session, so a reason left on the workbench would never be read.
+ */
+function SessionProbe({
+  onReason,
+}: {
+  onReason: (reason: string | null) => void;
+}) {
+  const { endedReason } = useAuth();
+  useEffect(() => {
+    onReason(endedReason);
+  }, [endedReason, onReason]);
+  return null;
+}
+
 function renderWorkbench() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const session = { endedReason: null as string | null };
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <AuthProvider>
-          <AdminKeyProvider>{children}</AdminKeyProvider>
+          <AdminKeyProvider>
+            <SessionProbe
+              onReason={(reason) => {
+                session.endedReason = reason;
+              }}
+            />
+            {children}
+          </AdminKeyProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
   const utils = render(<AdminView />, { wrapper });
-  return { ...utils, client };
+  return { ...utils, client, session };
 }
 
 async function unlock(user: ReturnType<typeof userEvent.setup>) {
@@ -860,19 +884,23 @@ describe("the provider credentials workbench", () => {
 
   it("ends the session when the credential payload is refused", async () => {
     // A 401 means the bearer key is no longer accepted, so the whole
-    // session is over and the operator has to sign in again.
+    // session is over and the operator has to sign in again. The
+    // workbench goes down with the session, so the reason travels with
+    // the sign-out instead of staying on a screen that is gone.
     stubApi((route) =>
       route.path === "/api/admin/health"
         ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
         : null
     );
     const user = userEvent.setup();
-    renderWorkbench();
+    const { session } = renderWorkbench();
 
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
     await user.click(screen.getByRole("button", { name: /Unlock/i }));
 
-    expect(await screen.findByText(/Session expired/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(session.endedReason).toBe(SESSION_EXPIRED_MESSAGE)
+    );
     expect(document.getElementById("adminPanel")?.className).toContain(
       "hidden"
     );
