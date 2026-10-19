@@ -5,14 +5,15 @@
 //
 // Cloudflare ships a brand mark in Font Awesome, so it needs no asset. Agnes
 // ships an app icon (a blue rounded square) as the leading mark of its
-// wordmark image; the raster is inlined as a data URI so the workbench
-// never fetches a third-party origin. The workbench is the credential
-// surface, and a vendor-hosted request there would both leak an
-// operator visit to that vendor and break the panel if the asset moved.
+// wordmark image; the raster is inlined as a data URI so the mark adds no
+// new third-party origin. The workbench is the credential surface, and a
+// vendor-hosted request there would both leak an operator visit to that
+// vendor and break the panel if the asset moved.
 //
 // Source: https://agnes-ai.com/images/new-logo.png — the 120x120 app icon at
 // the left of the wordmark, unmodified. It identifies the provider.
 
+/** The Agnes app icon as an inline `data:` URI, ready for an `<img src>`. */
 export const AGNES_LOGO_DATA_URI =
   "data:image/png;base64," +
   "iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5ZDbSAAAKf0lEQVR42u2dX0xTWR7Hv+ciYPgT2KSRKQ9sR1z1BUTKxj/h" +

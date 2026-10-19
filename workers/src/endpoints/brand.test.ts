@@ -55,7 +55,20 @@ describe("brand assets", () => {
     // vendor-hosted logo request there would leak an operator visit to
     // that vendor and break the panel if the asset moved, so the mark is
     // inlined as a data URI.
-    expect(html).not.toContain("agnes-ai.com");
+    //
+    // The guard is on every origin, not on one hostname: a hotlink to any
+    // other host would leak just as much. The page's only external
+    // requests are the two stylesheet CDNs it has always loaded, so any
+    // other absolute URL in the markup is a new origin and fails here.
+    const offOrigin = [...html.matchAll(/https?:\/\/[^\s"'()<>]+/g)]
+      .map((match) => match[0])
+      .filter(
+        (url) =>
+          !url.startsWith("https://cdn.jsdelivr.net/") &&
+          !url.startsWith("https://cdnjs.cloudflare.com/")
+      );
+
+    expect(offOrigin).toEqual([]);
     expect(html).toContain(AGNES_LOGO_DATA_URI);
   });
 
@@ -64,15 +77,17 @@ describe("brand assets", () => {
 
     // The Agnes family used a neutral Font Awesome wand. It now gets the
     // vendor's own app icon, inlined as a data URI.
-    expect(html).toContain("FAMILY_LOGOS = { agnes:");
+    expect(html).toMatch(/FAMILY_LOGOS = \{[^}]*agnes/);
     expect(html).toContain("img.className = 'family-mark mr-2';");
-    // The wand stays on the Prompt and Generate controls, where it is a
-    // generic sparkle rather than a provider mark.
-    expect(html).toContain("fa-wand-magic-sparkles");
-    // Cloudflare still uses the Font Awesome brand mark it ships in.
-    expect(html).toContain(
-      "FAMILY_ICONS = { cloudflare: 'fa-brands fa-cloudflare' }"
-    );
+    // Agnes must not also sit in the glyph table, or the rail would keep
+    // rendering a wand for it.
+    const glyphs = /FAMILY_ICONS = \{([^}]*)\}/.exec(html);
+    expect(glyphs).not.toBeNull();
+    expect(glyphs![1]).not.toContain("agnes");
+    // Cloudflare still uses the Font Awesome brand mark it ships in. The
+    // class is asserted, not the whole table, so adding a third
+    // Font Awesome family later does not break this.
+    expect(glyphs![1]).toContain("fa-brands fa-cloudflare");
   });
 
   test("the mark is decorative: it carries no accessible name", () => {
@@ -83,5 +98,25 @@ describe("brand assets", () => {
     // announce the logo twice.
     expect(html).toContain("img.alt = '';");
     expect(html).toContain("img.setAttribute('aria-hidden', 'true');");
+  });
+
+  test("every mark is followed by the family name as text", () => {
+    const html = getFrontendHTML();
+
+    // The mark carries no accessible name, so the name beside it is the
+    // only thing identifying the family. This suite has no DOM, so the
+    // guarantee is pinned structurally: every call site of familyIcon()
+    // appends the mark and then the name, and the number of such call
+    // sites must equal the number of adjacency matches. A new call site
+    // that forgot the name would make the two counts diverge.
+    const callSites = (html.match(/familyIcon\(/g) ?? []).length - 1; // minus the definition
+    const withName = (
+      html.match(
+        /const icon = familyIcon\([^)]*\);\s*if \(icon\) \w+\.appendChild\(icon\);\s*\w+\.appendChild\(document\.createTextNode\(/g
+      ) ?? []
+    ).length;
+
+    expect(callSites).toBe(2);
+    expect(withName).toBe(callSites);
   });
 });
