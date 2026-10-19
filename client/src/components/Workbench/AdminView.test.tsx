@@ -465,4 +465,106 @@ describe("the provider credentials workbench", () => {
     );
     expect(client.getQueryData(["admin", "health"])).toBeUndefined();
   });
+
+  it("does not put the credential payload back when a request fails after the lock", async () => {
+    // The operator can lock the panel while a request is still open. A
+    // late failure must not undo the lock by restoring the payload the
+    // lock dropped.
+    let releaseToggle: (() => void) | null = null;
+    const deferred = new Promise<Response>((resolve) => {
+      releaseToggle = () =>
+        resolve(jsonResponse(false, { error: { message: "boom" } }, 500));
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (
+          path === "/api/admin/keys/1" &&
+          (init?.method ?? "GET") === "PATCH"
+        ) {
+          return deferred;
+        }
+        if (path === "/api/admin/health") return jsonResponse(true, HEALTH);
+        if (path === "/api/internal/models") return jsonResponse(true, []);
+        return jsonResponse(true, {});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    const { client } = renderWorkbench();
+    await unlock(user);
+
+    // The toggle is in flight, then the operator locks the panel.
+    await user.click(screen.getByRole("switch", { name: /Disable key-1/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Lock provider credentials/i })
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("Unlock Provider Administration")
+      ).toBeInTheDocument()
+    );
+
+    // The request fails after the lock.
+    releaseToggle!();
+    await screen.findByText(/boom/i);
+
+    // The payload the lock dropped does not come back.
+    const entries = client.getQueriesData({ queryKey: ["admin", "health"] });
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every(([, data]) => data === undefined)).toBe(true);
+  });
+
+  it("keeps a row busy while its own request is open", async () => {
+    // Two rows can be acted on at once. Each row must stay busy until
+    // its own request is answered, not until the last request is.
+    const releases = new Map<string, () => void>();
+    const twoKeys = {
+      ...HEALTH,
+      keys: [
+        HEALTH.keys[0],
+        { ...HEALTH.keys[0], id: 2, label: "key-2", accountId: "acct-2" },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (
+          path.startsWith("/api/admin/keys/") &&
+          (init?.method ?? "GET") === "PATCH"
+        ) {
+          const id = path.slice("/api/admin/keys/".length);
+          await new Promise<void>((resolve) => {
+            releases.set(id, resolve);
+          });
+          return jsonResponse(true, {});
+        }
+        if (path === "/api/admin/health") return jsonResponse(true, twoKeys);
+        if (path === "/api/internal/models") return jsonResponse(true, []);
+        return jsonResponse(true, {});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    const first = screen.getByRole("switch", { name: /Disable key-1/i });
+    const second = screen.getByRole("switch", { name: /Disable key-2/i });
+
+    await user.click(first);
+    await waitFor(() => expect(first).toBeDisabled());
+
+    // The second row is acted on while the first is still open.
+    await user.click(second);
+    await waitFor(() => expect(second).toBeDisabled());
+
+    // The first row's own request is still open, so it stays busy.
+    expect(first).toBeDisabled();
+
+    releases.get("1")?.();
+    releases.get("2")?.();
+  });
 });

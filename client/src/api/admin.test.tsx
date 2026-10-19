@@ -363,7 +363,7 @@ describe("the admin API client", () => {
     await waitFor(() => expect(result.current.health.data).toEqual(HEALTH));
 
     await act(async () => {
-      await result.current.mutations.deleteKey.mutateAsync(1);
+      await result.current.mutations.deleteKey.mutateAsync({ keyId: 1 });
     });
 
     const deleteCall = fetchMock.mock.calls.find((call) =>
