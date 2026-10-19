@@ -8,6 +8,11 @@ import { WORKER_VERSION } from "./version.js";
 import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleAdmin } from "./endpoints/admin.js";
+import {
+  serveClientAsset,
+  wantsSpa,
+  isClientAssetPath,
+} from "./endpoints/spa.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { serveFrontend } from "./endpoints/frontend.js";
 import { getProviderPools, getExposureOverlay } from "./services/pool-cache.js";
@@ -20,6 +25,26 @@ import {
   buildProtectedResourceMetadata,
 } from "./middleware/auth.js";
 
+/**
+ * The 404 the Worker answers for a path it does not own (OpenAI error
+ * envelope: the router serves /v1/*).
+ */
+function notFound(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        message: "Not found",
+        type: "invalid_request_error",
+        code: null,
+      },
+    }),
+    {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -31,6 +56,20 @@ export default {
     }
 
     try {
+      // Route: the React client's build output. The bundle, the
+      // stylesheet and the icon fonts are public — every browser
+      // downloads them — so they are served before the auth gate, which
+      // governs the API routes. The prefix check keeps the asset lookup
+      // off the inference hot path.
+      if (isClientAssetPath(path)) {
+        const clientAsset = await serveClientAsset(request, env);
+        if (clientAsset) return clientAsset;
+        // The client has no such file. Answering 404 here rather than
+        // falling through keeps a missing bundle from reading as a
+        // credential problem, which the auth gate below would say.
+        return notFound();
+      }
+
       // Check authentication for protected routes
       if (requiresAuth(path, request.method)) {
         const authResult = authenticateRequest(request, env);
@@ -55,6 +94,16 @@ export default {
 
       // Route: Frontend
       if (path === "/" || path === "/index.html" || path === "/admin") {
+        // The React client is opted into with ?spa=1 while it lives
+        // beside the legacy single-file frontend. The cutover makes the
+        // client the default and drops the flag.
+        if (wantsSpa(url) && env.ASSETS) {
+          const clientDocument = await serveClientAsset(
+            new Request(url.origin + "/", { method: "GET" }),
+            env
+          );
+          if (clientDocument) return clientDocument;
+        }
         // Credential readiness is part of the page, not a client probe:
         // the admin health route is gated, so an unauthenticated page
         // cannot tell "no credentials" from "403".
@@ -215,19 +264,7 @@ export default {
       }
 
       // 404 for unknown routes (OpenAI error envelope: router serves /v1/*)
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: "Not found",
-            type: "invalid_request_error",
-            code: null,
-          },
-        }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return notFound();
     } catch (error) {
       console.error("Worker error:", error);
       return new Response(

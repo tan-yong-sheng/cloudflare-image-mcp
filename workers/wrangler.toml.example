@@ -30,3 +30,17 @@ database_id = "local"
 
 [vars]
 IMAGE_EXPIRY_HOURS = "24"
+
+# The React client (client/) is built by Vite and served as Workers Static
+# Assets. Build it before starting wrangler:
+#
+#     npm --prefix ../client ci && npm --prefix ../client run build
+#
+# The Worker owns every route it serves and reaches the client's files
+# through the ASSETS binding, so an unknown path still gets the Worker's
+# own error envelope rather than the asset worker's.
+[assets]
+directory = "../client/dist"
+binding = "ASSETS"
+not_found_handling = "none"
+run_worker_first = true
