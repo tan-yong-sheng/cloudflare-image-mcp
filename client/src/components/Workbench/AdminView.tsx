@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { AdminApiError, useAdminMutations, useHealth } from "../../api/admin";
 import type { AdminKey } from "../../api/types";
@@ -23,7 +22,6 @@ export function AdminView() {
   const { adminKey, unlock, lock } = useAdminKey();
   const health = useHealth(session);
   const mutations = useAdminMutations(session);
-  const queryClient = useQueryClient();
 
   const [selected, setSelected] = useState("");
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -96,21 +94,24 @@ export function AdminView() {
   }, []);
 
   const handleLock = () => {
+    // The provider owns the teardown: it drops the key and the cached
+    // credential payload together.
     lock();
     setGateError(null);
     setPanelError(null);
     setSheet(null);
     setSelected("");
-    // The cached payload names the configured credentials, so a locked
-    // panel does not keep it around.
-    queryClient.removeQueries({ queryKey: ["admin", "health"] });
   };
 
   const handleSave = async (values: SheetValues) => {
+    // The drawer the request was sent from. The operator may dismiss it
+    // and open another one while the request is in flight, so a late
+    // answer must not close or annotate the drawer that replaced it.
+    const submitted = sheet;
     try {
-      if (sheet?.mode === "edit" && sheet.key) {
+      if (submitted?.mode === "edit" && submitted.key) {
         await mutations.updateKey.mutateAsync({
-          keyId: sheet.key.id,
+          keyId: submitted.key.id,
           accountId: values.accountId,
           weight: values.weight,
           enabled: values.enabled,
@@ -128,9 +129,11 @@ export function AdminView() {
         });
       }
       setPanelError(null);
-      setSheet(null);
+      if (sheetRef.current === submitted) setSheet(null);
     } catch (cause) {
-      setSheetError(cause instanceof Error ? cause.message : String(cause));
+      if (sheetRef.current === submitted) {
+        setSheetError(cause instanceof Error ? cause.message : String(cause));
+      }
     }
   };
 
