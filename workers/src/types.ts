@@ -34,6 +34,11 @@ export interface ModelConfig {
     mask?: "supported" | "required";
   };
   maxInputImages?: number; // Max input images for multi-reference (e.g. FLUX 2 supports up to 4)
+  // How a transport that takes a single `size` string interprets the requested
+  // width/height: "tier" (default) sends a resolution tier plus an aspect
+  // ratio, "exact" sends the requested WxH and no ratio. Only transports that
+  // take a size string read it; Cloudflare models take width/height directly.
+  sizeStrategy?: "tier" | "exact";
   exposure?: {
     enabled?: boolean; // default true; false hides the model everywhere
     alias?: string; // short id resolving to this model

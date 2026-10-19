@@ -1,6 +1,6 @@
 # agnes-image-2.5-flash
 
-**Model ID**: @agnes/agnes-image-2.5-flash
+**Model ID**: agnes-image-2.5-flash
 
 **Mode**: Text-to-Image • Image-to-Image
 
@@ -38,7 +38,7 @@ curl -sS -X POST "http://localhost:8787/v1/images/generations" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-api-key>" \
   -d '{
-    "model": "@agnes/agnes-image-2.5-flash",
+    "model": "agnes-image-2.5-flash",
     "prompt": "a lighthouse at dusk, long exposure",
     "size": "2048x2048",
     "n": 1
@@ -52,7 +52,7 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-api-key>" \
   -d '{
-    "model": "@agnes/agnes-image-2.5-flash",
+    "model": "agnes-image-2.5-flash",
     "prompt": "make it a watercolor painting",
     "image": "https://example.com/input.png",
     "size": "1312x736"
@@ -63,7 +63,7 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 
 ```json
 {
-  "model_id": "@agnes/agnes-image-2.5-flash",
+  "model_id": "agnes-image-2.5-flash",
   "prompt": "a lighthouse at dusk, long exposure",
   "size": "2048x2048"
 }
