@@ -145,24 +145,31 @@ describe("buildAgnesRequestBody", () => {
 });
 
 describe("publicImageUrl", () => {
-  test("accepts a public https image URL", () => {
-    expect(publicImageUrl("https://cdn.example/out.png")).toBe(
-      "https://cdn.example/out.png"
+  const HOST = "api.agnes.example";
+
+  test("accepts a public https image URL on the provider host", () => {
+    expect(publicImageUrl(`https://${HOST}/out.png`, HOST)).toBe(
+      `https://${HOST}/out.png`
     );
   });
 
-  test("refuses schemes and hosts a response must not reach", () => {
+  test("refuses schemes, hosts, and hosts this transport does not fetch", () => {
     for (const target of [
-      "http://cdn.example/out.png",
+      `http://${HOST}/out.png`,
       "data:image/png;base64,AAAA",
       "file:///etc/passwd",
       "https://127.0.0.1/out.png",
       "https://[::1]/out.png",
       "https://localhost/out.png",
       "https://images.local/out.png",
+      // Public names that resolve to a private address: a Worker cannot
+      // resolve DNS, so the host pin - not this check - is what refuses them.
+      "https://127.0.0.1.nip.io/out.png",
+      "https://169.254.169.254.nip.io/out.png",
+      "https://cdn.example/out.png",
       "not a url",
     ]) {
-      expect(() => publicImageUrl(target)).toThrow(OpenAITransportError);
+      expect(() => publicImageUrl(target, HOST)).toThrow(OpenAITransportError);
     }
   });
 });
@@ -211,7 +218,9 @@ describe("OpenAITransport.run", () => {
       const href = String(input);
       if (href.endsWith("/v1/images/generations")) {
         return Response.json({
-          data: [{ url: "https://cdn.example/out.png" }],
+          data: [
+            { url: `https://${BASE_URL.replace("https://", "")}/out.png` },
+          ],
         });
       }
       return new Response(bytes.buffer as ArrayBuffer, {
@@ -232,6 +241,73 @@ describe("OpenAITransport.run", () => {
     expect(result.image).toBeInstanceOf(Uint8Array);
     expect([...result.image]).toEqual([1, 2, 3]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Redirects are not followed: the image fetch must say so explicitly.
+    const [, imageInit] = fetchMock.mock.calls[1] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(imageInit.redirect).toBe("manual");
+  });
+
+  test("refuses a public name that resolves to a private address (DNS rebinding)", async () => {
+    // `https://` and not an IP literal, so only the host pin refuses it: a
+    // Worker cannot resolve the name to see that it points at 127.0.0.1.
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const href = String(input);
+      if (href.endsWith("/v1/images/generations")) {
+        return Response.json({
+          data: [{ url: "https://127.0.0.1.nip.io/latest/meta-data" }],
+        });
+      }
+      throw new Error(`unexpected fetch to ${href}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool: oneKeyPool("k"),
+    });
+
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).rejects.toThrow("does not fetch");
+    // Only the API call went out: the internal target was never fetched.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not follow a redirect off the provider host", async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const href = String(input);
+      if (href.endsWith("/v1/images/generations")) {
+        return Response.json({
+          data: [
+            { url: `https://${BASE_URL.replace("https://", "")}/out.png` },
+          ],
+        });
+      }
+      // Only a manual-mode fetch may see the raw 3xx; a followed redirect
+      // would have produced the 200 below.
+      if (init?.redirect === "manual") {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "https://127.0.0.1.nip.io/steal" },
+        });
+      }
+      return new Response(bytes.buffer as ArrayBuffer, { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool: oneKeyPool("k"),
+    });
+
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).rejects.toThrow("image download failed (302)");
+    // The API call and the refused download only; the redirect target is
+    // never requested.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1][0])).toBe(`${BASE_URL}/out.png`);
   });
 
   test("refuses to download from a target a response must not reach", async () => {
@@ -256,7 +332,6 @@ describe("OpenAITransport.run", () => {
     // Only the API call went out: the internal target was never fetched.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
-
   test("pool: a retryable failure parks the key and tries the next", async () => {
     const pool = twoKeyPool();
     const reportSpy = vi.spyOn(pool, "reportFailure");

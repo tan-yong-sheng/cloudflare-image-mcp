@@ -89,10 +89,15 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 
 - `image`
 
-  The generated image encoded as a Base64 string (`b64_json`). If the
-  provider returns a public URL instead, the service downloads it and returns
-  the bytes, so the seam output is the same either way. A URL that is not a
-  public `https` location is refused rather than fetched.
+  The generated image encoded as a Base64 string (`b64_json`). The request
+  always asks for base64; if the provider returns an image URL instead, the
+  service downloads it and returns the bytes, so the seam output is the same
+  either way. Only an `https` URL on the provider's own host (the configured
+  API host) is fetched, and redirects are not followed: a Worker resolves DNS
+  itself, so a public-looking name such as `127.0.0.1.nip.io` cannot be told
+  apart from a real one, and pinning the host is what keeps a compromised
+  response from reaching an internal address. Any other URL is refused rather
+  than fetched.
 
 ## Size Reference
 

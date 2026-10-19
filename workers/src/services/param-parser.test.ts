@@ -144,6 +144,15 @@ describe("ParamParser.parse with string input", () => {
     expect(result.height).toBe(2000);
   });
 
+  test("a size string clamps to the model's width/height bounds", () => {
+    // Models that declare only `size` (Agnes) forward it verbatim and map it
+    // to a tier upstream, so an out-of-range WxH must be clamped here or it
+    // picks a ratio outside the model's limits.
+    const sizeOnly = sizeOnlyConfig();
+    const result = ParamParser.parse("cat --size=999999x100", {}, sizeOnly);
+    expect(result.size).toBe("2048x512");
+  });
+
   test("width outside hard parse bounds throws before clamping", () => {
     expect(() => ParamParser.parse("cat --width=100", {}, fluxConfig)).toThrow(
       "width must be between 256 and 2048"
@@ -185,6 +194,17 @@ describe("ParamParser.parse with object input", () => {
     expect(result.n).toBe(2);
     expect(result.width).toBe(1024);
     expect(result.height).toBe(1024);
+  });
+
+  test("an OpenAI size field clamps through the same limits", () => {
+    const result = ParamParser.parse(
+      { prompt: "cat", size: "999999x100" },
+      {},
+      sizeOnlyConfig()
+    );
+    expect(result.size).toBe("2048x512");
+    expect(result.width).toBe(2048);
+    expect(result.height).toBe(512);
   });
 
   test("n out of range throws", () => {
