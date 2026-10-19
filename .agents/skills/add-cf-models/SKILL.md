@@ -44,8 +44,11 @@ workers/
 │   │   ├── models.json          # Source of truth - JSON schema
 │   │   ├── models.generated.ts  # Generated from models.json - never edited
 │   │   └── models.ts            # Registry access (lookup, exposure, listing)
-│   └── endpoints/
-│       └── frontend.ts          # HTML dropdown options
+│   └── routes.ts                # API paths the client and the Worker share
+client/
+└── src/
+    └── api/
+        └── models.ts            # The dropdown reads the registry from here
 docs/
 └── models/
     └── generation/

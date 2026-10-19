@@ -172,7 +172,7 @@ For existing deployments using environment variables:
 
 - `src/services/pool-loader.ts` - Read D1 rows only, no environment fallback
 - `src/services/pool-loader.test.ts` - Cover the database-only loader
-- `workers/src/endpoints/frontend.ts` - Warning logic already correct (checks DB)
+- `workers/src/endpoints/frontend.ts` - Warning logic already correct (checks DB) (since replaced: the frontend is now the React client in `client/`)
 - `workers/wrangler.toml` - Remove credential env var references from examples
 
 ### Risk Mitigation

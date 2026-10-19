@@ -6,14 +6,10 @@
 // rest to the asset binding, so the hashed bundle files are served
 // without the Worker knowing the client's output layout.
 //
-// While the legacy single-file frontend and the React client live side by
-// side, the React client is opted into with ?spa=1. The cutover makes the
-// client the default and drops both the flag and the legacy template.
+// The client is the only frontend: the legacy single-file template and
+// the ?spa=1 opt-in are gone.
 
 import type { Env } from "../types.js";
-
-/** The query parameter that opts a request into the React client. */
-export const SPA_QUERY_FLAG = "spa";
 
 /**
  * The URL prefix the client's build output is served under.
@@ -32,18 +28,6 @@ export const CLIENT_ASSET_PREFIX = "/assets/";
 /** Whether a path addresses the client's build output. */
 export function isClientAssetPath(path: string): boolean {
   return path.startsWith(CLIENT_ASSET_PREFIX);
-}
-
-/**
- * Whether the request asked for the React client. The flag counts as set
- * unless it is explicitly switched off, so ?spa, ?spa=1 and ?spa=true all
- * opt in while ?spa=0 and ?spa=false do not.
- */
-export function wantsSpa(url: URL): boolean {
-  const value = url.searchParams.get(SPA_QUERY_FLAG);
-  if (value === null) return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized !== "0" && normalized !== "false" && normalized !== "no";
 }
 
 /**

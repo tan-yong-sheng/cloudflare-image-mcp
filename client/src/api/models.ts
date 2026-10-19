@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { INTERNAL_MODELS_PATH } from "../../../workers/src/routes";
 import { apiFetch } from "./client";
 import type { ModelConfig } from "./types";
 
@@ -13,7 +14,7 @@ export const modelsQueryKey = ["models"] as const;
  * would refuse.
  */
 export async function fetchModels(): Promise<ModelConfig[]> {
-  const result = await apiFetch<ModelConfig[]>("/api/internal/models");
+  const result = await apiFetch<ModelConfig[]>(INTERNAL_MODELS_PATH);
   if (!result.ok) {
     throw new Error("HTTP " + result.status);
   }

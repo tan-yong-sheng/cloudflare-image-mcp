@@ -10,14 +10,15 @@ OpenAI-compatible image generation API + Streamable HTTP MCP server powered by C
 - **MCP Protocol Support**: HTTP transport with SSE (streamable)
 - **10 Image Generation Models**: FLUX, SDXL, Stable Diffusion, and more
 - **Multiple Tasks**: Text-to-image, image-to-image (masked edits supported)
-- **Web Frontend**: Interactive UI for image generation
+- **Web Frontend**: React SPA for image generation and provider credentials
 - **R2 Storage**: Auto-expiring image storage with CDN
 
 ## 📦 What's Included
 
 ```
 cloudflare-image-mcp/
-├── workers/           # Cloudflare Worker (API + MCP + Frontend)
+├── workers/           # Cloudflare Worker (API + MCP)
+├── client/            # React SPA (Vite + Tailwind + TanStack Query)
 └── e2e/               # Playwright E2E tests
 ```
 
@@ -177,7 +178,10 @@ And it can be used for OpenWebUI's image generation feature and image edits feat
 
 ### Web Frontend
 
-Open your worker URL in a browser for an interactive UI.
+Open your worker URL in a browser for an interactive UI. The frontend is
+a React single-page app deployed as Workers Static Assets: the Worker
+owns the API routes and hands the client's build output to the browser.
+`/admin` opens the provider credentials workbench.
 
 ![Frontend](/static/img/image-generation-frontend.png)
 

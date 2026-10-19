@@ -16,7 +16,9 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "//": "Test-only files are typechecked separately by tsconfig.test.json, which adds Node types for the tests that read the repository's files and hash the brand asset. Split rather than widened: src/ keeps browser-only globals, so a Node API cannot slip into the shipped client unnoticed.",
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
