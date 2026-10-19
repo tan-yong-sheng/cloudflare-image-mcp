@@ -43,6 +43,33 @@ describe("router public paths", () => {
     expect(html).toContain("<!DOCTYPE html>");
   });
 
+  test("the model picker is told which providers can actually serve", async () => {
+    const response = await worker.fetch(get("/api/internal/models"), env());
+
+    expect(response.status).toBe(200);
+    const models = (await response.json()) as Array<{
+      provider: string;
+      available: boolean;
+    }>;
+    expect(models.length).toBeGreaterThan(0);
+    // This env has no D1 binding, so no provider row is servable and every
+    // entry says so. Availability is per model, from the pool readiness
+    // map — not a per-provider list the client has to join itself.
+    expect(models.every((model) => model.available === false)).toBe(true);
+  });
+
+  test("an unservable pool leaves the picker blank, not disabled-with-models", async () => {
+    const html = await (await worker.fetch(get("/"), env())).text();
+
+    // Options exist only for models the request path would accept...
+    expect(html).toContain("m.available === true");
+    // ...and the empty state is a genuinely empty <select> (no placeholder
+    // masquerading as a choice) plus the shared no-keys title.
+    expect(html).toContain("modelSelect.innerHTML = ''");
+    expect(html).not.toContain('value="">No models');
+    expect(html).toContain("selectableModels === 0");
+  });
+
   test("login modal validates the key against an authenticated route", async () => {
     const response = await worker.fetch(get("/"), env());
     const html = await response.text();
@@ -102,7 +129,9 @@ describe("router public paths", () => {
     expect(html).toContain("applyCredentialWarning");
     // The model picker greys out with the same flag, so an unconfigured
     // pool never offers a model the user then cannot generate with.
-    expect(html).toContain("modelSelect.disabled = !credentialsConfigured;");
+    expect(html).toContain(
+      "modelSelect.disabled = !credentialsConfigured || selectableModels === 0;"
+    );
     expect(html).not.toContain("fetch(API_BASE + '/admin/health'");
   });
 

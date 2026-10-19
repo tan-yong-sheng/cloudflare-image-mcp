@@ -165,9 +165,21 @@ export default {
 
       // Route: API endpoints
       if (path === "/api/internal/models") {
+        // Availability rides along with the descriptors, and it reads the
+        // same predicate the request path does: a model is offered only
+        // when its transport resolves a pool. Resolving by transport, not
+        // by `provider`, is what keeps this in step with routing —
+        // `provider` names the model's author, and several authors share
+        // one set of credentials. The picker is public, so this reveals
+        // which transports are configured, not which models exist: the
+        // page already reports that much in its no-keys warning (ADR-001).
+        const pools = await getProviderPools(env);
         const models = listModels(
           overlayRegistry(MODEL_CONFIGS, await getExposureOverlay(env))
-        );
+        ).map((model) => ({
+          ...model,
+          available: pools.forTransport(model.inferenceProvider) !== undefined,
+        }));
         return new Response(JSON.stringify(models), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
