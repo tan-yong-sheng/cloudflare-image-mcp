@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { CLIENT_ASSET_PREFIX } from "./endpoints/spa.js";
 
 const WORKERS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_DIR = join(WORKERS_DIR, "..");
@@ -126,6 +127,22 @@ describe("local dev templates", () => {
       not_found_handling: "none",
       run_worker_first: "true",
     });
+  });
+
+  test("the client build produces only what the Worker serves publicly", () => {
+    // The Worker serves the client's bundle, stylesheet and fonts from
+    // /assets/ before the auth gate, and everything else the client
+    // asks for is the document. The build has to agree: a bundle
+    // directory with another name leaves every bundle request 404ing,
+    // and a file outside /assets/ answers 401, which reads as a
+    // credential problem. Nothing else would say so.
+    const viteConfig = read("client/vite.config.ts");
+    const assetsDir = /assetsDir:\s*"([^"]+)"/.exec(viteConfig)?.[1] ?? "";
+    expect(assetsDir).toBe(CLIENT_ASSET_PREFIX.replace(/^\/+|\/+$/g, ""));
+    // Vite copies a public directory to the root of the build output.
+    // The build must not have one, or it can produce a file the Worker
+    // would not serve.
+    expect(/publicDir:\s*false/.test(viteConfig)).toBe(true);
   });
 
   test("the local secrets template names only variables the Worker reads", () => {

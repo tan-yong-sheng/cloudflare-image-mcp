@@ -36,6 +36,11 @@ export function AdminView() {
   // The drawer whose own save is in flight. Another drawer opened while
   // it waits is not busy: only the request it sent is outstanding.
   const [savingSheet, setSavingSheet] = useState<SheetState>(null);
+  // The drawer whose own request is in flight. The flag has to name
+  // that drawer, not just "a request": a dismissed drawer's late answer
+  // must not free the drawer that replaced it, or the operator could
+  // send the same save twice.
+  const savingSheetRef = useRef<SheetState>(null);
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -129,6 +134,7 @@ export function AdminView() {
     // answer must not close or annotate the drawer that replaced it.
     const submitted = sheet;
     setSavingSheet(submitted);
+    savingSheetRef.current = submitted;
     try {
       if (submitted?.mode === "edit" && submitted.key) {
         await mutations.updateKey.mutateAsync({
@@ -156,7 +162,12 @@ export function AdminView() {
         setSheetError(cause instanceof Error ? cause.message : String(cause));
       }
     } finally {
-      setSavingSheet(null);
+      // Only the drawer that sent the request may clear the busy state.
+      // Another drawer may have taken over in the meantime.
+      if (savingSheetRef.current === submitted) {
+        savingSheetRef.current = null;
+        setSavingSheet(null);
+      }
     }
   };
 

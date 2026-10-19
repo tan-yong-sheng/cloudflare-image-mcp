@@ -20,8 +20,10 @@ import type { Env } from "../types.js";
  * Worker checks it before the auth gate: the build output is public —
  * every browser downloads it — while the gate governs the API routes.
  *
- * The client's vite.config.ts must keep `build.assetsDir` in step; the
- * dev-config test fails if it drifts.
+ * The client's vite.config.ts must keep `build.assetsDir` in step and
+ * must not publish a public directory: the dev-config test fails if
+ * either drifts, because a bundle in another directory 404s and a file
+ * outside this prefix answers 401.
  */
 export const CLIENT_ASSET_PREFIX = "/assets/";
 

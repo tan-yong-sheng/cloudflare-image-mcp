@@ -532,6 +532,87 @@ describe("the provider credentials workbench", () => {
     releaseSave!();
   });
 
+  it("does not free a replacement drawer's button when the first request answers", async () => {
+    // The first drawer's answer arrives after the second drawer sent its
+    // own request. It must not clear the second drawer's busy state, or
+    // the operator could send the same save twice.
+    let releaseAdd: (() => void) | null = null;
+    let releaseEdit: (() => void) | null = null;
+    const addDeferred = new Promise<Response>((resolve) => {
+      releaseAdd = () => resolve(jsonResponse(true, {}));
+    });
+    const editDeferred = new Promise<Response>((resolve) => {
+      releaseEdit = () => resolve(jsonResponse(true, {}));
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        const method = init?.method ?? "GET";
+        if (path === "/api/admin/keys" && method === "POST") return addDeferred;
+        if (path === "/api/admin/keys/1" && method === "PATCH") {
+          return editDeferred;
+        }
+        if (path === "/api/admin/health") return jsonResponse(true, HEALTH);
+        if (path === "/api/internal/models") return jsonResponse(true, []);
+        return jsonResponse(true, {});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    // The first drawer sends an add and waits for the answer.
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    // Dismiss it and send an edit from the drawer that replaces it.
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).toBeNull()
+    );
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).not.toBeNull()
+    );
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /^Save$/i }) as HTMLButtonElement)
+          .disabled
+      ).toBe(true)
+    );
+
+    // The first request answers now. The second drawer is still waiting
+    // for its own answer, so its button has to stay disabled. The
+    // answer is applied when the key change refreshes the health
+    // payload, so the assertion waits for that and not for the clock.
+    const healthCalls = () =>
+      fetchMock.mock.calls.filter(
+        (call) => String(call[0]) === "/api/admin/health"
+      ).length;
+    const before = healthCalls();
+    releaseAdd!();
+    await waitFor(() => expect(healthCalls()).toBeGreaterThan(before));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /^Save$/i }) as HTMLButtonElement)
+          .disabled
+      ).toBe(true)
+    );
+
+    releaseEdit!();
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).toBeNull()
+    );
+  });
+
   it("locks the panel and says why when the credential payload cannot be read", async () => {
     // An error the operator cannot see is not an error they can act on,
     // and a panel that cannot read the credentials must not stay open
