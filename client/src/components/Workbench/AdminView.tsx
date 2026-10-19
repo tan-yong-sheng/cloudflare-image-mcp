@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { AdminApiError, useAdminMutations, useHealth } from "../../api/admin";
+import {
+  AdminApiError,
+  useAdminMutations,
+  useHealth,
+  usePendingAdminKeyIds,
+} from "../../api/admin";
 import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
@@ -137,17 +142,10 @@ export function AdminView() {
     }
   };
 
-  const pendingKeyIds = [
-    ...(mutations.toggleKey.isPending && mutations.toggleKey.variables
-      ? [mutations.toggleKey.variables.keyId]
-      : []),
-    ...(mutations.deleteKey.isPending && mutations.deleteKey.variables
-      ? [mutations.deleteKey.variables]
-      : []),
-    ...(mutations.updateKey.isPending && mutations.updateKey.variables
-      ? [mutations.updateKey.variables.keyId]
-      : []),
-  ];
+  // Every key with a request in flight, not just the last one the
+  // operator touched: two rows can be acted on at once, and each row
+  // must stay busy until its own request is answered.
+  const pendingKeyIds = usePendingAdminKeyIds();
 
   return (
     <main
@@ -257,13 +255,16 @@ export function AdminView() {
               }}
               onDelete={(key) => {
                 setPanelError(null);
-                mutations.deleteKey.mutate(key.id, {
-                  onSuccess: () => setNotice("Deleted key #" + key.id + "."),
-                  onError: (cause) =>
-                    setPanelError(
-                      cause instanceof Error ? cause.message : String(cause)
-                    ),
-                });
+                mutations.deleteKey.mutate(
+                  { keyId: key.id },
+                  {
+                    onSuccess: () => setNotice("Deleted key #" + key.id + "."),
+                    onError: (cause) =>
+                      setPanelError(
+                        cause instanceof Error ? cause.message : String(cause)
+                      ),
+                  }
+                );
               }}
               onToggle={(key, enabled) => {
                 setPanelError(null);
