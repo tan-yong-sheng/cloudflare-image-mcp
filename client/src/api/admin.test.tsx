@@ -233,6 +233,70 @@ describe("the admin API client", () => {
     });
   });
 
+  it("refetches the payload of the session that is live when the request finishes", async () => {
+    // A lock and an unlock during an in-flight mutation start a new
+    // session. The answer has to reach that session's payload, not the
+    // one the request was sent under.
+    let releaseToggle: (() => void) | null = null;
+    let healthCalls = 0;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/admin/health") {
+          healthCalls += 1;
+          return jsonResponse(true, HEALTH);
+        }
+        await new Promise<void>((resolve) => {
+          releaseToggle = resolve;
+        });
+        return jsonResponse(true, HEALTH);
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = {
+      adminKey: "management-key",
+      bearerToken: "bearer-key",
+      sessionId: 1,
+    };
+    const second = { ...first, sessionId: 2 };
+
+    const { result, rerender } = renderHook(
+      ({ session }: { session: typeof first }) => ({
+        health: useHealth(session),
+        mutations: useAdminMutations(session),
+      }),
+      { initialProps: { session: first }, wrapper: wrapper(client) }
+    );
+
+    await waitFor(() => expect(result.current.health.data).toEqual(HEALTH));
+    expect(healthCalls).toBe(1);
+
+    // The toggle goes out under the first session.
+    let pending: Promise<unknown> = Promise.resolve();
+    act(() => {
+      pending = result.current.mutations.toggleKey.mutateAsync({
+        keyId: 1,
+        enabled: false,
+      });
+      void pending.catch(() => undefined);
+    });
+
+    // The operator locks and unlocks: a new session, a new payload.
+    rerender({ session: second });
+    await waitFor(() => expect(healthCalls).toBe(2));
+
+    // The answer arrives.
+    await act(async () => {
+      releaseToggle?.();
+      await pending;
+    });
+
+    // The live session's payload is refetched, so the row on screen
+    // agrees with the server.
+    await waitFor(() => expect(healthCalls).toBe(3));
+  });
+
   it("adds a key and refetches the health payload and the registry", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, _init?: RequestInit) => {

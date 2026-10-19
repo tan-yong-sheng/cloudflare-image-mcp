@@ -239,6 +239,43 @@ describe("the provider credentials workbench", () => {
     });
   });
 
+  it("shows the server's answer when a key is refused as a duplicate", async () => {
+    // A duplicate label is a conflict. The operator has to be told
+    // which label the server refused, and the drawer has to stay open
+    // so it can be corrected.
+    const calls = stubApi((route) => {
+      if (route.path === "/api/admin/keys" && route.method === "POST") {
+        return jsonResponse(
+          false,
+          { error: { message: "label 'key-1' already exists" } },
+          409
+        );
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(document.getElementById("adminSheetError")?.textContent).toContain(
+        "label 'key-1' already exists"
+      )
+    );
+    expect(document.getElementById("adminSheetError")?.className).not.toMatch(
+      /hidden/
+    );
+    expect(screen.getByRole("button", { name: "Add key" })).toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/admin/keys")).toBe(true);
+  });
+
   it("keeps the stored token version when the token is left blank", async () => {
     const calls = stubApi();
     const user = userEvent.setup();
