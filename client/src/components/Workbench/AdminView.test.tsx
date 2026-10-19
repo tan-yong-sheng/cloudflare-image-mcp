@@ -448,6 +448,53 @@ describe("the provider credentials workbench", () => {
     );
   });
 
+  it("leaves a replacement drawer free to save while the first one waits", async () => {
+    // The drawer that replaced the submitted one is a drawer of its own:
+    // the request the other one sent does not make it busy.
+    let releaseSave: (() => void) | null = null;
+    const deferred = new Promise<Response>((resolve) => {
+      releaseSave = () => resolve(jsonResponse(true, {}));
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (path === "/api/admin/keys" && (init?.method ?? "GET") === "POST") {
+          return deferred;
+        }
+        if (path === "/api/admin/health") return jsonResponse(true, HEALTH);
+        if (path === "/api/internal/models") return jsonResponse(true, []);
+        return jsonResponse(true, {});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    // Dismiss the drawer and open another one while the save waits.
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).toBeNull()
+    );
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).not.toBeNull()
+    );
+
+    const save = screen.getByRole("button", { name: /^Save$/i });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+
+    releaseSave!();
+  });
+
   it("closes the panel and drops the cached payload when the operator locks", async () => {
     stubApi();
     const user = userEvent.setup();
