@@ -7,6 +7,7 @@ import {
 } from "../../api/admin";
 import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
+import { useAuth } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
@@ -25,6 +26,7 @@ type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
 export function AdminView() {
   const session = useAdminSession();
   const { adminKey, unlock, lock } = useAdminKey();
+  const { logout } = useAuth();
   const health = useHealth(session);
   const mutations = useAdminMutations(session);
 
@@ -64,10 +66,20 @@ export function AdminView() {
     if (handledError.current === health.error) return;
     handledError.current = health.error;
     const failure = health.error;
+    if (failure instanceof AdminApiError && failure.status === 401) {
+      // The bearer key is no longer accepted, so the whole session is
+      // over, not just the admin half of it.
+      logout();
+      setGateError("Session expired. Please sign in again.");
+      return;
+    }
+    // The credential payload could not be read, so the admin session is
+    // over: the management key goes with it, and the gate says why. An
+    // error the operator cannot see is not an error they can act on.
+    lock();
     if (failure instanceof AdminApiError && failure.status === 403) {
       // A disabled admin gate is not the operator's key being wrong, so
       // the server's own reason is shown when it says which it was.
-      lock();
       setGateError(
         failure.code === "admin_disabled"
           ? failure.message
@@ -76,7 +88,7 @@ export function AdminView() {
       return;
     }
     setGateError(failure instanceof Error ? failure.message : String(failure));
-  }, [health.isError, health.error, lock]);
+  }, [health.isError, health.error, lock, logout]);
 
   // A notice fades on its own, the way the legacy page's did.
   useEffect(() => {
