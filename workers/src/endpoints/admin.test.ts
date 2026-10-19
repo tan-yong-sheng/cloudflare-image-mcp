@@ -355,7 +355,13 @@ describe("production D1 adapter (R2)", () => {
           all: async () => {
             if (sql.includes("FROM providers")) {
               return {
-                results: [{ id: "cloudflare", display_name: "Cloudflare" }],
+                results: [
+                  {
+                    id: "cloudflare",
+                    display_name: "Cloudflare",
+                    transport: "cloudflare-rest",
+                  },
+                ],
               };
             }
             return { results: [] };
@@ -397,7 +403,11 @@ describe("production D1 adapter (R2)", () => {
       configVersion: number | null;
     };
     expect(body.providers).toEqual([
-      { id: "cloudflare", displayName: "Cloudflare" },
+      {
+        id: "cloudflare",
+        displayName: "Cloudflare",
+        transport: "cloudflare-rest",
+      },
     ]);
     expect(body.configVersion).toBe(3);
   });
@@ -795,7 +805,13 @@ describe("admin health readiness (ADR-001)", () => {
             }
             if (sql.includes("FROM providers")) {
               return {
-                results: [{ id: "cloudflare", display_name: "Cloudflare" }],
+                results: [
+                  {
+                    id: "cloudflare",
+                    display_name: "Cloudflare",
+                    transport: "cloudflare-rest",
+                  },
+                ],
               };
             }
             return { results: [] };
