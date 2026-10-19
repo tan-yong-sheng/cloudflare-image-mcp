@@ -8,6 +8,26 @@ For project overview, tech stack, and layout see `README.md`.
 - `/mcp/smart` (explicit multi-model)
 - `/mcp/simple?model=@cf/...` (single-model; `model` is required)
 
+## Web client (React SPA)
+
+**Source of truth:** `client/`
+
+- The frontend is a React SPA (Vite + Tailwind + TanStack Query) built to
+  `client/dist` and deployed as Workers Static Assets. The Worker owns
+  the API routes and serves the client's build output through the
+  `ASSETS` binding; `/` and `/admin` both serve the client document.
+- The client is a **separate package** with its own lockfile. Install and
+  build it before running the Worker locally:
+  `npm --prefix client ci && npm --prefix client run build`.
+- `client/src/index.css` holds the design tokens; `DESIGN.md` is their
+  source of truth. The client loads **no third-party origin** — Tailwind
+  and Font Awesome are bundled from packages.
+- The management key that gates `/api/admin/*` is **memory-only** in the
+  client: never `sessionStorage`, `localStorage` or a cookie.
+- Local gates: `npm --prefix client run check` and
+  `npm --prefix client test`. Conventions: read `CODING_STANDARDS.md`
+  when editing `client/src`.
+
 ## Configuration & deployment (source of truth)
 
 ### CI/CD deploy (GitHub Actions)
@@ -29,8 +49,7 @@ Optional Worker secrets:
 
 - `API_KEYS` (protects MCP + OpenAI endpoints + Frontend)
 - `TZ`
-
-Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contradiction).
+  Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contradiction).
 
 ### Model Configuration (Source of Truth)
 

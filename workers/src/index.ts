@@ -8,13 +8,8 @@ import { WORKER_VERSION } from "./version.js";
 import { corsHeaders, withCors } from "./utils/cors.js";
 import { OpenAIEndpoint } from "./endpoints/openai-endpoint.js";
 import { handleAdmin } from "./endpoints/admin.js";
-import {
-  serveClientAsset,
-  wantsSpa,
-  isClientAssetPath,
-} from "./endpoints/spa.js";
+import { serveClientAsset, isClientAssetPath } from "./endpoints/spa.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
-import { serveFrontend } from "./endpoints/frontend.js";
 import { getProviderPools, getExposureOverlay } from "./services/pool-cache.js";
 import { overlayRegistry } from "./config/exposure-overlay.js";
 import { listModels, MODEL_CONFIGS } from "./config/models.js";
@@ -40,6 +35,31 @@ function notFound(): Response {
     }),
     {
       status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }
+  );
+}
+
+/**
+ * The answer when the client build is missing.
+ *
+ * The Worker has no frontend of its own any more: the React client's
+ * build output is the whole UI. A deployment without that build cannot
+ * serve a page, and saying so plainly beats a 404 that reads like a
+ * missing route.
+ */
+function clientMissing(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        message:
+          "The client build is missing. Run `npm --prefix client ci && npm --prefix client run build` before deploying.",
+        type: "invalid_request_error",
+        code: "client_not_built",
+      },
+    }),
+    {
+      status: 503,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     }
   );
@@ -92,23 +112,17 @@ export default {
         );
       }
 
-      // Route: Frontend
+      // Route: the React client. The document is the client's own build
+      // output, served through the asset binding; the client routes
+      // between the generator and the workbench on the hash (and on the
+      // /admin path, which the legacy shell also served).
       if (path === "/" || path === "/index.html" || path === "/admin") {
-        // The React client is opted into with ?spa=1 while it lives
-        // beside the legacy single-file frontend. The cutover makes the
-        // client the default and drops the flag.
-        if (wantsSpa(url) && env.ASSETS) {
-          const clientDocument = await serveClientAsset(
-            new Request(url.origin + "/", { method: "GET" }),
-            env
-          );
-          if (clientDocument) return clientDocument;
-        }
-        // Credential readiness is part of the page, not a client probe:
-        // the admin health route is gated, so an unauthenticated page
-        // cannot tell "no credentials" from "403".
-        const pools = await getProviderPools(env);
-        return serveFrontend({ hasCredentials: pools.hasAnyServable() });
+        const clientDocument = await serveClientAsset(
+          new Request(url.origin + "/", { method: "GET" }),
+          env
+        );
+        if (clientDocument) return clientDocument;
+        return clientMissing();
       }
 
       // Route: Health check

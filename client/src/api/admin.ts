@@ -1,4 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ADMIN_HEALTH_PATH,
+  ADMIN_KEYS_PATH,
+} from "../../../workers/src/routes";
 import { apiFetch, type ApiResult } from "./client";
 import { modelsQueryKey } from "./models";
 import type { AdminHealth } from "./types";
@@ -65,7 +69,7 @@ export async function fetchHealth(
   session: AdminSession,
   signal?: AbortSignal
 ): Promise<AdminHealth> {
-  const result = await apiFetch<AdminHealth>("/api/admin/health", {
+  const result = await apiFetch<AdminHealth>(ADMIN_HEALTH_PATH, {
     adminKey: session.adminKey,
     authToken: session.bearerToken,
     signal,
@@ -124,7 +128,7 @@ export function useAdminMutations(session: AdminSession) {
 
   const addKey = useMutation({
     mutationFn: async (variables: AddKeyVariables) => {
-      const result = await apiFetch("/api/admin/keys", {
+      const result = await apiFetch(ADMIN_KEYS_PATH, {
         method: "POST",
         body: variables,
         adminKey: session.adminKey,
@@ -143,7 +147,7 @@ export function useAdminMutations(session: AdminSession) {
         enabled: variables.enabled,
       };
       if (variables.apiToken) body.apiToken = variables.apiToken;
-      const result = await apiFetch(`/api/admin/keys/${variables.keyId}`, {
+      const result = await apiFetch(`${ADMIN_KEYS_PATH}/${variables.keyId}`, {
         method: "PATCH",
         body,
         adminKey: session.adminKey,
@@ -168,7 +172,7 @@ export function useAdminMutations(session: AdminSession) {
 
   const toggleKey = useMutation({
     mutationFn: async (variables: ToggleKeyVariables) => {
-      const result = await apiFetch(`/api/admin/keys/${variables.keyId}`, {
+      const result = await apiFetch(`${ADMIN_KEYS_PATH}/${variables.keyId}`, {
         method: "PATCH",
         body: { enabled: variables.enabled },
         adminKey: session.adminKey,
