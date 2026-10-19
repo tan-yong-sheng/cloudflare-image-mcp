@@ -595,9 +595,10 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   // R3-Agnes (#75): the first non-Cloudflare provider, riding the same seam
   // as the Cloudflare models. inferenceProvider selects the registry entry
   // registered under "openai-compat", so the generator never learns that
-  // Agnes exists; the namespaced id keeps it distinct from the @cf/* ids.
-  "@agnes/agnes-image-2.5-flash": {
-    id: "@agnes/agnes-image-2.5-flash",
+  // Agnes exists; the id is the upstream model name, which is what the
+  // transport puts on the wire, so no second mapping can drift from it.
+  "agnes-image-2.5-flash": {
+    id: "agnes-image-2.5-flash",
     name: "Agnes Image 2.5 Flash",
     description:
       "Agnes AI text-to-image and image-composition model with 1K-4K output tiers and aspect-ratio control",
@@ -639,6 +640,94 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
         "3072x3072",
         "4096x4096",
       ],
+    },
+  },
+  // 2.1 publishes the same parameter schema and the same 1K-4K x 8-ratio
+  // matrix as 2.5 (agnes-ai.com/en/docs/agnes-image-21-flash), so it reuses
+  // the tier strategy unchanged; only the upstream model name differs.
+  "agnes-image-2.1-flash": {
+    id: "agnes-image-2.1-flash",
+    name: "Agnes Image 2.1 Flash",
+    description:
+      "Agnes AI text-to-image and image-composition model tuned for high-information-density visuals, with 1K-4K output tiers and aspect-ratio control",
+    provider: "agnes",
+    inferenceProvider: "openai-compat",
+    apiVersion: 1,
+    inputFormat: "json",
+    responseFormat: "base64",
+    supportedTasks: ["text-to-image", "image-to-image"],
+    maxInputImages: 4,
+    parameters: {
+      prompt: promptParam,
+      size: {
+        cfParam: "size",
+        type: "string",
+        default: "1024x1024",
+        description:
+          "Output size as WxH; mapped to the nearest 1K/2K/3K/4K tier and aspect ratio",
+      },
+    },
+    limits: {
+      maxPromptLength: 2048,
+      defaultSteps: 1,
+      maxSteps: 1,
+      minWidth: 512,
+      maxWidth: 4096,
+      minHeight: 512,
+      maxHeight: 4096,
+      supportedSizes: [
+        "1024x1024",
+        "864x1152",
+        "1152x864",
+        "1312x736",
+        "736x1312",
+        "832x1248",
+        "1248x832",
+        "1568x672",
+        "2048x2048",
+        "3072x3072",
+        "4096x4096",
+      ],
+    },
+  },
+  // 2.0 takes an exact WxH in `size` and publishes no `ratio`
+  // (agnes-ai.com/en/docs/agnes-image-20-flash), unlike its successors, so it
+  // sets sizeStrategy "exact" and the transport withholds ratio for it.
+  "agnes-image-2.0-flash": {
+    id: "agnes-image-2.0-flash",
+    name: "Agnes Image 2.0 Flash",
+    description:
+      "Agnes AI text-to-image, image-to-image, and multi-image composition model addressed by exact output size",
+    provider: "agnes",
+    inferenceProvider: "openai-compat",
+    apiVersion: 1,
+    inputFormat: "json",
+    responseFormat: "base64",
+    supportedTasks: ["text-to-image", "image-to-image"],
+    maxInputImages: 4,
+    sizeStrategy: "exact",
+    parameters: {
+      prompt: promptParam,
+      size: {
+        cfParam: "size",
+        type: "string",
+        default: "1024x1024",
+        description:
+          "Exact output size as WxH, sent verbatim; this model takes no aspect ratio",
+      },
+    },
+    limits: {
+      maxPromptLength: 2048,
+      defaultSteps: 1,
+      maxSteps: 1,
+      minWidth: 512,
+      maxWidth: 4096,
+      minHeight: 512,
+      maxHeight: 4096,
+      // Only these three are published; the docs describe the field as "such
+      // as 1024x768, 1024x1024, or 768x1024" without enumerating the set. The
+      // bounds above are mirrored from 2.5 because 2.0 publishes none.
+      supportedSizes: ["1024x768", "1024x1024", "768x1024"],
     },
   },
 };

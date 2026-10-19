@@ -32,11 +32,14 @@ test.describe("OpenAI Models API", () => {
       expect(model).toHaveProperty("owned_by");
     }
 
-    // Every model id is namespaced @{namespace}/{model-name}; Cloudflare ids
-    // carry an extra provider segment (@cf/{provider}/{model}). Check all of
-    // them, not just the first, so a bad id cannot hide behind list order.
+    // A model id is either namespaced @{namespace}/{model-name} (Cloudflare
+    // ids carry an extra provider segment: @cf/{provider}/{model}) or the
+    // upstream name bare (agnes-image-2.5-flash). Check all of them, not just
+    // the first, so a bad id cannot hide behind list order.
     for (const model of body.data) {
-      expect(model.id).toMatch(/^@[a-z0-9-]+\/[a-z0-9.-]+(?:\/[a-z0-9.-]+)?$/);
+      expect(model.id).toMatch(
+        /^(?:@[a-z0-9-]+\/)?[a-z0-9.-]+(?:\/[a-z0-9.-]+)?$/
+      );
     }
 
     // Log available models for debugging

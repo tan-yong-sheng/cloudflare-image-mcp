@@ -19,7 +19,7 @@ import {
 import { ProviderPool } from "./provider-pool.js";
 import { MODEL_CONFIGS } from "../config/models.js";
 
-const MODEL = MODEL_CONFIGS["@agnes/agnes-image-2.5-flash"];
+const MODEL = MODEL_CONFIGS["agnes-image-2.5-flash"];
 const BASE_URL = "https://api.agnes.example";
 
 /** Single-key pool, the shape the registry factory always passes. */
@@ -123,10 +123,24 @@ describe("buildAgnesRequestBody", () => {
     expect(body.ratio).toBe("16:9");
   });
 
-  test("the namespaced registry id becomes the upstream model name", () => {
+  test("the registry id is the upstream model name", () => {
     expect(buildAgnesRequestBody(MODEL, { prompt: "x" }).model).toBe(
       "agnes-image-2.5-flash"
     );
+  });
+
+  test("an exact-size model sends the requested WxH and no ratio", () => {
+    // 2.0 publishes `size` as an exact canvas and has no `ratio` parameter,
+    // so it must not receive a tier label ("1K") the way 2.5/2.1 do.
+    const exact = MODEL_CONFIGS["agnes-image-2.0-flash"];
+    const body = buildAgnesRequestBody(exact, {
+      prompt: "a cat",
+      size: "1024x768",
+    });
+    expect(body.model).toBe("agnes-image-2.0-flash");
+    expect(body.size).toBe("1024x768");
+    expect(body.ratio).toBeUndefined();
+    expect(body.return_base64).toBe(true);
   });
 
   test("URL and data-URI images pass through; raw base64 is wrapped", () => {

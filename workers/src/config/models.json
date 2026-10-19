@@ -753,8 +753,8 @@
         "supportedSizes": ["256x256", "512x512", "768x768", "1024x1024"]
       }
     },
-    "@agnes/agnes-image-2.5-flash": {
-      "id": "@agnes/agnes-image-2.5-flash",
+    "agnes-image-2.5-flash": {
+      "id": "agnes-image-2.5-flash",
       "name": "Agnes Image 2.5 Flash",
       "description": "Agnes AI text-to-image and image-composition model with 1K-4K output tiers and aspect-ratio control",
       "provider": "agnes",
@@ -800,6 +800,92 @@
           "4096x4096"
         ]
       }
+    },
+    "agnes-image-2.1-flash": {
+      "id": "agnes-image-2.1-flash",
+      "name": "Agnes Image 2.1 Flash",
+      "description": "Agnes AI text-to-image and image-composition model tuned for high-information-density visuals, with 1K-4K output tiers and aspect-ratio control",
+      "provider": "agnes",
+      "inferenceProvider": "openai-compat",
+      "apiVersion": 1,
+      "inputFormat": "json",
+      "responseFormat": "base64",
+      "supportedTasks": ["text-to-image", "image-to-image"],
+      "maxInputImages": 4,
+      "parameters": {
+        "prompt": {
+          "cfParam": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "Text description of the image"
+        },
+        "size": {
+          "cfParam": "size",
+          "type": "string",
+          "default": "1024x1024",
+          "description": "Output size as WxH; mapped to the nearest 1K/2K/3K/4K tier and aspect ratio"
+        }
+      },
+      "limits": {
+        "maxPromptLength": 2048,
+        "defaultSteps": 1,
+        "maxSteps": 1,
+        "minWidth": 512,
+        "maxWidth": 4096,
+        "minHeight": 512,
+        "maxHeight": 4096,
+        "supportedSizes": [
+          "1024x1024",
+          "864x1152",
+          "1152x864",
+          "1312x736",
+          "736x1312",
+          "832x1248",
+          "1248x832",
+          "1568x672",
+          "2048x2048",
+          "3072x3072",
+          "4096x4096"
+        ]
+      }
+    },
+    "agnes-image-2.0-flash": {
+      "$comment": "2.0 takes an exact WxH in size and publishes no ratio, unlike 2.5/2.1, so sizeStrategy is exact and the transport withholds ratio. Only the three sizes below are published; the docs give them as examples without enumerating the set, and 2.0 publishes no width/height bounds, so the bounds mirror 2.5's.",
+      "id": "agnes-image-2.0-flash",
+      "name": "Agnes Image 2.0 Flash",
+      "description": "Agnes AI text-to-image, image-to-image, and multi-image composition model addressed by exact output size",
+      "provider": "agnes",
+      "inferenceProvider": "openai-compat",
+      "apiVersion": 1,
+      "inputFormat": "json",
+      "responseFormat": "base64",
+      "supportedTasks": ["text-to-image", "image-to-image"],
+      "maxInputImages": 4,
+      "sizeStrategy": "exact",
+      "parameters": {
+        "prompt": {
+          "cfParam": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "Text description of the image"
+        },
+        "size": {
+          "cfParam": "size",
+          "type": "string",
+          "default": "1024x1024",
+          "description": "Exact output size as WxH, sent verbatim; this model takes no aspect ratio"
+        }
+      },
+      "limits": {
+        "maxPromptLength": 2048,
+        "defaultSteps": 1,
+        "maxSteps": 1,
+        "minWidth": 512,
+        "maxWidth": 4096,
+        "minHeight": 512,
+        "maxHeight": 4096,
+        "supportedSizes": ["1024x768", "1024x1024", "768x1024"]
+      }
     }
   },
   "modelAliases": {
@@ -813,6 +899,8 @@
     "@cf/leonardo/lucid-origin": "@cf/leonardo/lucid-origin",
     "@cf/leonardo/phoenix-1.0": "@cf/leonardo/phoenix-1.0",
     "@cf/runwayml/stable-diffusion-v1-5-inpainting": "@cf/runwayml/stable-diffusion-v1-5-inpainting",
-    "@agnes/agnes-image-2.5-flash": "@agnes/agnes-image-2.5-flash"
+    "agnes-image-2.5-flash": "agnes-image-2.5-flash",
+    "agnes-image-2.1-flash": "agnes-image-2.1-flash",
+    "agnes-image-2.0-flash": "agnes-image-2.0-flash"
   }
 }

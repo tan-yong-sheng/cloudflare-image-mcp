@@ -34,11 +34,29 @@ describe("model registry validity", () => {
     }
   });
 
-  test("the non-Cloudflare provider is namespaced apart (R3-Agnes)", () => {
-    const agnes = MODEL_CONFIGS["@agnes/agnes-image-2.5-flash"];
-    expect(agnes).toBeDefined();
-    expect(agnes.provider).toBe("agnes");
-    expect(agnes.inferenceProvider).toBe("openai-compat");
+  test("the second provider registers un-namespaced upstream ids (R3-Agnes)", () => {
+    // The id is the upstream model name, not a @provider/ mirror: the
+    // openai-compat transport sends it verbatim.
+    for (const id of [
+      "agnes-image-2.5-flash",
+      "agnes-image-2.1-flash",
+      "agnes-image-2.0-flash",
+    ]) {
+      const agnes = MODEL_CONFIGS[id];
+      expect(agnes).toBeDefined();
+      expect(agnes.id).toBe(id);
+      expect(agnes.provider).toBe("agnes");
+      expect(agnes.inferenceProvider).toBe("openai-compat");
+    }
+  });
+
+  test("only the model without a ratio parameter uses the exact size strategy", () => {
+    // 2.0 publishes an exact `size` and no `ratio` (agnes-ai.com/en/docs/
+    // agnes-image-20-flash); 2.5/2.1 take a tier plus a ratio, which is the
+    // transport's default, so a stray "exact" on them would send a raw WxH.
+    expect(MODEL_CONFIGS["agnes-image-2.0-flash"].sizeStrategy).toBe("exact");
+    expect(MODEL_CONFIGS["agnes-image-2.5-flash"].sizeStrategy).toBeUndefined();
+    expect(MODEL_CONFIGS["agnes-image-2.1-flash"].sizeStrategy).toBeUndefined();
   });
 
   test("every model declares prompt, tasks, and width/height limits", () => {
