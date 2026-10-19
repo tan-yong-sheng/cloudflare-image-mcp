@@ -234,7 +234,12 @@ export function GeneratorView() {
                     ? "loading"
                     : "ready"
               }
-              disabled={!credentialsConfigured}
+              disabled={!credentialsConfigured || selectable.length === 0}
+              unavailableReason={
+                !credentialsConfigured
+                  ? "No API keys configured"
+                  : "No model available for the configured keys"
+              }
               error={
                 models.isError
                   ? "Could not load models: " +
@@ -332,7 +337,14 @@ export function GeneratorView() {
             id="submitButton"
             type="button"
             className="btn btn-primary w-full py-3 flex items-center justify-center"
-            disabled={!credentialsConfigured || selectable.length === 0}
+            // A generation in flight keeps Submit disabled, so a second
+            // click cannot start a second request for the same prompt.
+            disabled={
+              generate.isPending ||
+              !credentialsConfigured ||
+              selectable.length === 0
+            }
+            title={credentialsConfigured ? undefined : "No API keys configured"}
             onClick={submit}
           >
             <i className="fa-solid fa-wand-magic-sparkles mr-2" />

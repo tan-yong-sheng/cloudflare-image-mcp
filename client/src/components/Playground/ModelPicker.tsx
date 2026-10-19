@@ -6,6 +6,8 @@ interface ModelPickerProps {
   /** "loading" while the registry is in flight, "error" when it failed. */
   status: "loading" | "error" | "ready";
   disabled: boolean;
+  /** Why the picker cannot be used, shown as the control's tooltip. */
+  unavailableReason: string;
   error: string | null;
   onChange: (modelId: string) => void;
 }
@@ -22,6 +24,7 @@ export function ModelPicker({
   models,
   status,
   disabled,
+  unavailableReason,
   error,
   onChange,
 }: ModelPickerProps) {
@@ -36,6 +39,7 @@ export function ModelPicker({
         className={`w-full${disabled ? " opacity-60" : ""}`}
         value={modelId}
         disabled={disabled}
+        title={disabled ? unavailableReason : undefined}
         onChange={(event) => onChange(event.target.value)}
       >
         {status === "loading" ? (

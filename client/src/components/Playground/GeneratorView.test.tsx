@@ -95,7 +95,7 @@ function jsonResponse(ok: boolean, body: unknown, status = 200): Response {
 type Route = { path: string; body: unknown; method: string };
 
 function stubApi(
-  overrides: (route: Route) => Response | null = () => null
+  overrides: (route: Route) => Response | Promise<Response> | null = () => null
 ): Route[] {
   const calls: Route[] = [];
   const fetchMock = vi.fn(
@@ -235,6 +235,31 @@ describe("the generator", () => {
     // The model declares neither, so neither is sent.
     expect(generation?.body).not.toHaveProperty("guidance");
     expect(generation?.body).not.toHaveProperty("negative_prompt");
+  });
+
+  it("keeps the submit button disabled while a generation is in flight", async () => {
+    // A second click must not start a second request for the same
+    // prompt, so the button is busy for as long as the request is open.
+    let release: (() => void) | null = null;
+    const deferred = new Promise<Response>((resolve) => {
+      release = () =>
+        resolve(jsonResponse(true, { data: [{ b64_json: "AAA" }] }));
+    });
+    stubApi((route) =>
+      route.path === "/v1/images/generations" ? deferred : null
+    );
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    const submit = document.getElementById("submitButton") as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+
+    await user.click(submit);
+    await waitFor(() => expect(submit.disabled).toBe(true));
+
+    release!();
+    await waitFor(() => expect(submit.disabled).toBe(false));
   });
 
   it("shows the server's message when the generation fails", async () => {
