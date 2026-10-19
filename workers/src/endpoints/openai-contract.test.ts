@@ -315,6 +315,28 @@ describe("POST /v1/images/edits contract", () => {
     expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
   });
 
+  test("the selected size reaches the provider for a width/height model", async () => {
+    // SDXL declares width and height, not a size string. The chosen
+    // size has to reach the provider as those two dimensions.
+    const fetchMock = stubInference("binary");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+
+    const res = await endpoint.handle(
+      post("/v1/images/edits", {
+        prompt: "edit this",
+        model: SDXL,
+        image: FIXTURE_PNG_B64,
+        size: "512x512",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(firstProviderBody(fetchMock)).toMatchObject({
+      width: 512,
+      height: 512,
+    });
+  });
+
   test("size parameter flows through to a url", async () => {
     stubInference("binary");
     const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });

@@ -79,6 +79,12 @@ export class ParamParser {
     }
     if (mergedParams.size !== undefined) {
       result.size = this.parseSize(mergedParams.size);
+      // Derive the dimensions here as the object path does. A model
+      // that declares width and height consumes those, not the size
+      // string, so without them the size control does nothing.
+      const [width, height] = result.size.split("x").map(Number);
+      result.width = width;
+      result.height = height;
     }
     if (mergedParams.width !== undefined) {
       result.width = this.parseInteger(mergedParams.width, 256, 2048, "width");

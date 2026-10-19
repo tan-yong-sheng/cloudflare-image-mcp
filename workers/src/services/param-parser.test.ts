@@ -66,6 +66,18 @@ function numStepsConfig(): typeof fluxConfig {
   };
 }
 
+/** A model that declares its output size as width and height. */
+function dimsConfig(): typeof fluxConfig {
+  return {
+    ...fluxConfig,
+    parameters: {
+      prompt: { cfParam: "prompt", type: "string", required: true },
+      width: { cfParam: "width", type: "integer", default: 1024 },
+      height: { cfParam: "height", type: "integer", default: 1024 },
+    },
+  };
+}
+
 describe("ParamParser.parse with string input", () => {
   test("plain prompt carries through with rawPrompt preserved", () => {
     const result = ParamParser.parse("a cyberpunk cat");
@@ -236,6 +248,21 @@ describe("ParamParser.buildPayload (C1)", () => {
     const { payload, dropped } = ParamParser.buildPayload(params, fluxConfig);
     expect(payload).toEqual({ prompt: "cat" });
     expect(dropped).toEqual(["size"]);
+  });
+
+  test("a size in the explicit params derives the dimensions", () => {
+    // A model that declares width and height consumes the dimensions,
+    // not the size string. Without them the size control does nothing.
+    const params = ParamParser.parse("cat", { size: "512x512" }, fluxConfig);
+    expect(params.size).toBe("512x512");
+    expect(params.width).toBe(512);
+    expect(params.height).toBe(512);
+  });
+
+  test("the derived dimensions reach a model that declares them", () => {
+    const params = ParamParser.parse("cat", { size: "512x512" }, dimsConfig());
+    const { payload } = ParamParser.buildPayload(params, dimsConfig());
+    expect(payload).toEqual({ prompt: "cat", width: 512, height: 512 });
   });
 
   test("the step count reaches a model that declares num_steps", () => {
