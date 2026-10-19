@@ -51,7 +51,8 @@ Required GitHub Secrets (CI deploy):
 
 Optional Worker secrets:
 
-- `API_KEYS` (protects MCP + OpenAI endpoints + Frontend)
+- `API_KEYS` (protects the MCP + OpenAI API routes; the client's document and
+  its files under `/assets/` stay public — every browser downloads them)
 - `TZ`
   Details: see `docs/DEPLOY.md` (AGENTS.md is authoritative if there is any contradiction).
 

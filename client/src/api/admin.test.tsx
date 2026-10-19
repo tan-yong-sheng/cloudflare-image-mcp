@@ -259,9 +259,8 @@ describe("the admin API client", () => {
       bearerToken: "bearer-key",
       sessionId: 1,
     };
-    const second = { ...first, sessionId: 2 };
 
-    const { result, rerender } = renderHook(
+    const { result, unmount } = renderHook(
       ({ session }: { session: typeof first }) => ({
         health: useHealth(session),
         mutations: useAdminMutations(session),
@@ -282,8 +281,22 @@ describe("the admin API client", () => {
       void pending.catch(() => undefined);
     });
 
-    // The operator locks and unlocks: a new session, a new payload.
-    rerender({ session: second });
+    // The operator leaves the workbench while the request is open. The
+    // hook goes away, and a pending mutation keeps the options it was
+    // started with: nothing refreshes them behind its back, so the
+    // answer it publishes still names the session that is gone.
+    unmount();
+
+    // The operator unlocks again: a new session, a new payload.
+    const second = renderHook(
+      () =>
+        useHealth({
+          adminKey: "management-key",
+          bearerToken: "bearer-key",
+          sessionId: 2,
+        }),
+      { wrapper: wrapper(client) }
+    );
     await waitFor(() => expect(healthCalls).toBe(2));
 
     // The answer arrives.
@@ -295,6 +308,7 @@ describe("the admin API client", () => {
     // The live session's payload is refetched, so the row on screen
     // agrees with the server.
     await waitFor(() => expect(healthCalls).toBe(3));
+    second.unmount();
   });
 
   it("adds a key and refetches the health payload and the registry", async () => {

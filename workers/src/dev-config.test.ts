@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { CLIENT_ASSET_PREFIX } from "./endpoints/spa.js";
+import { CLIENT_ASSET_DIR } from "./routes.js";
 
 const WORKERS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_DIR = join(WORKERS_DIR, "..");
@@ -91,6 +91,29 @@ function devVars(text: string): { key: string; value: string }[] {
     });
 }
 
+/**
+ * The value of a setting in the client's Vite config.
+ *
+ * A plain search over the file would be satisfied by a commented-out
+ * value, and the first match could be an override that is not the one
+ * in effect. Only a line that starts with the setting name carries a
+ * value, and the setting has to be named exactly once, so neither a
+ * comment nor a second occurrence can hide the value that counts.
+ *
+ * The client asserts the same contract against the effective build
+ * configuration; this is the Worker's side of it, and it keeps the two
+ * packages from drifting apart.
+ */
+function configValue(source: string, setting: string): string | undefined {
+  const matches = [
+    ...source.matchAll(
+      new RegExp(`^\\s*${setting}\\s*:\\s*(?:"([^"]*)"|([^,\\s]+))`, "gm")
+    ),
+  ];
+  if (matches.length !== 1) return undefined;
+  return matches[0][1] ?? matches[0][2];
+}
+
 describe("local dev templates", () => {
   const example = read("workers/wrangler.toml.example");
   const generated = generatedManifest(
@@ -134,15 +157,15 @@ describe("local dev templates", () => {
     // /assets/ before the auth gate, and everything else the client
     // asks for is the document. The build has to agree: a bundle
     // directory with another name leaves every bundle request 404ing,
-    // and a file outside /assets/ answers 401, which reads as a
+    // and a file outside /assets/ is served by the Worker as an API
+    // path — with API keys configured it answers 401, which reads as a
     // credential problem. Nothing else would say so.
     const viteConfig = read("client/vite.config.ts");
-    const assetsDir = /assetsDir:\s*"([^"]+)"/.exec(viteConfig)?.[1] ?? "";
-    expect(assetsDir).toBe(CLIENT_ASSET_PREFIX.replace(/^\/+|\/+$/g, ""));
+    expect(configValue(viteConfig, "assetsDir")).toBe(CLIENT_ASSET_DIR);
     // Vite copies a public directory to the root of the build output.
     // The build must not have one, or it can produce a file the Worker
     // would not serve.
-    expect(/publicDir:\s*false/.test(viteConfig)).toBe(true);
+    expect(configValue(viteConfig, "publicDir")).toBe("false");
   });
 
   test("the local secrets template names only variables the Worker reads", () => {

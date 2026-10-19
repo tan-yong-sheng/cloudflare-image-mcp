@@ -17,4 +17,23 @@ describe("the client's document", () => {
       /<link[^>]+rel="icon"[^>]*href="([^"]*)"/.exec(document)?.[1] ?? "";
     expect(href.startsWith("data:")).toBe(true);
   });
+
+  it("references no file outside the served build output", () => {
+    // The Worker serves the build output from /assets/ before the auth
+    // gate. A root-absolute reference to anything else — an image in a
+    // public directory, a stray stylesheet — is answered by the Worker
+    // as an API path: with API keys configured it answers 401, which
+    // reads as a credential problem. The only root-absolute reference
+    // the source document may carry is the Vite entry, which the build
+    // rewrites into a hashed file under /assets/.
+    const references = [
+      ...document.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/g),
+    ].map((match) => match[1]);
+
+    expect(references.length).toBeGreaterThan(0);
+    for (const reference of references) {
+      if (!reference.startsWith("/")) continue;
+      expect(reference, reference).toMatch(/^\/src\//);
+    }
+  });
 });

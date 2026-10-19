@@ -158,6 +158,17 @@ describe("the client shell", () => {
     expect(document.getElementById("generatorView")).toBeNull();
   });
 
+  it("keeps the generator for a fragment that merely starts with admin", () => {
+    // The legacy shell compared the fragment exactly, so only `#admin`
+    // was the workbench.
+    window.location.hash = "#administrator";
+    stubFetch(() => jsonResponse(true, { data: [] }));
+    render(<App />);
+
+    expect(document.getElementById("generatorView")).not.toBeNull();
+    expect(document.getElementById("adminView")).toBeNull();
+  });
+
   it("re-syncs the route on a history navigation that announces no hash change", async () => {
     // The legacy shell listened to both events. A history navigation
     // can announce the new URL through popstate alone, and the route

@@ -345,6 +345,10 @@ test.describe("Workbench", () => {
     await signIn(page);
     await page.click("#adminWorkbenchButton");
     await unlock(page);
+    // The account field belongs to the Cloudflare family. The provider
+    // list comes back in the database's order, so the family is picked
+    // by name rather than by position.
+    await page.locator("#adminRail button", { hasText: "Cloudflare" }).click();
     await page.click("#adminAddKey");
     await expect(page.locator("#adminSheet")).toBeVisible();
     await page.fill("#adminSheetAcct", `${SWEEP_PREFIX}${Date.now()}`);

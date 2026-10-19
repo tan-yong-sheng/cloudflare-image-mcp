@@ -124,7 +124,8 @@ export interface Env {
   /**
    * Workers Static Assets binding serving the React client (client/).
    * Absent when the client is not deployed, in which case the Worker
-   * serves the legacy single-file frontend only.
+   * answers the client's routes with an explicit `client_not_built`
+   * error instead of a document.
    */
   ASSETS?: Fetcher;
 }

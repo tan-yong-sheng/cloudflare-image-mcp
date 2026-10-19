@@ -9,25 +9,27 @@
 // The client is the only frontend: the legacy single-file template and
 // the ?spa=1 opt-in are gone.
 
+import { CLIENT_ASSET_PREFIX } from "../routes.js";
 import type { Env } from "../types.js";
 
 /**
- * The URL prefix the client's build output is served under.
+ * Whether a path addresses the client's build output.
  *
  * Vite writes the bundle, the stylesheet and the icon fonts into
- * `build.assetsDir` and references them from the document, so the prefix
- * is part of the contract between the client build and the Worker. The
- * Worker checks it before the auth gate: the build output is public —
- * every browser downloads it — while the gate governs the API routes.
+ * `build.assetsDir` and references them from the document, so the
+ * prefix is part of the contract between the client build and the
+ * Worker. The Worker checks it before the auth gate: the build output
+ * is public — every browser downloads it — while the gate governs the
+ * API routes.
  *
  * The client's vite.config.ts must keep `build.assetsDir` in step and
- * must not publish a public directory: the dev-config test fails if
- * either drifts, because a bundle in another directory 404s and a file
- * outside this prefix answers 401.
+ * must not publish a public directory. The contract is pinned by tests
+ * on both sides: the client asserts the effective build config, and the
+ * Worker's dev-config test fails if the config drifts. A bundle in
+ * another directory 404s, and a file outside this prefix is served by
+ * the Worker as an API path: with API keys configured it answers 401,
+ * which reads as a credential problem.
  */
-export const CLIENT_ASSET_PREFIX = "/assets/";
-
-/** Whether a path addresses the client's build output. */
 export function isClientAssetPath(path: string): boolean {
   return path.startsWith(CLIENT_ASSET_PREFIX);
 }

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -43,20 +44,31 @@ export function resolveInitialTheme(): Theme {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(resolveInitialTheme);
+  // The toggle needs the theme that is on screen without re-creating
+  // itself on every change, and the state updater must stay pure.
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   useEffect(() => {
     // The theme lives on the <html> element, the way the legacy page
     // did it: the .dark class is what the token block keys off.
     document.documentElement.classList.toggle("dark", theme === "dark");
-    try {
-      window.localStorage.setItem(STORAGE_KEY, theme);
-    } catch {
-      // A blocked storage backend must not break the toggle.
-    }
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((current) => (current === "dark" ? "light" : "dark"));
+    const next = themeRef.current === "dark" ? "light" : "dark";
+    setTheme(next);
+    // Only an explicit choice is stored. The legacy page wrote
+    // localStorage.theme from its toggle handler and nowhere else, so
+    // an operator who never chose kept following the system
+    // preference. Storing the resolved theme here would have frozen
+    // that preference at the first visit and turned it into a choice
+    // the operator never made.
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      // A blocked storage backend must not break the toggle.
+    }
   }, []);
 
   const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
