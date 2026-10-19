@@ -37,7 +37,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: workers/package-lock.json
+          cache-dependency-path: |
+            workers/package-lock.json
+            client/package-lock.json
 
       - name: Install dependencies
         working-directory: workers
@@ -46,6 +48,32 @@ jobs:
       - name: Type check
         working-directory: workers
         run: npm run check
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Client type check
+        working-directory: client
+        run: npm run check
+
+      - name: Client build
+        # The build is part of the gate: a client that does not bundle is
+        # a client that cannot be deployed, and the deploy workflow builds
+        # the same output.
+        working-directory: client
+        run: npm run build
+
+      - name: Client unit tests
+        working-directory: client
+        run: npm test
+
+      - name: Client format check
+        working-directory: client
+        # The whole client tree is new, so a blanket check is affordable
+        # here; the workers tree predates the repo formatter config and
+        # keeps its scoped check.
+        run: npx prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
 
       - name: Format check
         working-directory: workers

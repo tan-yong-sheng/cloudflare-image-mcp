@@ -45,6 +45,19 @@ function mainEntry(toml: string): string {
   return /^[ \t]*main\s*=\s*"([^"]+)"/m.exec(toml)?.[1] ?? "";
 }
 
+/** The `[assets]` table of a manifest, with quoted values unquoted. */
+function assets(toml: string): Record<string, string> {
+  const start = toml.search(/^[ \t]*\[assets\][ \t]*$/m);
+  if (start < 0) return {};
+  const table: Record<string, string> = {};
+  for (const line of toml.slice(start).split("\n").slice(1)) {
+    if (/^[ \t]*\[/.test(line)) break;
+    const entry = /^[ \t]*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$/.exec(line);
+    if (entry) table[entry[1]] = entry[2].replace(/^"|"$/g, "");
+  }
+  return table;
+}
+
 /** The manifest body the deploy workflow writes into workers/wrangler.toml. */
 function generatedManifest(workflow: string): string {
   const body = /cat > wrangler\.toml << EOF\n([\s\S]*?)\n\s*EOF/.exec(workflow);
@@ -97,6 +110,22 @@ describe("local dev templates", () => {
     expect(bindings(example).sort()).toEqual(bindings(generated).sort());
     expect(vars(example).sort()).toEqual(vars(generated).sort());
     expect(mainEntry(example)).toBe(mainEntry(generated));
+  });
+
+  test("both manifests serve the client from the same build output", () => {
+    // The React client is deployed as Workers Static Assets. A local
+    // manifest pointing somewhere else would make local dev serve a
+    // different document than the one that is deployed.
+    expect(assets(example)).toEqual(assets(generated));
+    expect(assets(example)).toMatchObject({
+      directory: "../client/dist",
+      binding: "ASSETS",
+      // The Worker answers the routes it owns and reaches the client's
+      // files through the binding, so an unknown path keeps the Worker's
+      // error envelope.
+      not_found_handling: "none",
+      run_worker_first: "true",
+    });
   });
 
   test("the local secrets template names only variables the Worker reads", () => {
