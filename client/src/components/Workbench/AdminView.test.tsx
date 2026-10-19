@@ -335,6 +335,119 @@ describe("the provider credentials workbench", () => {
     ).toBe(false);
   });
 
+  it("keeps the keyboard inside the drawer", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    const dialog = document.getElementById("adminSheet");
+    expect(dialog).not.toBeNull();
+    const focusable = Array.from(
+      dialog!.querySelectorAll<HTMLElement>(
+        "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      )
+    );
+    expect(focusable.length).toBeGreaterThan(2);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    // Tab past the last control wraps to the first.
+    last.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(first);
+
+    // Shift+Tab before the first wraps to the last.
+    first.focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("drops the credential payload when the provider goes away", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    const { client, unmount } = renderWorkbench();
+    await unlock(user);
+
+    // The payload is cached under the unlock session.
+    await waitFor(() =>
+      expect(
+        client.getQueriesData({ queryKey: ["admin", "health"] })
+      ).not.toEqual([])
+    );
+
+    unmount();
+
+    // The key and the payload it unlocked do not outlive the provider.
+    expect(client.getQueriesData({ queryKey: ["admin", "health"] })).toEqual(
+      []
+    );
+  });
+
+  it("does not close a drawer that replaced the submitted one", async () => {
+    // The operator can dismiss a drawer while its save is in flight and
+    // open another one. A late answer must not close the new drawer.
+    let releaseSave: (() => void) | null = null;
+    const deferred = new Promise<Response>((resolve) => {
+      releaseSave = () => resolve(jsonResponse(true, {}));
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (path === "/api/admin/keys" && (init?.method ?? "GET") === "POST") {
+          return deferred;
+        }
+        if (path === "/api/admin/health") return jsonResponse(true, HEALTH);
+        if (path === "/api/internal/models") return jsonResponse(true, []);
+        return jsonResponse(true, {});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    // Open the add drawer and submit it.
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    // The save is in flight. Dismiss the drawer and open another one.
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).toBeNull()
+    );
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).not.toBeNull()
+    );
+
+    // The late answer lands.
+    releaseSave!();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          (call) =>
+            String(call[0]) === "/api/admin/keys" &&
+            (call[1]?.method ?? "GET") === "POST"
+        )
+      ).toBe(true)
+    );
+
+    // The drawer that replaced the submitted one is still open.
+    expect(document.getElementById("adminSheet")).not.toBeNull();
+    expect(document.getElementById("adminSheetTitle")?.textContent).toContain(
+      "Edit Key #1"
+    );
+  });
+
   it("closes the panel and drops the cached payload when the operator locks", async () => {
     stubApi();
     const user = userEvent.setup();

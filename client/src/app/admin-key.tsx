@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./auth";
 
 /**
@@ -37,6 +38,7 @@ export function AdminKeyProvider({ children }: { children: ReactNode }) {
   const keyRef = useRef<string | null>(null);
   const [adminKey, setAdminKey] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState(0);
+  const queryClient = useQueryClient();
 
   const unlock = useCallback((key: string) => {
     keyRef.current = key;
@@ -47,14 +49,18 @@ export function AdminKeyProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(() => {
     keyRef.current = null;
     setAdminKey(null);
-  }, []);
+    // The credential metadata the panel fetched goes with the key: a
+    // locked panel must leave nothing behind to read.
+    queryClient.removeQueries({ queryKey: ["admin", "health"] });
+  }, [queryClient]);
 
-  // Teardown: the key does not outlive the provider.
+  // Teardown: neither the key nor the payload outlives the provider.
   useEffect(() => {
     return () => {
       keyRef.current = null;
+      queryClient.removeQueries({ queryKey: ["admin", "health"] });
     };
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({ adminKey, sessionId, unlock, lock }),
