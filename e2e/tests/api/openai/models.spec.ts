@@ -32,13 +32,15 @@ test.describe("OpenAI Models API", () => {
       expect(model).toHaveProperty("owned_by");
     }
 
-    // A model id is either namespaced @{namespace}/{model-name} (Cloudflare
-    // ids carry an extra provider segment: @cf/{provider}/{model}) or the
-    // upstream name bare (agnes-image-2.5-flash). Check all of them, not just
-    // the first, so a bad id cannot hide behind list order.
+    // A model id is either namespaced (Cloudflare ids carry an extra
+    // provider segment: @cf/{provider}/{model}, so 2-3 segments) or the
+    // upstream name bare (agnes-image-2.5-flash, a single segment). Keep the
+    // two shapes distinct: a bare two-segment id like `agnes/image` is not
+    // something the registry can produce and must still fail here. Check all
+    // of them, not just the first, so a bad id cannot hide behind list order.
     for (const model of body.data) {
       expect(model.id).toMatch(
-        /^(?:@[a-z0-9-]+\/)?[a-z0-9.-]+(?:\/[a-z0-9.-]+)?$/
+        /^(?:@[a-z0-9-]+\/[a-z0-9.-]+(?:\/[a-z0-9.-]+)?|[a-z0-9.-]+)$/
       );
     }
 

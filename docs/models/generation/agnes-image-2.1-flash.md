@@ -102,15 +102,14 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 
 ## Size Reference
 
-| Tier | Square | 16:9     | 9:16     | 3:4      | 4:3      | 2:3      | 3:2      | 21:9     |
-| ---- | ------ | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
-| 1K   | 1024²  | 1312x736 | 736x1312 | 864x1152 | 1152x864 | 832x1248 | 1248x832 | 1568x672 |
-| 2K   | 2048²  | —        | —        | —        | —        | —        | —        | —        |
-| 3K   | 3072²  | —        | —        | —        | —        | —        | —        | —        |
-| 4K   | 4096²  | —        | —        | —        | —        | —        | —        | —        |
+| Tier | Square | 16:9      | 9:16      | 3:4       | 4:3       | 2:3       | 3:2       | 21:9      |
+| ---- | ------ | --------- | --------- | --------- | --------- | --------- | --------- | --------- |
+| 1K   | 1024²  | 1312x736  | 736x1312  | 864x1152  | 1152x864  | 832x1248  | 1248x832  | 1568x672  |
+| 2K   | 2048²  | 2624x1472 | 1472x2624 | 1728x2304 | 2304x1728 | 1664x2496 | 2496x1664 | 3136x1344 |
+| 3K   | 3072²  | 3936x2208 | 2208x3936 | 2592x3456 | 3456x2592 | 2496x3744 | 3744x2496 | 4704x2016 |
+| 4K   | 4096²  | 5248x2944 | 2944x5248 | 3456x4608 | 4608x3456 | 3328x4992 | 4992x3328 | 6272x2688 |
 
-Any requested `WxH` is accepted and normalized; the table lists the published
-tier/ratio dimensions the mapping targets. A `—` cell is a tier whose
-non-square dimensions the provider docs do not publish: the request still
-sends that tier with the mapped ratio, and the exact pixels are the
-provider's to choose.
+Any requested `WxH` is accepted and normalized to the nearest tier and
+aspect ratio; the transport sends that tier and ratio, and the table lists
+the dimensions the provider publishes for each combination (agnes-ai.com/
+en/docs/agnes-image-21-flash, "Size and Ratio").
