@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../api/client";
 import { useModels } from "../../api/models";
 import type { GenerationResponse } from "../../api/types";
-import { useAuth } from "../../app/auth";
+import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { useCredentialsConfigured } from "../../app/credentials";
 import {
   AdminWorkbenchButton,
@@ -25,7 +25,7 @@ const GENERATION_TIMEOUT_MS = 120_000;
 /** The server said the bearer key is no longer accepted. */
 class SessionExpired extends Error {
   constructor() {
-    super("Session expired. Please login again.");
+    super(SESSION_EXPIRED_MESSAGE);
     this.name = "SessionExpired";
   }
 }
@@ -158,7 +158,7 @@ export function GeneratorView() {
       setPendingImages(produced);
     } catch (cause) {
       if (cause instanceof SessionExpired) {
-        logout();
+        logout(SESSION_EXPIRED_MESSAGE);
         setError(cause.message);
         return;
       }

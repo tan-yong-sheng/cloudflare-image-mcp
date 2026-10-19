@@ -318,4 +318,38 @@ describe("the client shell", () => {
       "hidden"
     );
   });
+
+  it("explains the expired session when the credentials are refused", async () => {
+    // A refused credential read ends the whole session, and the
+    // workbench goes down with it. The reason has to reach the prompt
+    // the operator lands on, or they are asked for their key again
+    // without being told why.
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin";
+    stubFetch((url) => {
+      if (url === "/api/admin/health") {
+        return jsonResponse(false, { error: { message: "Unauthorized" } }, 401);
+      }
+      if (url === "/api/internal/models") return jsonResponse(true, []);
+      return jsonResponse(true, { data: [] });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    // The workbench is gone and the sign-in prompt is back. The route
+    // follows the hash change, so it lands a tick after the prompt.
+    await waitFor(() =>
+      expect(document.getElementById("adminView")).toBeNull()
+    );
+
+    // The reason is on the prompt the operator lands on. It cannot be
+    // on the workbench: that screen went down with the session.
+    expect(document.getElementById("loginError")).toHaveTextContent(
+      "Session expired. Please sign in again."
+    );
+    expect(document.getElementById("loginModal")).not.toBeNull();
+  });
 });

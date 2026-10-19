@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -44,31 +43,30 @@ export function resolveInitialTheme(): Theme {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(resolveInitialTheme);
-  // The toggle needs the theme that is on screen without re-creating
-  // itself on every change, and the state updater must stay pure.
-  const themeRef = useRef(theme);
-  themeRef.current = theme;
+  // Only a theme the operator chose is stored. The legacy page wrote
+  // localStorage.theme from its toggle handler and nowhere else, so an
+  // operator who never chose kept following the system preference.
+  // The flag says the theme on screen was chosen, not suggested.
+  const [chosen, setChosen] = useState(false);
 
   useEffect(() => {
     // The theme lives on the <html> element, the way the legacy page
     // did it: the .dark class is what the token block keys off.
     document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
-
-  const toggleTheme = useCallback(() => {
-    const next = themeRef.current === "dark" ? "light" : "dark";
-    setTheme(next);
-    // Only an explicit choice is stored. The legacy page wrote
-    // localStorage.theme from its toggle handler and nowhere else, so
-    // an operator who never chose kept following the system
-    // preference. Storing the resolved theme here would have frozen
-    // that preference at the first visit and turned it into a choice
-    // the operator never made.
+    if (!chosen) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, next);
+      window.localStorage.setItem(STORAGE_KEY, theme);
     } catch {
       // A blocked storage backend must not break the toggle.
     }
+  }, [theme, chosen]);
+
+  const toggleTheme = useCallback(() => {
+    // The updater answers from the theme that is on screen, so two
+    // presses that land in the same render toggle twice, the way the
+    // legacy page's own handler did.
+    setChosen(true);
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
   }, []);
 
   const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);

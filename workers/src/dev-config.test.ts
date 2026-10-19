@@ -105,9 +105,12 @@ function devVars(text: string): { key: string; value: string }[] {
  * packages from drifting apart.
  */
 function configValue(source: string, setting: string): string | undefined {
+  // The setting name goes into the pattern as a literal, so a name with
+  // a regex character in it cannot match something else.
+  const literal = setting.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const matches = [
     ...source.matchAll(
-      new RegExp(`^\\s*${setting}\\s*:\\s*(?:"([^"]*)"|([^,\\s]+))`, "gm")
+      new RegExp(`^\\s*${literal}\\s*:\\s*(?:"([^"]*)"|([^,\\s]+))`, "gm")
     ),
   ];
   if (matches.length !== 1) return undefined;

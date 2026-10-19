@@ -7,7 +7,7 @@ import {
 } from "../../api/admin";
 import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
-import { useAuth } from "../../app/auth";
+import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
@@ -74,12 +74,12 @@ export function AdminView() {
     if (failure instanceof AdminApiError && failure.status === 401) {
       // The bearer key is no longer accepted, so the whole session is
       // over, not just the admin half of it. The workbench ends its own
-      // session here rather than relying on the shell to notice the
+      // session here instead of waiting for the shell to notice the
       // sign-out: the management key must not outlive the session that
-      // carried it.
-      logout();
+      // carried it. The reason travels with the sign-out, because the
+      // shell tears this screen down with the session.
+      logout(SESSION_EXPIRED_MESSAGE);
       lock();
-      setGateError("Session expired. Please sign in again.");
       return;
     }
     // The credential payload could not be read, so the admin session is

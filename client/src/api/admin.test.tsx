@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AdminApiError,
+  HEALTH_QUERY_FAMILY,
   healthQueryKey,
   useAdminMutations,
   useHealth,
@@ -231,6 +232,43 @@ describe("the admin API client", () => {
       const cached = client.getQueryData<AdminHealth>(healthQueryKey(1));
       expect(cached?.keys[0].enabled).toBe(true);
     });
+  });
+
+  it("invalidates the whole health family after a key change", async () => {
+    // The payload on screen belongs to whichever session is live, so a
+    // key change has to invalidate the family rather than one session's
+    // entry. This pins the target of the invalidation itself: the
+    // refetch that follows is the query library's business.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "/api/admin/health") return jsonResponse(true, HEALTH);
+      return jsonResponse(true, {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    const session = {
+      adminKey: "management-key",
+      bearerToken: "bearer-key",
+      sessionId: 1,
+    };
+
+    const { result } = renderHook(
+      () => ({
+        health: useHealth(session),
+        mutations: useAdminMutations(session),
+      }),
+      { wrapper: wrapper(client) }
+    );
+    await waitFor(() => expect(result.current.health.data).toEqual(HEALTH));
+
+    await act(async () => {
+      await result.current.mutations.toggleKey
+        .mutateAsync({ keyId: 1, enabled: false })
+        .catch(() => undefined);
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: HEALTH_QUERY_FAMILY });
   });
 
   it("refetches the payload of the session that is live when the request finishes", async () => {
