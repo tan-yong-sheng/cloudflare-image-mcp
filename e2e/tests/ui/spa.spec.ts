@@ -180,6 +180,20 @@ test.describe("SPA shell", () => {
     await expect(page.locator("#adminView")).toBeVisible();
     await expect(page.locator("#adminGate")).toBeVisible();
   });
+
+  test("the workbench can be left when the operator came in on /admin", async ({
+    page,
+  }) => {
+    // The path is an entry alias. If it kept pinning the route, the
+    // Back button would do nothing and the operator would be stuck.
+    await signIn(page);
+    await page.goto("/admin");
+    await expect(page.locator("#adminView")).toBeVisible();
+
+    await page.click("#adminBackBtn");
+    await expect(page.locator("#generatorView")).toBeVisible();
+    await expect(page.locator("#adminView")).toHaveCount(0);
+  });
 });
 
 test.describe("Playground", () => {

@@ -55,6 +55,7 @@ describe("the client shell", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
     window.localStorage.clear();
+    window.history.replaceState(null, "", "/");
     window.location.hash = "";
     document.documentElement.classList.remove("dark");
   });
@@ -151,6 +152,27 @@ describe("the client shell", () => {
 
     expect(document.getElementById("adminView")).not.toBeNull();
     expect(document.getElementById("generatorView")).toBeNull();
+  });
+
+  it("leaves the workbench when the operator came in on the /admin path", async () => {
+    // The path is an entry alias. If it kept pinning the route, the
+    // Back button would be dead: the hash never changes, so nothing
+    // would change the route either.
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/admin");
+    stubFetch(() => jsonResponse(true, { data: [] }));
+    render(<App />);
+
+    expect(document.getElementById("adminView")).not.toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: /Back to Image Generator/i })
+    );
+
+    await waitFor(() =>
+      expect(document.getElementById("generatorView")).not.toBeNull()
+    );
+    expect(document.getElementById("adminView")).toBeNull();
   });
 
   it("shows the generator by default", () => {
