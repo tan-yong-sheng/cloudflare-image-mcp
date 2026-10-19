@@ -1328,12 +1328,15 @@ export function getFrontendHTML(options?: {
             }
 
             // Cloudflare ships a brand mark in Font Awesome. Agnes ships an
-            // app icon, inlined as a data URI so the workbench never fetches
-            // a third-party origin (see config/brand.ts).
+            // app icon, inlined as a data URI so the mark adds no new
+            // third-party origin (see config/brand.ts).
             const FAMILY_ICONS = { cloudflare: 'fa-brands fa-cloudflare' };
             const FAMILY_LOGOS = { agnes: '${AGNES_LOGO_DATA_URI}' };
             function familyIcon(providerId) {
-                const logo = FAMILY_LOGOS[providerId];
+                // Own-property lookups: a provider id such as "constructor"
+                // would otherwise resolve through Object.prototype and take
+                // the logo branch with a function value.
+                const logo = Object.hasOwn(FAMILY_LOGOS, providerId) ? FAMILY_LOGOS[providerId] : null;
                 if (logo) {
                     const img = document.createElement('img');
                     img.src = logo;
@@ -1342,10 +1345,9 @@ export function getFrontendHTML(options?: {
                     img.setAttribute('aria-hidden', 'true');
                     return img;
                 }
-                const className = FAMILY_ICONS[providerId];
-                if (!className) return null;
+                if (!Object.hasOwn(FAMILY_ICONS, providerId)) return null;
                 const icon = document.createElement('i');
-                icon.className = className + ' mr-2';
+                icon.className = FAMILY_ICONS[providerId] + ' mr-2';
                 icon.setAttribute('aria-hidden', 'true');
                 return icon;
             }
