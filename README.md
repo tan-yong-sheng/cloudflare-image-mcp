@@ -200,8 +200,10 @@ Open your worker URL in a browser for an interactive UI.
 | SD 1.5 Img2Img        | image-to-image (img2img)                               | Runway ML         | Cloudflare |
 | SD 1.5 Inpainting     | image-to-image (requires mask)                         | Runway ML         | Cloudflare |
 | Agnes Image 2.5 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
+| Agnes Image 2.1 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
+| Agnes Image 2.0 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
 
-> **Provider** = who built the model. **Hosted By** = who actually serves the inference API (and bills for it): Cloudflare Workers AI for the `@cf/*` models, Agnes AI's own OpenAI-compatible endpoint for the `@agnes/*` model.
+> **Provider** = who built the model. **Hosted By** = who actually serves the inference API (and bills for it): Cloudflare Workers AI for the `@cf/*` models, Agnes AI's own OpenAI-compatible endpoint for `agnes-image-*`. Cloudflare's ids are namespaced (`@cf/{provider}/{model}`); the Agnes id is the bare upstream model name, which is what the transport sends.
 
 ---
 

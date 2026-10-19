@@ -191,18 +191,23 @@ export function buildAgnesRequestBody(
 ): Record<string, any> {
   const { width, height } = readRequestedSize(payload);
   const { size, ratio } = mapSizeToTier(width, height);
+  // 2.0 addresses an exact canvas and publishes no ratio; its successors take
+  // a tier plus a ratio. Sending a tier to 2.0 would ask for a size it does
+  // not accept, so the strategy decides which half of mapSizeToTier is used.
+  const exact = model.sizeStrategy === "exact";
 
   const body: Record<string, any> = {
-    // Upstream name is the registry id without its namespace: the model is
-    // "@agnes/agnes-image-2.5-flash" here and "agnes-image-2.5-flash" there.
+    // The registry id is the upstream model name ("agnes-image-2.5-flash"),
+    // so this strip is a no-op today. It stays as the contract for any future
+    // openai-compat registry entry that does namespace its id.
     model: model.id.replace(/^@[^/]+\//, ""),
     prompt:
       typeof payload.prompt === "string"
         ? payload.prompt
         : String(payload.prompt ?? ""),
-    size,
-    ratio,
+    size: exact ? `${width}x${height}` : size,
   };
+  if (!exact) body.ratio = ratio;
 
   const inputImages = normalizeInputImages(images, payload.image);
   const extraBody: Record<string, any> = { response_format: "b64_json" };

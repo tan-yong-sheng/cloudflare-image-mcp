@@ -20,7 +20,9 @@ This document describes all available image generation models in the Cloudflare 
 | `@cf/leonardo/lucid-origin`                     | Lucid Origin                 | Leonardo.AI       | Most adaptable and prompt-responsive model                               |      ✅       |       ❌       |      ❌      |
 | `@cf/leonardo/phoenix-1.0`                      | Phoenix 1.0                  | Leonardo.AI       | Model with exceptional prompt adherence and coherent text                |      ✅       |       ❌       |      ❌      |
 | `@cf/runwayml/stable-diffusion-v1-5-inpainting` | SD 1.5 Inpainting            | Runway ML         | Stable Diffusion for masked edits (requires mask)                        |      ❌       |       ✅       |   Required   |
-| `@agnes/agnes-image-2.5-flash`                  | Agnes Image 2.5 Flash        | Agnes AI          | Text-to-image and image-composition with 1K-4K tiers and ratios          |      ✅       |       ✅       |      ❌      |
+| `agnes-image-2.5-flash`                         | Agnes Image 2.5 Flash        | Agnes AI          | Text-to-image and image-composition with 1K-4K tiers and ratios          |      ✅       |       ✅       |      ❌      |
+| `agnes-image-2.1-flash`                         | Agnes Image 2.1 Flash        | Agnes AI          | Same 1K-4K tiers and ratios as 2.5, tuned for high-density visuals       |      ✅       |       ✅       |      ❌      |
+| `agnes-image-2.0-flash`                         | Agnes Image 2.0 Flash        | Agnes AI          | Exact-size canvas; publishes no aspect-ratio parameter                   |      ✅       |       ✅       |      ❌      |
 
 ---
 
@@ -371,7 +373,9 @@ Models returning Base64-encoded images:
 
 - All FLUX models (`@cf/black-forest-labs/*`)
 - Lucid Origin (`@cf/leonardo/lucid-origin`)
-- Agnes Image 2.5 Flash (`@agnes/agnes-image-2.5-flash`)
+- Agnes Image 2.5 Flash (`agnes-image-2.5-flash`)
+- Agnes Image 2.1 Flash (`agnes-image-2.1-flash`)
+- Agnes Image 2.0 Flash (`agnes-image-2.0-flash`)
 
 The response includes the image data as a base64 string in the JSON response body.
 
@@ -434,7 +438,7 @@ carries them.
 
 | Attribute             | Value                                                    |
 | --------------------- | -------------------------------------------------------- |
-| **Model ID**          | `@agnes/agnes-image-2.5-flash`                           |
+| **Model ID**          | `agnes-image-2.5-flash`                                  |
 | **Upstream Model**    | `agnes-image-2.5-flash`                                  |
 | **Input Format**      | JSON                                                     |
 | **Response Format**   | Base64                                                   |
@@ -463,6 +467,54 @@ $0.010 (1K), $0.018 (2K), $0.021 (3K), $0.024 (4K) per image list price, plus
 $0.003 per input reference from the fourth onward. The provider currently
 charges $0 for this model; pricing is not hardcoded in the service.
 
+#### Agnes Image 2.1 Flash
+
+Agnes AI's upgraded flash-tier model, tuned for high-information-density
+visuals, complex compositions, and detail-rich scenes. It publishes the same
+parameter schema and the same 1K-4K × eight-ratio matrix as 2.5, so it uses
+the same tier strategy; only the upstream model name differs.
+
+| Attribute             | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| **Model ID**          | `agnes-image-2.1-flash`                                  |
+| **Upstream Model**    | `agnes-image-2.1-flash`                                  |
+| **Input Format**      | JSON                                                     |
+| **Response Format**   | Base64                                                   |
+| **API Version**       | 1                                                        |
+| **Max Prompt Length** | 2048 characters                                          |
+| **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
+| **Output Tiers**      | 1K, 2K, 3K, 4K                                           |
+| **Aspect Ratios**     | 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9                |
+
+**Parameters** are identical to 2.5 (`prompt`, `size`); the size mapping
+normalizes the requested `WxH` to a tier and ratio the same way. Sources:
+[`agnes-ai.com/en/docs/agnes-image-21-flash`](https://agnes-ai.com/en/docs/agnes-image-21-flash)
+and [`wiki.agnes-ai.com/en/docs/pricing`](https://wiki.agnes-ai.com/en/docs/pricing).
+
+#### Agnes Image 2.0 Flash
+
+Agnes AI's first flash-tier generation and editing model. It is the one Agnes
+model that takes an **exact** `WxH` in `size` and publishes **no `ratio`**, so
+it declares `sizeStrategy: "exact"` and the transport withholds `ratio` for it.
+
+| Attribute             | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| **Model ID**          | `agnes-image-2.0-flash`                                  |
+| **Upstream Model**    | `agnes-image-2.0-flash`                                  |
+| **Input Format**      | JSON                                                     |
+| **Response Format**   | Base64                                                   |
+| **API Version**       | 1                                                        |
+| **Max Prompt Length** | 2048 characters                                          |
+| **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
+| **Output Size**       | exact `WxH`, sent verbatim                               |
+| **Aspect Ratios**     | not supported by the model                               |
+
+**Published sizes.** The provider docs give `1024x1024`, `1024x768`, and
+`768x1024` as examples without enumerating the set, and publish no width or
+height bounds. `limits` mirrors 2.5's 512-4096 and lists only those three
+sizes; both are declarations for the size picker and MCP `supported_sizes`,
+not upstream validation. Source:
+[`agnes-ai.com/en/docs/agnes-image-20-flash`](https://agnes-ai.com/en/docs/agnes-image-20-flash).
 ---
 
 ## Notes
