@@ -284,15 +284,26 @@ async function keyRow(db: AdminD1, keyId: number): Promise<KeyRow | null> {
     .first<KeyRow>();
 }
 
-async function providerExists(
+/** Registry transport for a provider row; null when the row is unknown. */
+async function providerTransport(
   db: AdminD1,
   providerId: string
-): Promise<boolean> {
+): Promise<string | null> {
   const row = await db
-    .prepare("SELECT 1 AS one FROM providers WHERE id = ?")
+    .prepare("SELECT transport FROM providers WHERE id = ?")
     .bind(providerId)
-    .first<{ one: number }>();
-  return row !== null;
+    .first<{ transport: string }>();
+  return row ? String(row["transport"]) : null;
+}
+
+/**
+ * Only cloudflare-rest addresses inference through /accounts/{id}/ai/run, so
+ * the account id is a field of that transport rather than of a provider name
+ * (ADR-002). Keying the server gate on the transport keeps it in step with
+ * the workbench, which already shows the field by transport.
+ */
+function transportNeedsAccountId(transport: string): boolean {
+  return transport === "cloudflare-rest";
 }
 
 function bumpWrite(): AdminWrite {
@@ -366,11 +377,12 @@ export async function addProviderKey(
     throw new AdminStoreError(400, "apiToken is required");
   }
   assertTokenLength(apiToken);
-  if (!(await providerExists(db, providerId))) {
+  const transport = await providerTransport(db, providerId);
+  if (transport === null) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
   const accountId = input.accountId !== undefined ? clean(input.accountId) : "";
-  if (providerId === "cloudflare" && accountId.length === 0) {
+  if (transportNeedsAccountId(transport) && accountId.length === 0) {
     throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
   const weight = input.weight !== undefined ? assertWeight(input.weight) : 1;
@@ -572,8 +584,9 @@ async function activeVersionOf(
  * Update a key: field edits (account id, weight, enabled) with optional
  * rotate-on-save, one transaction. A present token rides the same
  * revoke-before-insert ledger order as rotateProviderKey so a save can
- * never fork versions. The cloudflare account id is load-bearing for
- * inference, so a change that would leave it empty is rejected.
+ * never fork versions. The account id is load-bearing for the
+ * cloudflare-rest transport, so a change that would leave it empty is
+ * rejected for those keys.
  */
 export async function updateProviderKey(
   db: AdminD1,
@@ -588,7 +601,11 @@ export async function updateProviderKey(
     input.accountId !== undefined
       ? clean(input.accountId)
       : (key.external_account_id ?? "");
-  if (key.provider_id === "cloudflare" && accountId.length === 0) {
+  const transport = await providerTransport(db, key.provider_id);
+  if (transport === null) {
+    throw new AdminStoreError(400, `unknown provider '${key.provider_id}'`);
+  }
+  if (transportNeedsAccountId(transport) && accountId.length === 0) {
     throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
   const storedAccountId = accountId.length > 0 ? accountId : null;
