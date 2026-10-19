@@ -495,6 +495,31 @@ describe("the provider credentials workbench", () => {
     releaseSave!();
   });
 
+  it("locks the panel and says why when the credential payload cannot be read", async () => {
+    // An error the operator cannot see is not an error they can act on,
+    // and a panel that cannot read the credentials must not stay open
+    // with the management key in memory.
+    stubApi((route) =>
+      route.path === "/api/admin/health"
+        ? jsonResponse(
+            false,
+            { error: { message: "the pool is on fire" } },
+            500
+          )
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    expect(await screen.findByText("the pool is on fire")).toBeInTheDocument();
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+  });
+
   it("closes the panel and drops the cached payload when the operator locks", async () => {
     stubApi();
     const user = userEvent.setup();
