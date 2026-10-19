@@ -3,6 +3,8 @@
 // Responsive web UI for image generation
 // ============================================================================
 
+import { AGNES_LOGO_DATA_URI } from "../config/brand.js";
+
 export function getFrontendHTML(options?: {
   hasCredentials?: boolean;
 }): string {
@@ -68,6 +70,15 @@ export function getFrontendHTML(options?: {
         }
 
         .text-primary { color: var(--primary); }
+
+        /* Provider brand mark. Sized in em so it tracks the family name's
+           font-size, the way a Font Awesome glyph does. */
+        .family-mark {
+            width: 1.15em;
+            height: 1.15em;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
 
         @keyframes fade-in {
             from { opacity: 0; }
@@ -1316,11 +1327,21 @@ export function getFrontendHTML(options?: {
                 return !!family && family.transport === 'cloudflare-rest';
             }
 
-            // Cloudflare ships a brand mark in Font Awesome; Agnes does not, so
-            // its family gets a neutral glyph rather than a logo fetched from a
-            // third-party origin on every page load.
-            const FAMILY_ICONS = { cloudflare: 'fa-brands fa-cloudflare', agnes: 'fa-solid fa-wand-magic-sparkles' };
+            // Cloudflare ships a brand mark in Font Awesome. Agnes ships an
+            // app icon, inlined as a data URI so the workbench never fetches
+            // a third-party origin (see config/brand.ts).
+            const FAMILY_ICONS = { cloudflare: 'fa-brands fa-cloudflare' };
+            const FAMILY_LOGOS = { agnes: '${AGNES_LOGO_DATA_URI}' };
             function familyIcon(providerId) {
+                const logo = FAMILY_LOGOS[providerId];
+                if (logo) {
+                    const img = document.createElement('img');
+                    img.src = logo;
+                    img.alt = '';
+                    img.className = 'family-mark mr-2';
+                    img.setAttribute('aria-hidden', 'true');
+                    return img;
+                }
                 const className = FAMILY_ICONS[providerId];
                 if (!className) return null;
                 const icon = document.createElement('i');
