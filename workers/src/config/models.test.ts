@@ -232,11 +232,20 @@ describe("model registry validity", () => {
 describe("models.json source of truth", () => {
   // The field-by-field mirror tests that used to live here were retired along
   // with the hand-written registry. scripts/generate-models.mjs copies every
-  // key of every model verbatim and round-trips the printed literal back to
-  // the JSON it came from, and `npm run check` (CI + deploy) fails when
-  // models.generated.ts is stale. Together those cover strictly more than the
-  // mirror did: limits, min/max/step, provider, apiVersion, and the rest.
-  // What is left here are invariants of the JSON itself.
+  // key of every model verbatim, and `npm run check` (CI + deploy) fails when
+  // models.generated.ts is stale. This suite closes the remaining gap: the
+  // committed artifact is deep-compared to the JSON it was generated from, so
+  // a dropped, renamed, or mis-escaped field fails here. (`$comment` is the
+  // one key the generator converts to a source comment rather than data.)
+  test("the generated registry deep-equals models.json", () => {
+    const json = modelsJson as { models: Record<string, unknown> };
+    const expected = JSON.parse(JSON.stringify(json.models));
+    for (const model of Object.values(expected)) {
+      delete (model as Record<string, unknown>).$comment;
+    }
+    expect(MODEL_CONFIGS).toEqual(expected);
+  });
+
   test("every entry declares the transport that serves it (C4)", () => {
     // A missing or drifting inferenceProvider silently routes a model to the
     // wrong transport, which no other test observes, so the source of truth

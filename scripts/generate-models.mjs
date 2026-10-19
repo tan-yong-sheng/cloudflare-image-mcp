@@ -25,7 +25,6 @@
 //   node scripts/generate-models.mjs           # write the generated file
 //   node scripts/generate-models.mjs --check   # fail if it is stale
 
-import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,15 +55,20 @@ function isIdentifier(key) {
 }
 
 function renderKey(key) {
+  // `__proto__` would be a prototype setter in a `{ key: value }` literal,
+  // not an own property, so it must be computed.
+  if (key === "__proto__") return '["__proto__"]';
   return isIdentifier(key) ? key : JSON.stringify(key);
 }
 
 function renderScalar(value) {
   if (value === null) return "null";
   if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
+  if (typeof value === "number") {
+    // `String(-0)` is "0", which would not round-trip.
+    return Object.is(value, -0) ? "-0" : String(value);
   }
+  if (typeof value === "boolean") return String(value);
   throw new Error(`unsupported value type: ${typeof value}`);
 }
 
@@ -111,7 +115,10 @@ function renderEntry(key, value, indent, out) {
 
 function renderComment(text, indent, out) {
   const pad = "  ".repeat(indent);
-  for (const line of String(text).split("\n")) {
+  // A `//` comment ends at any JS line terminator, so a bare CR or a
+  // U+2028/U+2029 in the source text would start a new line and could inject
+  // code after the comment marker. Split on all of them.
+  for (const line of String(text).split(/\r\n|[\n\r\u2028\u2029]/)) {
     out.push((pad + "// " + line).trimEnd());
   }
 }
@@ -201,31 +208,17 @@ export function renderModelsFile(doc) {
   return lines.join("\n");
 }
 
-// The projection is only trustworthy if what it printed reads back as the JSON
-// it was printed from. The literal is data (no calls, no identifiers), so
-// evaluating it is the cheapest faithful check; `$comment` keys are the
-// documented exception because they become comments.
-function assertRoundTrip(literal, models) {
-  const parsed = new Function(`return (${literal});`)();
-  const expected = JSON.parse(JSON.stringify(models));
-  for (const model of Object.values(expected)) delete model[COMMENT_KEY];
-  assert.deepStrictEqual(
-    parsed,
-    expected,
-    "the generated registry does not round-trip to models.json"
-  );
-}
-
 function loadDocument() {
   const doc = JSON.parse(readFileSync(SOURCE, "utf8"));
   assertCommentPlacement(doc);
   return doc;
 }
 
+// Equivalence between the generated registry and models.json is asserted by
+// the test suite (workers/src/config/models.test.ts), which imports the real
+// committed artifact and deep-compares it to the JSON - no code execution.
 function generate() {
-  const doc = loadDocument();
-  assertRoundTrip(renderRegistryLiteral(doc.models), doc.models);
-  return renderModelsFile(doc);
+  return renderModelsFile(loadDocument());
 }
 
 function firstDifference(actual, expected) {
