@@ -31,7 +31,8 @@ the `agnes` provider through the admin UI (`/#admin`); the transport calls
 environment-variable fallback for this provider (ADR-001).
 
 Because 2.0 takes an exact canvas, it declares `sizeStrategy: "exact"`: the
-transport sends the requested `WxH` verbatim and withholds `ratio`, instead of
+transport sends the requested `WxH` (after the service clamps it to the
+model's bounds) and withholds `ratio`, instead of
 sending a resolution tier the way 2.1 and 2.5 require.
 
 ## Usage
@@ -86,7 +87,8 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 
 - `size` default `1024x1024`
 
-  Exact output size as `WxH`, sent upstream unchanged. No aspect-ratio
+  Exact output size as `WxH`, sent upstream after clamping to 512–4096.
+  No aspect-ratio
   parameter exists for this model.
 
 ### Output
@@ -114,6 +116,6 @@ docs give the field as "such as" these values:
 `limits.supportedSizes` in `workers/src/config/models.json` lists exactly
 these three, and `limits.minWidth`/`maxWidth`/`minHeight`/`maxHeight` mirror
 2.5's 512–4096 because 2.0 publishes none of its own. Both are declarations
-for the size picker and MCP `supported_sizes` — they are not upstream
-validation. Widening them requires the provider's own limits, which these
+for the size picker and MCP `supported_sizes`, and the service clamps to
+them before sending — they are not upstream validation. Widening them requires the provider's own limits, which these
 docs do not state.
