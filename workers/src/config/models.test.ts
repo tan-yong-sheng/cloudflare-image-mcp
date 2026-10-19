@@ -221,6 +221,23 @@ describe("models.json mirror", () => {
     }
   });
 
+  test("limits and sizeStrategy mirror the JSON source of truth", () => {
+    // The shipped mirror test compared ids, transport, and parameters but
+    // not the size contract: a limits edit (dimension bounds or the size
+    // picker's supportedSizes) or a stray sizeStrategy could drift from
+    // models.json and change what the UI offers without any test noticing.
+    const json = modelsJson as {
+      models: Record<
+        string,
+        { limits?: Record<string, unknown>; sizeStrategy?: string }
+      >;
+    };
+    for (const [id, jcfg] of Object.entries(json.models)) {
+      expect(MODEL_CONFIGS[id].limits).toEqual(jcfg.limits);
+      expect(MODEL_CONFIGS[id].sizeStrategy).toBe(jcfg.sizeStrategy);
+    }
+  });
+
   test("parameter metadata mirrors the JSON source of truth (#53)", () => {
     // listModels() exposes the parameter table to drive UI controls,
     // so descriptions, defaults, and key names must match the JSON:

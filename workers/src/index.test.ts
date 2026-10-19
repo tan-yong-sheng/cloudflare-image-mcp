@@ -68,6 +68,18 @@ describe("router public paths", () => {
     expect(html).toContain("modelSelect.innerHTML = ''");
     expect(html).not.toContain('value="">No models');
     expect(html).toContain("selectableModels === 0");
+    // A failed refetch drops the stale list instead of keeping options that
+    // may no longer be servable (the picker would otherwise offer a model the
+    // request path refuses), while the user's choice survives for the next
+    // successful load. Submit follows the same predicate, so an empty picker
+    // never sits under an enabled button.
+    expect(html).toContain("selectableModels = 0;");
+    expect(html).toContain(
+      "lastModelValue = modelSelect.value || lastModelValue;"
+    );
+    expect(html).toContain(
+      "submitButton.disabled = !credentialsConfigured || selectableModels === 0;"
+    );
   });
 
   test("login modal validates the key against an authenticated route", async () => {

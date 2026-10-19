@@ -234,9 +234,9 @@ describe("admin store against the real migrations (S2)", () => {
     expect(versionOf(db)).toBe(1);
   });
 
-  test("add requires an account id for cloudflare keys", async () => {
+  test("add requires an account id for cloudflare-rest keys", async () => {
     // Inference addresses /accounts/{account_id}/ai/run — the account id
-    // is load-bearing, so add refuses a cloudflare key without one.
+    // is load-bearing, so add refuses a cloudflare-rest key without one.
     const db = freshDb();
     await expect(
       addProviderKey(asD1(db), seal, {
@@ -246,6 +246,47 @@ describe("admin store against the real migrations (S2)", () => {
       })
     ).rejects.toMatchObject({ status: 400 });
     expect(versionOf(db)).toBe(1);
+  });
+
+  test("the account-id gate follows the transport, not the provider name", async () => {
+    // ADR-002: external_account_id belongs to cloudflare-rest. A second
+    // provider on that transport must require it, and a non-cloudflare-rest
+    // provider must not be forced to carry one.
+    const db = freshDb();
+    const d1 = asD1(db);
+    db.prepare(
+      "INSERT INTO providers (id, display_name, transport) VALUES (?, ?, ?)"
+    ).run("cf-eu", "Cloudflare EU", "cloudflare-rest");
+
+    await expect(
+      addProviderKey(d1, seal, {
+        providerId: "cf-eu",
+        label: "eu-no-acct",
+        apiToken: "t",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cf-eu",
+      label: "eu-acct",
+      apiToken: "t",
+      accountId: "acct-eu",
+    });
+    expect(added.providerId).toBe("cf-eu");
+
+    // The empty-account guard on update follows the same transport rule.
+    await expect(
+      updateProviderKey(d1, seal, { keyId: added.id, accountId: "" })
+    ).rejects.toMatchObject({ status: 400 });
+
+    // Agnes is openai-compat: no account id is part of its contract.
+    await expect(
+      addProviderKey(d1, seal, {
+        providerId: "agnes",
+        label: "agnes-no-acct",
+        apiToken: "t",
+      })
+    ).resolves.toMatchObject({ providerId: "agnes" });
   });
 
   test("disable parks the key, keeps the row, bumps, audits", async () => {

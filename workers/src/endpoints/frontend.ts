@@ -639,9 +639,15 @@ export function getFrontendHTML(options?: {
         // nothing until one does, so a blank select is the honest empty
         // state rather than a list of models that cannot run.
         let selectableModels = 0;
+        // Survives a failed refetch so a transient error does not also
+        // discard the model the user had picked.
+        let lastModelValue = '';
         function applyCredentialWarning() {
             noKeysWarning.classList.toggle('hidden', credentialsConfigured);
-            submitButton.disabled = !credentialsConfigured;
+            // No credentials, or no model the request path would accept:
+            // both leave generation impossible, so the button matches the
+            // disabled picker instead of looking actionable.
+            submitButton.disabled = !credentialsConfigured || selectableModels === 0;
             // Grey the model picker too: an unconfigured pool must not offer
             // a model the user then cannot generate with.
             modelSelect.disabled = !credentialsConfigured || selectableModels === 0;
@@ -786,7 +792,7 @@ export function getFrontendHTML(options?: {
                 const response = await fetch('/api/internal/models');
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 modelRegistry = await response.json();
-                const previous = modelSelect.value;
+                const previous = modelSelect.value || lastModelValue;
                 modelSelect.innerHTML = '';
                 // Prompt-only UI: image-to-image-only models have no
                 // input-image control, so exclude them (CodeRabbit + OCR).
@@ -808,9 +814,19 @@ export function getFrontendHTML(options?: {
                 if (previous && textModels.some((m) => m.id === previous)) {
                     modelSelect.value = previous;
                 }
+                lastModelValue = modelSelect.value;
+                modelError.classList.add('hidden');
                 applyCredentialWarning();
                 applyModelControls();
             } catch (error) {
+                // A failed refetch must not leave a stale list on screen: those
+                // options may no longer be servable, and offering one is how a
+                // blank-picker state ends up submitting anyway. Drop them and
+                // keep the choice for the next successful load.
+                lastModelValue = modelSelect.value || lastModelValue;
+                modelSelect.innerHTML = '';
+                selectableModels = 0;
+                applyCredentialWarning();
                 modelError.textContent = 'Could not load models: ' + (error instanceof Error ? error.message : String(error));
                 modelError.classList.remove('hidden');
             }
@@ -903,7 +919,10 @@ export function getFrontendHTML(options?: {
                 settled = true;
                 clearTimeout(abortTimer);
                 loadingOverlay.classList.add('hidden');
-                submitButton.disabled = !credentialsConfigured;
+                // Same predicate as the initial state: readiness and a
+                // selectable model, so a completed run cannot re-enable a
+                // picker that has since emptied.
+                applyCredentialWarning();
             };
             const imageFailed = () => {
                 finish();
