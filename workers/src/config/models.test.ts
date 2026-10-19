@@ -179,6 +179,22 @@ describe("model registry validity", () => {
       expect(entry.limits.minWidth).toBeLessThanOrEqual(entry.limits.maxWidth);
     }
   });
+
+  test("listModels carries the transport, not the author, that routing joins on", () => {
+    // Availability in /api/internal/models resolves credentials by
+    // inferenceProvider. `provider` names the model's author, so joining
+    // on it finds no pool for any @cf model — the picker would hide every
+    // model while generation still worked.
+    const listed = listModels();
+    expect(
+      Array.from(new Set(listed.map((m) => m.inferenceProvider))).sort()
+    ).toEqual(["cloudflare-rest", "openai-compat"]);
+    for (const entry of listed) {
+      expect(entry.inferenceProvider).toBe(
+        entry.id.startsWith("@cf/") ? "cloudflare-rest" : "openai-compat"
+      );
+    }
+  });
 });
 
 describe("models.json mirror", () => {

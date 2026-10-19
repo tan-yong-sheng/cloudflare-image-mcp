@@ -775,6 +775,10 @@ export function listModels(
   // Superset fields for service-side consumers (C3): the generator
   // projects its list from this registry instead of hand-writing one.
   provider: string;
+  // The transport key (ADR-002). It, not `provider`, is what routing
+  // resolves credentials by: `provider` names the model's author, so
+  // several of them share one transport.
+  inferenceProvider: string;
   supportedSizes: string[];
 }> {
   // R0: disabled models are absent from every listing surface.
@@ -790,6 +794,7 @@ export function listModels(
       parameters: config.parameters,
       limits: config.limits,
       provider: config.provider,
+      inferenceProvider: config.inferenceProvider,
       supportedSizes: config.limits.supportedSizes,
     }));
 }

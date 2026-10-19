@@ -635,19 +635,28 @@ export function getFrontendHTML(options?: {
         const modelSelect = document.getElementById('model');
 
         let credentialsConfigured = HAS_CREDENTIALS;
+        // Models whose provider holds a servable key. The picker offers
+        // nothing until one does, so a blank select is the honest empty
+        // state rather than a list of models that cannot run.
+        let selectableModels = 0;
         function applyCredentialWarning() {
             noKeysWarning.classList.toggle('hidden', credentialsConfigured);
             submitButton.disabled = !credentialsConfigured;
             // Grey the model picker too: an unconfigured pool must not offer
             // a model the user then cannot generate with.
-            modelSelect.disabled = !credentialsConfigured;
-            modelSelect.classList.toggle('opacity-60', !credentialsConfigured);
+            modelSelect.disabled = !credentialsConfigured || selectableModels === 0;
+            modelSelect.classList.toggle('opacity-60', modelSelect.disabled);
+            if (modelSelect.disabled) {
+                modelSelect.title = credentialsConfigured
+                    ? 'No model available for the configured keys'
+                    : 'No API keys configured';
+            } else {
+                modelSelect.removeAttribute('title');
+            }
             if (credentialsConfigured) {
                 submitButton.removeAttribute('title');
-                modelSelect.removeAttribute('title');
             } else {
                 submitButton.title = 'No API keys configured';
-                modelSelect.title = 'No API keys configured';
             }
         }
         function setCredentialsConfigured(hasCredentials) {
@@ -777,11 +786,15 @@ export function getFrontendHTML(options?: {
                 const response = await fetch('/api/internal/models');
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 modelRegistry = await response.json();
+                const previous = modelSelect.value;
                 modelSelect.innerHTML = '';
                 // Prompt-only UI: image-to-image-only models have no
                 // input-image control, so exclude them (CodeRabbit + OCR).
+                // Also exclude models whose provider has no servable key:
+                // the available flag is the routing predicate, so the
+                // picker can never offer a model the request path refuses.
                 const textModels = modelRegistry.filter((m) =>
-                    (m.taskTypes || []).includes('text-to-image')
+                    (m.taskTypes || []).includes('text-to-image') && m.available === true
                 );
                 for (const m of textModels) {
                     const option = document.createElement('option');
@@ -789,6 +802,13 @@ export function getFrontendHTML(options?: {
                     option.textContent = m.id;
                     modelSelect.appendChild(option);
                 }
+                selectableModels = textModels.length;
+                // Keep the user's choice across a reload (adding a key
+                // refetches this list); it only moves if it is gone.
+                if (previous && textModels.some((m) => m.id === previous)) {
+                    modelSelect.value = previous;
+                }
+                applyCredentialWarning();
                 applyModelControls();
             } catch (error) {
                 modelError.textContent = 'Could not load models: ' + (error instanceof Error ? error.message : String(error));
@@ -1230,6 +1250,10 @@ export function getFrontendHTML(options?: {
                 // predicate the pool uses (enabled, weighted, envelope
                 // opens), so the warning cannot disagree with generation.
                 setCredentialsConfigured(health.hasServableCredential === true);
+                // Key mutations land here, and they change which providers
+                // can serve, so the model list is refetched with the same
+                // freshness as the health read it came from.
+                loadModels();
                 if (!selected || !providers.some((p) => p.id === selected)) {
                     selected = providers.length ? providers[0].id : '';
                 }
