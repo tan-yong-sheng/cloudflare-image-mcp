@@ -205,8 +205,11 @@ or logout — never persisted.
   `accountId`, `weight`, `enabled`. The token is sealed
   server-side with `PROVIDER_DATA_KEY`; the response echoes identity only
   (`id`, `label`, `providerId`, `activeVersion`). Duplicate labels fail
-  with 409; unknown providers with 400. Cloudflare keys require
-  `accountId` (inference addresses `/accounts/{account_id}/ai/run`).
+  with 409; unknown providers with 400. A key whose provider row declares
+  `transport: "cloudflare-rest"` requires `accountId` (inference addresses
+  `/accounts/{account_id}/ai/run`); the gate follows the transport, not the
+  provider name. `GET /api/admin/health` reports each provider's
+  `transport` in `providers[]`.
   `providerId` rides on every write, so a second provider needs no API
   change — the catalog seeds `"cloudflare"` (migration 0001) and `"agnes"`
   (migration 0005). Each `providers` row names its seam by protocol in

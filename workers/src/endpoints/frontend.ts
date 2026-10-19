@@ -642,12 +642,21 @@ export function getFrontendHTML(options?: {
         // Survives a failed refetch so a transient error does not also
         // discard the model the user had picked.
         let lastModelValue = '';
+        // Sequence token for loadModels: a health render can start a second
+        // refetch while the first is in flight, and the older response must
+        // not overwrite the newer list.
+        let modelRequest = 0;
+        // A generation in flight keeps Submit disabled: render(health) reruns
+        // the predicate below, and without this a health refetch arriving
+        // mid-request would re-enable the button and allow a duplicate POST.
+        let inFlight = false;
         function applyCredentialWarning() {
             noKeysWarning.classList.toggle('hidden', credentialsConfigured);
             // No credentials, or no model the request path would accept:
             // both leave generation impossible, so the button matches the
             // disabled picker instead of looking actionable.
-            submitButton.disabled = !credentialsConfigured || selectableModels === 0;
+            submitButton.disabled =
+                inFlight || !credentialsConfigured || selectableModels === 0;
             // Grey the model picker too: an unconfigured pool must not offer
             // a model the user then cannot generate with.
             modelSelect.disabled = !credentialsConfigured || selectableModels === 0;
@@ -755,9 +764,11 @@ export function getFrontendHTML(options?: {
             const params = config.parameters || {};
             const limits = config.limits || {};
             const has = (key) => params[key] !== undefined;
-            // Size sliders need width+height params; steps needs steps or
-            // num_steps (backend parses both, payload maps via cfParam).
-            const showSize = has('width') && has('height');
+            // Size control: width+height models drive it from their bounds,
+            // and Agnes models declare a single size parameter instead
+            // (2.0 takes an exact WxH, 2.5/2.1 a tier-mapped WxH), so the
+            // same select serves both shapes.
+            const showSize = (has('width') && has('height')) || has('size');
             const showSteps = has('steps') || has('num_steps');
             const showGuidance = has('guidance');
             const showNegative = has('negative_prompt');
@@ -788,10 +799,12 @@ export function getFrontendHTML(options?: {
         }
 
         async function loadModels() {
+            const request = ++modelRequest;
             try {
                 const response = await fetch('/api/internal/models');
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 modelRegistry = await response.json();
+                if (request !== modelRequest) return;
                 const previous = modelSelect.value || lastModelValue;
                 modelSelect.innerHTML = '';
                 // Prompt-only UI: image-to-image-only models have no
@@ -819,6 +832,8 @@ export function getFrontendHTML(options?: {
                 applyCredentialWarning();
                 applyModelControls();
             } catch (error) {
+                // A newer refetch already owns the list and the error line.
+                if (request !== modelRequest) return;
                 // A failed refetch must not leave a stale list on screen: those
                 // options may no longer be servable, and offering one is how a
                 // blank-picker state ends up submitting anyway. Drop them and
@@ -840,6 +855,12 @@ export function getFrontendHTML(options?: {
 
         // Generate image
         submitButton.addEventListener('click', async () => {
+            // The button may be disabled by the time the click handler fires
+            // (e.g. the DOM shim in tests calls listeners regardless of
+            // disabled, and a browser that queued the event before the flag
+            // flipped is equivalent). Guard here so a mid-flight click does
+            // not start a second generation request.
+            if (submitButton.disabled) return;
             const model = modelSelect.value;
             const prompt = document.getElementById('prompt').value;
             const config = currentModelConfig();
@@ -851,7 +872,7 @@ export function getFrontendHTML(options?: {
             // declared key, not the UI alias (OCR: steps was still dead
             // on SDXL/Leonardo).
             const body = { model: model, prompt: prompt, n: parseInt(document.getElementById('n').value) };
-            if (has('width') && has('height')) {
+            if ((has('width') && has('height')) || has('size')) {
                 body.size = document.getElementById('size').value;
             }
             if (has('num_steps')) {
@@ -900,6 +921,7 @@ export function getFrontendHTML(options?: {
             }
             document.getElementById('usedModel').textContent = '…';
             document.getElementById('generationTime').textContent = '…';
+            inFlight = true;
             submitButton.disabled = true;
             loadingOverlay.classList.remove('hidden');
 
@@ -917,6 +939,7 @@ export function getFrontendHTML(options?: {
             let settled = false;
             const finish = () => {
                 settled = true;
+                inFlight = false;
                 clearTimeout(abortTimer);
                 loadingOverlay.classList.add('hidden');
                 // Same predicate as the initial state: readiness and a

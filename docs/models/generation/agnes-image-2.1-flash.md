@@ -109,7 +109,10 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 | 3K   | 3072²  | 3936x2208 | 2208x3936 | 2592x3456 | 3456x2592 | 2496x3744 | 3744x2496 | 4704x2016 |
 | 4K   | 4096²  | 5248x2944 | 2944x5248 | 3456x4608 | 4608x3456 | 3328x4992 | 4992x3328 | 6272x2688 |
 
-Any requested `WxH` is accepted and normalized to the nearest tier and
-aspect ratio; the transport sends that tier and ratio, and the table lists
-the dimensions the provider publishes for each combination (agnes-ai.com/
+Any requested `WxH` is clamped to `limits` (512–4096 per side) and then
+normalized to the nearest tier and aspect ratio; the transport sends that
+tier and ratio. The table is the provider's published matrix, so a cell
+wider or taller than 4096 cannot be requested exactly through this
+integration — the clamped size maps to a nearby tier and ratio, and the
+picker/MCP `supported_sizes` offer the `supportedSizes` subset (agnes-ai.com/
 en/docs/agnes-image-21-flash, "Size and Ratio").

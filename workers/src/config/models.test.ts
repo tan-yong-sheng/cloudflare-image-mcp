@@ -221,21 +221,35 @@ describe("models.json mirror", () => {
     }
   });
 
-  test("limits and sizeStrategy mirror the JSON source of truth", () => {
-    // The shipped mirror test compared ids, transport, and parameters but
-    // not the size contract: a limits edit (dimension bounds or the size
-    // picker's supportedSizes) or a stray sizeStrategy could drift from
-    // models.json and change what the UI offers without any test noticing.
+  test("every JSON field mirrors the registry", () => {
+    // The earlier mirror test compared ids, transport, parameters, limits,
+    // and sizeStrategy only, which left name/description/apiVersion/
+    // inputFormat/responseFormat/supportedTasks/maxInputImages free to
+    // drift. Compare every JSON field both ways so a data edit cannot
+    // change what the API or the picker offers without this test failing.
     const json = modelsJson as {
-      models: Record<
-        string,
-        { limits?: Record<string, unknown>; sizeStrategy?: string }
-      >;
+      models: Record<string, Record<string, unknown>>;
     };
+    const drift: string[] = [];
     for (const [id, jcfg] of Object.entries(json.models)) {
-      expect(MODEL_CONFIGS[id].limits).toEqual(jcfg.limits);
-      expect(MODEL_CONFIGS[id].sizeStrategy).toBe(jcfg.sizeStrategy);
+      const tcfg = MODEL_CONFIGS[id] as unknown as Record<string, unknown>;
+      if (!tcfg) {
+        drift.push(`${id}: missing in models.ts`);
+        continue;
+      }
+      for (const [key, jval] of Object.entries(jcfg)) {
+        if (key === "$comment") continue;
+        if (JSON.stringify(tcfg[key]) !== JSON.stringify(jval)) {
+          drift.push(
+            `${id}.${key}: ts=${JSON.stringify(tcfg[key])} json=${JSON.stringify(jval)}`
+          );
+        }
+      }
+      for (const key of Object.keys(tcfg)) {
+        if (!(key in jcfg)) drift.push(`${id}.${key}: only in models.ts`);
+      }
     }
+    expect(drift).toEqual([]);
   });
 
   test("parameter metadata mirrors the JSON source of truth (#53)", () => {
