@@ -91,8 +91,12 @@ describe("the client shell", () => {
       expect(document.getElementById("loginModal")).toBeNull()
     );
     expect(window.sessionStorage.getItem("api_key")).toBe("secret-key");
-    const call = fetchMock.mock.calls[0];
-    expect(call[0]).toBe("/v1/models");
+    // The key is validated against an authenticated route. The registry
+    // read is public and may come first, so ask whether the key was
+    // sent, not what was sent first.
+    expect(
+      fetchMock.mock.calls.some((call) => String(call[0]) === "/v1/models")
+    ).toBe(true);
   });
 
   it("keeps the prompt up and explains itself when the key is refused", async () => {
