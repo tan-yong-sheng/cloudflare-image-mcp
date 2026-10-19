@@ -11,6 +11,11 @@ export type Route = "generator" | "admin";
  * document, so a static asset can serve all of them. The `/admin` path
  * is still honoured, so an operator who bookmarked it lands in the
  * workbench.
+ *
+ * The path only decides the route on the way in. Once the shell has
+ * adopted the fragment, the hash alone owns the route — otherwise the
+ * path would keep pinning the workbench open and the Back button, which
+ * clears the hash, could never leave it.
  */
 export function parseRoute(hash: string, pathname = ""): Route {
   if (hash.replace(/^#/, "").startsWith("admin")) return "admin";
@@ -24,15 +29,17 @@ export function useHashRoute(): Route {
   );
 
   useEffect(() => {
-    // `/admin` is an entry alias, not a route the app owns: the hash
-    // owns the route. The path is normalised away at startup, or it
-    // pins the workbench open — the Back button would not change the
-    // hash, so nothing would change the route either.
-    if (window.location.pathname.replace(/\/+$/, "") === "/admin") {
-      window.history.replaceState(null, "", "/#admin");
+    // The legacy shell adopted the fragment on the `/admin` path and
+    // routed on the hash alone from then on. Keep that: the path stays
+    // the workbench's addressable path, and the hash becomes the single
+    // source of the route, so Back can leave the workbench.
+    if (
+      window.location.pathname.replace(/\/+$/, "") === "/admin" &&
+      window.location.hash !== "#admin"
+    ) {
+      window.history.replaceState(null, "", "/admin#admin");
     }
-    const onHashChange = () =>
-      setRoute(parseRoute(window.location.hash, window.location.pathname));
+    const onHashChange = () => setRoute(parseRoute(window.location.hash));
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);

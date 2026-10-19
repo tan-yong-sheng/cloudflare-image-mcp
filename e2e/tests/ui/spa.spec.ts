@@ -194,6 +194,22 @@ test.describe("SPA shell", () => {
     await expect(page.locator("#generatorView")).toBeVisible();
     await expect(page.locator("#adminView")).toHaveCount(0);
   });
+
+  test("signing in on the /admin path lands in the workbench", async ({
+    page,
+  }) => {
+    // The legacy reacted to an auth change, not to the first render,
+    // so an operator who opened `/admin` before signing in landed in
+    // the workbench once they did.
+    await page.goto("/admin");
+    await expect(page.locator("#loginModal")).toBeVisible();
+    await page.fill("#password", apiKey());
+    await page.click("#loginButton");
+
+    await expect(page.locator("#loginModal")).toHaveCount(0);
+    await expect(page.locator("#adminView")).toBeVisible();
+    await expect(page.locator("#generatorView")).toHaveCount(0);
+  });
 });
 
 test.describe("Playground", () => {
