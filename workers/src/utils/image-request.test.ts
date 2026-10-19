@@ -32,7 +32,7 @@ const VARIATION_CONFIG: CollectConfig = {
 
 const GENERATION_CONFIG: CollectConfig = {
   defaultModel: "@cf/black-forest-labs/flux-1-schnell",
-  params: ["size", "steps", "seed", "guidance", "negative_prompt"],
+  params: ["size", "steps", "num_steps", "seed", "guidance", "negative_prompt"],
   imageKeys: [],
   includePrompt: true,
 };
@@ -125,8 +125,19 @@ describe("collectInputImages from JSON", () => {
     expect(collected.imageDataArr).toEqual(["aGVsbG8="]);
     expect(collected.prompt).toBe("p");
   });
-});
 
+  test("collects the num_steps spelling of the step count", async () => {
+    // SDXL-family models declare the step count as `num_steps`; the
+    // client sends that name, so it must survive collection.
+    const request = jsonRequest("/v1/images/generations", {
+      prompt: "a cyberpunk cat",
+      num_steps: 7,
+    });
+
+    const collected = await collectInputImages(request, GENERATION_CONFIG);
+    expect(collected.explicitParams).toEqual({ num_steps: 7 });
+  });
+});
 describe("collectInputImages from multipart", () => {
   test("gathers Files, image[] fields, string entries, mask, coerced params", async () => {
     const formData = new FormData();
@@ -165,6 +176,33 @@ describe("collectInputImages from multipart", () => {
         strength: 0.5,
       },
     });
+  });
+
+  test("collects num_steps from a multipart form as an integer", async () => {
+    const formData = new FormData();
+    formData.append("prompt", "a cyberpunk cat");
+    formData.append("num_steps", "7");
+    const request = new Request("https://worker.test/v1/images/generations", {
+      method: "POST",
+      body: formData,
+    });
+
+    const collected = await collectInputImages(request, GENERATION_CONFIG);
+    expect(collected.explicitParams).toEqual({ num_steps: 7 });
+  });
+
+  test("rejects a num_steps form field that is not an integer", async () => {
+    const formData = new FormData();
+    formData.append("prompt", "a cyberpunk cat");
+    formData.append("num_steps", "7junk");
+    const request = new Request("https://worker.test/v1/images/generations", {
+      method: "POST",
+      body: formData,
+    });
+
+    await expect(
+      collectInputImages(request, GENERATION_CONFIG)
+    ).rejects.toThrow("Invalid num_steps");
   });
 
   test("ignores empty entries and falls back to model/n defaults", async () => {

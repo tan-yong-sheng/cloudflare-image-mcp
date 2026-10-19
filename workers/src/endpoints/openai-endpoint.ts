@@ -27,14 +27,25 @@ import {
 const GENERATIONS_CONFIG: CollectConfig = {
   // R0: configured default replaces the hardcoded id.
   defaultModel: DEFAULT_MODEL,
-  params: ["size", "steps", "seed", "guidance", "negative_prompt"],
+  // `num_steps` is the SDXL-family spelling of the step count. The
+  // client sends the name the model declares, so both must be
+  // collected or the control is dead on those models.
+  params: ["size", "steps", "num_steps", "seed", "guidance", "negative_prompt"],
   imageKeys: [],
   includePrompt: true,
 };
 
 const EDITS_CONFIG: CollectConfig = {
   defaultModel: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
-  params: ["size", "steps", "seed", "guidance", "negative_prompt", "strength"],
+  params: [
+    "size",
+    "steps",
+    "num_steps",
+    "seed",
+    "guidance",
+    "negative_prompt",
+    "strength",
+  ],
   imageKeys: ["image", "image_b64"],
   maskKeys: ["mask", "mask_b64"],
   includeMask: true,
@@ -43,7 +54,7 @@ const EDITS_CONFIG: CollectConfig = {
 
 const VARIATIONS_CONFIG: CollectConfig = {
   defaultModel: "@cf/black-forest-labs/flux-2-klein-4b",
-  params: ["size", "steps", "seed", "strength"],
+  params: ["size", "steps", "num_steps", "seed", "strength"],
   imageKeys: ["image"],
   // Default strength for variations (more faithful to original)
   defaults: { strength: 0.7 },

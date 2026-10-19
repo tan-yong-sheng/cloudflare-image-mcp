@@ -14,6 +14,7 @@ import {
   FIXTURE_PNG_B64,
   fakeEnv,
   fakePools,
+  firstProviderBody,
   stubInference,
 } from "../test-utils/fixtures.js";
 
@@ -163,6 +164,46 @@ describe("POST /v1/images/generations contract", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(new URL(body.data[0].url).pathname).toMatch(/^\/images\//);
+  });
+
+  test("the declared step count reaches the provider for a num_steps model", async () => {
+    // SDXL-family models declare the step count as `num_steps`. The
+    // control must not be dead: the provider has to receive the value.
+    const fetchMock = stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+
+    const res = await endpoint.handle(
+      post("/v1/images/generations", {
+        prompt: "a star",
+        model: SDXL,
+        num_steps: 7,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(firstProviderBody(fetchMock)).toMatchObject({
+      prompt: "a star",
+      num_steps: 7,
+    });
+  });
+
+  test("the step count reaches the provider for a steps model", async () => {
+    const fetchMock = stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+
+    const res = await endpoint.handle(
+      post("/v1/images/generations", {
+        prompt: "a beach",
+        model: SCHNELL,
+        steps: 5,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(firstProviderBody(fetchMock)).toMatchObject({
+      prompt: "a beach",
+      steps: 5,
+    });
   });
 
   test("CORS header present on generation response", async () => {

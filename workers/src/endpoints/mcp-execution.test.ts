@@ -10,7 +10,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { handleRunModel, type ToolsContext } from "./mcp-tools.js";
 import { ImageGeneratorService } from "../services/image-generator.js";
-import { fakeEnv, fakePools, stubInference } from "../test-utils/fixtures.js";
+import {
+  fakeEnv,
+  fakePools,
+  firstProviderBody,
+  stubInference,
+} from "../test-utils/fixtures.js";
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
 const BASE_URL = "https://worker.test";
@@ -68,5 +73,34 @@ describe("handleRunModel execution: generations", () => {
     const matches = result.content[0].text.match(/!\[.*?\]\(.*?\)/g);
     expect(matches).not.toBeNull();
     expect(matches!).toHaveLength(2);
+  });
+
+  test("run_model sends the declared step count for a num_steps model", async () => {
+    // The MCP tool is the second entry point for the step count. A
+    // model that declares `num_steps` must receive it under that name.
+    const fetchMock = stubInference("json");
+    const context: ToolsContext = {
+      generator: new ImageGeneratorService(fakeEnv(), {
+        pools: fakePools(),
+      }) as unknown as ToolsContext["generator"],
+      baseUrl: BASE_URL,
+    };
+
+    const result = await handleRunModel(
+      context,
+      {
+        taskType: "generations",
+        prompt: "A bright red apple",
+        model_id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+        cf_params: { num_steps: 7 },
+      },
+      null
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(firstProviderBody(fetchMock)).toMatchObject({
+      prompt: "A bright red apple",
+      num_steps: 7,
+    });
   });
 });

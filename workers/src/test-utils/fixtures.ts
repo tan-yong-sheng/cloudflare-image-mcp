@@ -56,16 +56,28 @@ function binaryImageResponse(): Response {
  * no-network.ts setup guard still fails any test that forgets to call it.
  */
 export function stubInference(shape: "json" | "binary" = "json") {
-  const respond =
+  const respond = async (
+    _input: RequestInfo | URL,
+    _init?: RequestInit
+  ): Promise<Response> =>
     shape === "binary"
-      ? async () => binaryImageResponse()
-      : async () =>
-          Response.json(jsonEnvelopeImage(), {
-            headers: { "Content-Type": "application/json" },
-          });
+      ? binaryImageResponse()
+      : Response.json(jsonEnvelopeImage(), {
+          headers: { "Content-Type": "application/json" },
+        });
   const mock = vi.fn(respond);
   vi.stubGlobal("fetch", mock);
   return mock;
+}
+
+/**
+ * The parsed body of the first outbound inference call. This is the
+ * provider request: the seam that proves a control reaches the model.
+ */
+export function firstProviderBody(mock: {
+  mock: { calls: [unknown, RequestInit?][] };
+}): Record<string, any> {
+  return JSON.parse(String(mock.mock.calls[0]?.[1]?.body ?? "{}"));
 }
 
 /** Minimal in-memory R2Bucket: put/get round-trip, delete/list for cleanup. */

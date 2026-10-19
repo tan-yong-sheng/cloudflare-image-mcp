@@ -36,6 +36,36 @@ const fluxConfig: ModelConfig = {
   },
 };
 
+/** A model whose only output-size parameter is the WxH `size` string (Agnes). */
+function sizeOnlyConfig(): typeof fluxConfig {
+  return {
+    ...fluxConfig,
+    parameters: {
+      prompt: { cfParam: "prompt", type: "string", required: true },
+      size: { cfParam: "size", type: "string", default: "512x512" },
+    },
+  };
+}
+
+/** A model that declares its step count as `num_steps` (SDXL family). */
+function numStepsConfig(): typeof fluxConfig {
+  return {
+    ...fluxConfig,
+    id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    parameters: {
+      prompt: { cfParam: "prompt", type: "string", required: true },
+      num_steps: {
+        cfParam: "num_steps",
+        type: "integer",
+        default: 20,
+        min: 1,
+        max: 20,
+      },
+    },
+    limits: { ...fluxConfig.limits, defaultSteps: 20, maxSteps: 20 },
+  };
+}
+
 describe("ParamParser.parse with string input", () => {
   test("plain prompt carries through with rawPrompt preserved", () => {
     const result = ParamParser.parse("a cyberpunk cat");
@@ -206,6 +236,45 @@ describe("ParamParser.buildPayload (C1)", () => {
     const { payload, dropped } = ParamParser.buildPayload(params, fluxConfig);
     expect(payload).toEqual({ prompt: "cat" });
     expect(dropped).toEqual(["size"]);
+  });
+
+  test("the step count reaches a model that declares num_steps", () => {
+    // The parser normalizes both spellings into `steps`; the payload
+    // has to restore the name the model declares.
+    const params = ParamParser.parse("cat", { num_steps: 7 }, numStepsConfig());
+    const { payload, dropped } = ParamParser.buildPayload(
+      params,
+      numStepsConfig()
+    );
+    expect(payload).toEqual({ prompt: "cat", num_steps: 7 });
+    expect(dropped).toEqual([]);
+  });
+
+  test("the steps alias also reaches a model that declares num_steps", () => {
+    const params = ParamParser.parse("cat", { steps: 7 }, numStepsConfig());
+    const { payload, dropped } = ParamParser.buildPayload(
+      params,
+      numStepsConfig()
+    );
+    expect(payload).toEqual({ prompt: "cat", num_steps: 7 });
+    expect(dropped).toEqual([]);
+  });
+
+  test("the step count reaches a model that declares steps", () => {
+    const params = ParamParser.parse("cat", { num_steps: 6 }, fluxConfig);
+    const { payload, dropped } = ParamParser.buildPayload(params, fluxConfig);
+    expect(payload).toEqual({ prompt: "cat", steps: 6 });
+    expect(dropped).toEqual([]);
+  });
+
+  test("a model that declares no step count still reports steps as dropped", () => {
+    const params = ParamParser.parse("cat", { steps: 6 }, sizeOnlyConfig());
+    const { payload, dropped } = ParamParser.buildPayload(
+      params,
+      sizeOnlyConfig()
+    );
+    expect(payload).toEqual({ prompt: "cat" });
+    expect(dropped).toEqual(["steps"]);
   });
 });
 
