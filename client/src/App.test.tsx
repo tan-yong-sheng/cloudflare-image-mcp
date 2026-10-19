@@ -175,6 +175,30 @@ describe("the client shell", () => {
     expect(document.getElementById("adminView")).toBeNull();
   });
 
+  it("keeps the workbench when the operator signs in on the /admin path", async () => {
+    // The legacy shell reacted to an auth change, not to the first
+    // render: an operator who opened `/admin` before signing in landed
+    // in the workbench once they did.
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/admin");
+    stubFetch(() => jsonResponse(true, { object: "list", data: [] }));
+    render(<App />);
+
+    expect(document.getElementById("loginModal")).not.toBeNull();
+
+    await user.type(
+      screen.getByLabelText(/Password \/ API Key/i),
+      "secret-key"
+    );
+    await user.click(screen.getByRole("button", { name: /^Login$/i }));
+
+    await waitFor(() =>
+      expect(document.getElementById("loginModal")).toBeNull()
+    );
+    expect(document.getElementById("adminView")).not.toBeNull();
+    expect(document.getElementById("generatorView")).toBeNull();
+  });
+
   it("shows the generator by default", () => {
     stubFetch(() => jsonResponse(true, { data: [] }));
     render(<App />);

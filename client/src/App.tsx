@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { AdminView } from "./components/Workbench/AdminView";
 import { LoginDialog } from "./components/Auth/LoginDialog";
@@ -31,13 +31,20 @@ function AppShell() {
   // Signing out ends the admin session too: the management key must not
   // outlive the operator's own session, and the workbench is a surface
   // only a signed-in operator may open.
+  //
+  // The route is left alone until the operator actually signs out. The
+  // legacy shell reacted to an auth change, not to the first render, so
+  // an operator who opened `/admin` before signing in landed in the
+  // workbench once they did.
+  const wasAuthenticated = useRef(isAuthenticated);
   useEffect(() => {
     if (!isAuthenticated) {
       lock();
-      if (window.location.hash === "#admin") {
+      if (wasAuthenticated.current && window.location.hash === "#admin") {
         window.location.hash = "";
       }
     }
+    wasAuthenticated.current = isAuthenticated;
   }, [isAuthenticated, lock]);
 
   // Leaving the workbench ends the admin session as well. The legacy
