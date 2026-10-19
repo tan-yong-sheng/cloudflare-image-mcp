@@ -51,9 +51,11 @@ Click **New repository secret** and add `CLOUDFLARE_ACCOUNT_ID` (required) and
 `D1_DATABASE_ID` is also required for deploy, but it is **environment-scoped**, not
 repository-scoped — see Step 3b.
 
-**Note on `API_KEYS`**: if set, all OpenAI API endpoints, MCP endpoints, and the
-web frontend require `Authorization: Bearer <key>`. The frontend prompts for the
-key in a login modal and sends it as a Bearer header.
+**Note on `API_KEYS`**: if set, all OpenAI API endpoints and MCP endpoints
+require `Authorization: Bearer <key>`. The client prompts for the key in a
+login modal and sends it as a Bearer header. The client itself — the document
+and the files under `/assets/` — is public: every browser downloads it, so the
+auth gate covers the API routes, not the build output.
 
 ---
 

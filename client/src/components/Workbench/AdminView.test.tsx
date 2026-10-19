@@ -757,4 +757,124 @@ describe("the provider credentials workbench", () => {
     releases.get("1")?.();
     releases.get("2")?.();
   });
+
+  it("does not clear a panel error with a late answer from a dismissed drawer", async () => {
+    // The panel error belongs to the panel. A drawer the operator has
+    // already dismissed has nothing to say about it, so its late
+    // answer must not wipe a message the operator is reading.
+    let releaseSave: (() => void) | null = null;
+    const deferred = new Promise<Response>((resolve) => {
+      releaseSave = () => resolve(jsonResponse(true, {}));
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        const method = init?.method ?? "GET";
+        if (path === "/api/admin/keys" && method === "POST") return deferred;
+        if (path.endsWith("/delete")) {
+          return jsonResponse(
+            false,
+            { error: { message: "Delete failed." } },
+            500
+          );
+        }
+        if (path === "/api/admin/health") return jsonResponse(true, HEALTH);
+        if (path === "/api/internal/models") return jsonResponse(true, []);
+        return jsonResponse(true, {});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    // The add request goes out and waits.
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    // The operator dismisses the drawer and deletes a key instead.
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).toBeNull()
+    );
+    await user.click(screen.getByRole("button", { name: /Delete key #1/i }));
+
+    // The delete fails, so the panel says why.
+    await waitFor(() =>
+      expect(document.getElementById("adminPanelError")?.textContent).toContain(
+        "Delete failed."
+      )
+    );
+
+    // The add answers late.
+    releaseSave!();
+    const healthCalls = () =>
+      fetchMock.mock.calls.filter(
+        (call) => String(call[0]) === "/api/admin/health"
+      ).length;
+    const before = healthCalls();
+    await waitFor(() => expect(healthCalls()).toBeGreaterThan(before));
+
+    // The message the operator is reading is still there.
+    expect(document.getElementById("adminPanelError")?.textContent).toContain(
+      "Delete failed."
+    );
+  });
+
+  it("shows the server's reason when the admin gate is disabled", async () => {
+    // A disabled admin gate is not the operator's key being wrong, so
+    // the server's own reason is shown when it says which it was.
+    stubApi((route) =>
+      route.path === "/api/admin/health"
+        ? jsonResponse(
+            false,
+            {
+              error: {
+                message: "Admin API is disabled.",
+                code: "admin_disabled",
+              },
+            },
+            403
+          )
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    expect(
+      await screen.findByText("Admin API is disabled.")
+    ).toBeInTheDocument();
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("ends the session when the credential payload is refused", async () => {
+    // A 401 means the bearer key is no longer accepted, so the whole
+    // session is over and the operator has to sign in again.
+    stubApi((route) =>
+      route.path === "/api/admin/health"
+        ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    expect(await screen.findByText(/Session expired/i)).toBeInTheDocument();
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+  });
 });

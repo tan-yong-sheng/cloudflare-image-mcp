@@ -73,7 +73,10 @@ jobs:
         # The whole client tree is new, so a blanket check is affordable
         # here; the workers tree predates the repo formatter config and
         # keeps its scoped check.
-        run: npx prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
+        # --no-install: prettier is a pinned dev dependency of this
+        # package, so the gate uses the version in the lockfile instead
+        # of fetching whatever npx considers current.
+        run: npx --no-install prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
 
       - name: Format check
         working-directory: workers

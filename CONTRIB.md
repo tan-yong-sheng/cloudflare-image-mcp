@@ -132,14 +132,22 @@ mints the tag automatically (never hand-tag). Full procedure:
 Unit tests are pure logic, run from the repo root with no backend needed:
 
 ```bash
-npm run test:unit # 301 vitest cases in workers/ (~2s)
+npm --prefix workers ci # once per checkout
+npm --prefix client ci  # once per checkout
+npm run test:unit       # both suites (~5s)
 ```
 
 Derivation of that count: every `*.test.ts` under `workers/src` — registry +
 JSON mirror, MCP handler/tool/SDK suites, generator service, auth gate, param
-parser, R2 storage, utilities, and the D1 provider-schema suites. It moves
+parser, R2 storage, utilities, and the D1 provider-schema suites — plus every
+`*.test.ts` and `*.test.tsx` under `client/src` — the React client's
+workbench, generator, API clients, theme, routing, and build layout. It moves
 whenever a suite or case is added or removed; `npm run test:unit` prints the
-authoritative number, so treat the comment as a rough scale indicator only.
+authoritative numbers, so treat a count as a rough scale indicator only.
+
+`npm run test:unit:workers` and `npm run test:unit:client` run one suite
+each. The client is a separate package with its own lockfile, so it needs
+its own `npm ci`.
 
 E2E tests run against Workers environments.
 

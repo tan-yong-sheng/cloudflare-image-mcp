@@ -73,8 +73,12 @@ export function AdminView() {
     const failure = health.error;
     if (failure instanceof AdminApiError && failure.status === 401) {
       // The bearer key is no longer accepted, so the whole session is
-      // over, not just the admin half of it.
+      // over, not just the admin half of it. The workbench ends its own
+      // session here rather than relying on the shell to notice the
+      // sign-out: the management key must not outlive the session that
+      // carried it.
       logout();
+      lock();
       setGateError("Session expired. Please sign in again.");
       return;
     }
@@ -155,8 +159,13 @@ export function AdminView() {
           enabled: values.enabled,
         });
       }
-      setPanelError(null);
-      if (sheetRef.current === submitted) setSheet(null);
+      // The panel error belongs to the panel, not to this drawer. A
+      // late answer from a drawer the operator has already dismissed
+      // must not wipe a message another request has just put there.
+      if (sheetRef.current === submitted) {
+        setPanelError(null);
+        setSheet(null);
+      }
     } catch (cause) {
       if (sheetRef.current === submitted) {
         setSheetError(cause instanceof Error ? cause.message : String(cause));

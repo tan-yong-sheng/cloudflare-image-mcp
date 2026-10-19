@@ -18,7 +18,10 @@ export type Route = "generator" | "admin";
  * clears the hash, could never leave it.
  */
 export function parseRoute(hash: string, pathname = ""): Route {
-  if (hash.replace(/^#/, "").startsWith("admin")) return "admin";
+  // The legacy shell matched the fragment exactly: `#admin` was the
+  // workbench and nothing else. A longer fragment that merely starts
+  // with "admin" is a different route and stays on the generator.
+  if (hash.replace(/^#/, "") === "admin") return "admin";
   if (pathname.replace(/\/+$/, "") === "/admin") return "admin";
   return "generator";
 }
