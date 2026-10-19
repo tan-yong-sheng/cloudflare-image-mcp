@@ -27,6 +27,10 @@ For project overview, tech stack, and layout see `README.md`.
 - Local gates: `npm --prefix client run check` and
   `npm --prefix client test`. Conventions: read `CODING_STANDARDS.md`
   when editing `client/src`.
+- The browser journey lives in `e2e/tests/ui/spa.spec.ts`: Playwright
+  drives the served Worker through login, the playground form and the
+  workbench. It stubs the model registry and the generation request, so
+  it makes no provider call.
 
 ## Configuration & deployment (source of truth)
 
