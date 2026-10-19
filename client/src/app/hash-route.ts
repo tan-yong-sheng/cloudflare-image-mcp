@@ -24,6 +24,13 @@ export function useHashRoute(): Route {
   );
 
   useEffect(() => {
+    // `/admin` is an entry alias, not a route the app owns: the hash
+    // owns the route. The path is normalised away at startup, or it
+    // pins the workbench open — the Back button would not change the
+    // hash, so nothing would change the route either.
+    if (window.location.pathname.replace(/\/+$/, "") === "/admin") {
+      window.history.replaceState(null, "", "/#admin");
+    }
     const onHashChange = () =>
       setRoute(parseRoute(window.location.hash, window.location.pathname));
     window.addEventListener("hashchange", onHashChange);
