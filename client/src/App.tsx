@@ -40,6 +40,14 @@ function AppShell() {
     }
   }, [isAuthenticated, lock]);
 
+  // Leaving the workbench ends the admin session as well. The legacy
+  // cleared the management key whenever it showed the generator, so the
+  // key lived exactly as long as the workbench was open; the key is
+  // asked for again on the way back in.
+  useEffect(() => {
+    if (route !== "admin") lock();
+  }, [route, lock]);
+
   return (
     <>
       {route === "admin" ? <AdminView /> : <GeneratorView />}

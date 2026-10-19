@@ -25,6 +25,31 @@ function stubFetch(impl: (url: string) => Response) {
   return fetchMock;
 }
 
+const HEALTH = {
+  providers: [
+    {
+      id: "cloudflare",
+      displayName: "Cloudflare Workers AI",
+      transport: "cloudflare-rest",
+    },
+  ],
+  keys: [
+    {
+      id: 1,
+      providerId: "cloudflare",
+      label: "key-1",
+      weight: 1,
+      enabled: true,
+      activeVersion: 1,
+      accountId: "acct-1",
+    },
+  ],
+  exposure: [],
+  configVersion: 1,
+  hasServableCredential: true,
+  hasServableCredentialByProvider: { cloudflare: true },
+};
+
 describe("the client shell", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
@@ -130,5 +155,49 @@ describe("the client shell", () => {
 
     expect(document.getElementById("generatorView")).not.toBeNull();
     expect(document.getElementById("adminView")).toBeNull();
+  });
+
+  it("asks for the management key again after the workbench is left", async () => {
+    // The management key lives exactly as long as the workbench is open,
+    // so leaving it ends the admin session.
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin";
+    stubFetch((url) => {
+      if (url === "/api/admin/health") return jsonResponse(true, HEALTH);
+      if (url === "/api/internal/models") return jsonResponse(true, []);
+      return jsonResponse(true, { data: [] });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminPanel")?.className).not.toContain(
+        "hidden"
+      )
+    );
+
+    // Leave the workbench for the generator.
+    await user.click(
+      screen.getByRole("button", { name: /Back to Image Generator/i })
+    );
+    await waitFor(() =>
+      expect(document.getElementById("generatorView")).not.toBeNull()
+    );
+
+    // Come back: the workbench asks for the key again.
+    await user.click(
+      screen.getByRole("button", { name: /Manage provider credentials/i })
+    );
+    await waitFor(() =>
+      expect(document.getElementById("adminView")).not.toBeNull()
+    );
+    expect(
+      screen.getByText("Unlock Provider Administration")
+    ).toBeInTheDocument();
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
   });
 });
