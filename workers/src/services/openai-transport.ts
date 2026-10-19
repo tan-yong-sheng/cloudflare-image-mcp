@@ -224,9 +224,12 @@ export function buildAgnesRequestBody(
 export class OpenAITransport implements AITransport {
   private readonly baseUrl: string;
   private readonly pool: ProviderPool;
+  /** The only host a provider-supplied image URL may name (see fetch below). */
+  private readonly imageHost: string;
 
   constructor(options: OpenAITransportOptions) {
     this.baseUrl = (options.baseUrl ?? AGNES_API_BASE_URL).replace(/\/+$/, "");
+    this.imageHost = new URL(this.baseUrl).hostname;
     this.pool = options.pool;
   }
 
@@ -328,7 +331,14 @@ export class OpenAITransport implements AITransport {
       return { image: item.b64_json };
     }
     if (typeof item.url === "string" && item.url.length > 0) {
-      const imageResponse = await fetch(publicImageUrl(item.url));
+      const imageResponse = await fetch(
+        publicImageUrl(item.url, this.imageHost),
+        {
+          // A response may not redirect the download to a host the guard above
+          // never saw; a 3xx surfaces as a retryable download failure.
+          redirect: "manual",
+        }
+      );
       if (!imageResponse.ok) {
         throw new OpenAITransportError(
           `Agnes image download failed (${imageResponse.status})`,
@@ -369,12 +379,16 @@ export class OpenAITransport implements AITransport {
 }
 
 /**
- * The image URL comes from the provider's response, so it is only fetched
- * when it names a public https location: a malformed or compromised response
- * must not be able to point this Worker at an internal host or a non-http
- * scheme (data:, file:), and neither is a legitimate image CDN location.
+ * The image URL comes from the provider's response, so it is fetched only
+ * when it names a public https location on the provider's own host. A
+ * malformed or compromised response must not be able to point this Worker at
+ * an internal host or a non-http scheme (data:, file:), and neither is a
+ * legitimate image location. A Worker resolves DNS itself, so a name that
+ * resolves to a private address (e.g. `127.0.0.1.nip.io`) looks public here;
+ * pinning the host to the one this transport already sends credentials to is
+ * what closes that gap.
  */
-export function publicImageUrl(raw: string): string {
+export function publicImageUrl(raw: string, allowedHost: string): string {
   let url: URL;
   try {
     url = new URL(raw);
@@ -395,6 +409,12 @@ export function publicImageUrl(raw: string): string {
   if (url.protocol !== "https:" || isIpLiteral || isLocalName) {
     throw new OpenAITransportError(
       `Agnes API returned an image URL that is not a public https location (${url.protocol}//${host})`,
+      "retry"
+    );
+  }
+  if (host !== allowedHost) {
+    throw new OpenAITransportError(
+      `Agnes API returned an image URL on a host this transport does not fetch (${host})`,
       "retry"
     );
   }
