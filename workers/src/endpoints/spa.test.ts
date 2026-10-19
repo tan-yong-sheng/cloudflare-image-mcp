@@ -3,30 +3,27 @@
 // ============================================================================
 
 import { describe, it, expect, vi } from "vitest";
-import { serveClientAsset, wantsSpa } from "./spa.js";
+import { isClientAssetPath, serveClientAsset } from "./spa.js";
 import type { Env } from "../types.js";
 
 function envWithAssets(fetchImpl: (request: Request) => Promise<Response>) {
   return { ASSETS: { fetch: vi.fn(fetchImpl) } } as unknown as Env;
 }
 
-describe("wantsSpa", () => {
-  it("opts in when the flag is present with any truthy value", () => {
-    expect(wantsSpa(new URL("https://example.com/?spa"))).toBe(true);
-    expect(wantsSpa(new URL("https://example.com/?spa=1"))).toBe(true);
-    expect(wantsSpa(new URL("https://example.com/?spa=true"))).toBe(true);
-    expect(wantsSpa(new URL("https://example.com/?spa=YES"))).toBe(true);
+describe("isClientAssetPath", () => {
+  it("claims the client's own build output", () => {
+    expect(isClientAssetPath("/assets/index-abc123.js")).toBe(true);
+    expect(isClientAssetPath("/assets/index-abc123.css")).toBe(true);
   });
 
-  it("stays on the legacy frontend when the flag is absent or disabled", () => {
-    expect(wantsSpa(new URL("https://example.com/"))).toBe(false);
-    expect(wantsSpa(new URL("https://example.com/?spa=0"))).toBe(false);
-    expect(wantsSpa(new URL("https://example.com/?spa=false"))).toBe(false);
-    expect(wantsSpa(new URL("https://example.com/?spa=no"))).toBe(false);
-  });
-
-  it("ignores an unrelated query parameter", () => {
-    expect(wantsSpa(new URL("https://example.com/?other=spa"))).toBe(false);
+  it("leaves every other path to the Worker", () => {
+    expect(isClientAssetPath("/")).toBe(false);
+    expect(isClientAssetPath("/admin")).toBe(false);
+    expect(isClientAssetPath("/v1/models")).toBe(false);
+    expect(isClientAssetPath("/api/internal/models")).toBe(false);
+    expect(isClientAssetPath("/images/abc.png")).toBe(false);
+    // A path that merely starts with the same letters is not the client's.
+    expect(isClientAssetPath("/assetsomething")).toBe(false);
   });
 });
 

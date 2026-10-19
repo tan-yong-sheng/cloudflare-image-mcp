@@ -4,7 +4,7 @@ name: Cloudflare AI Image Generator
 description: Visual design language and design tokens for Cloudflare AI Image Generator web UI
 omitted:
   - section: spacing
-    reason: "No global spacing token variables defined in frontend.ts; layout relies on standard Tailwind utility spacing."
+    reason: "No global spacing token variables defined in client/src/index.css; layout relies on standard Tailwind utility spacing."
 colors:
   primary: "#5046e5"
   primary-light: "#6e67eb"
@@ -118,7 +118,7 @@ Soft, consistent radii define container and interactive boundaries:
 - **Buttons:** Primary (`.btn-primary`) uses `{colors.primary}` with white text and lifts on hover; secondary (`.btn-secondary`) uses `{colors.secondary}` with a `{colors.border}` outline. Buttons suppress the default focus outline but restore a `2px solid` `{colors.primary}` `:focus-visible` ring.
 - **Cards:** Grouped input panels and results use `.card` with `{colors.card-bg}` and `{rounded.card}`.
 - **Modals:** A single centered login dialog (`#loginModal`) renders over a dimmed full-viewport backdrop and is dismissed once session auth is present.
-- **Provider Brand Marks:** A provider family is identified by its own mark next to the family name, in the workbench rail and in the key-table heading. Cloudflare uses the Font Awesome `fa-cloudflare` glyph; Agnes uses the vendor's app icon, inlined as a data URI (`workers/src/config/brand.ts`) so the mark adds no new third-party origin — the page's only external requests remain the two stylesheet CDNs it has always loaded. The mark is sized in `em` via `.family-mark` so it tracks the family name's font-size, and it is decorative — `alt=""` and `aria-hidden="true"`, because the family name is always rendered as text beside it. The raster is a fixed-colour brand asset and does not invert with the theme, so it reads at full contrast on the light card and at lower contrast on the dark card; the mark is decorative and the name carries the meaning, so it is left unrestyled rather than restyled away from the vendor's brand.
+- **Provider Brand Marks:** A provider family is identified by its own mark next to the family name, in the workbench rail and in the key-table heading. Cloudflare uses the Font Awesome `fa-cloudflare` glyph; Agnes uses the vendor's app icon, inlined as a data URI (`client/src/config/brand.ts`) so the mark adds no third-party origin. The React client loads nothing from a stylesheet CDN — Tailwind and Font Awesome are bundled from packages — so the credential surface contacts no third-party origin at all. The mark is sized in `em` via `.family-mark` so it tracks the family name's font-size, and it is decorative — `alt=""` and `aria-hidden="true"`, because the family name is always rendered as text beside it. The raster is a fixed-colour brand asset and does not invert with the theme, so it reads at full contrast on the light card and at lower contrast on the dark card; the mark is decorative and the name carries the meaning, so it is left unrestyled rather than restyled away from the vendor's brand.
 
 ## Do's and Don'ts
 

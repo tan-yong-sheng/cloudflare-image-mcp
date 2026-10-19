@@ -13,6 +13,7 @@
 // constant-time so a wrong admin key isn't a timing oracle.
 
 import type { Env } from "../types.js";
+import { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH } from "../routes.js";
 import {
   maskToken,
   openEnvelope,
@@ -34,9 +35,8 @@ import {
   type CredentialReadiness,
 } from "../services/admin-store.js";
 
-/** Routes the served frontend also calls; index.test.ts pins them to the UI. */
-export const ADMIN_HEALTH_PATH = "/api/admin/health";
-export const ADMIN_KEYS_PATH = "/api/admin/keys";
+/** Routes the client also calls; workers/src/routes.ts is the shared source. */
+export { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH };
 
 /**
  * Ids arrive as path text. Anything past a safe integer cannot address a row
