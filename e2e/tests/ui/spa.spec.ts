@@ -1,4 +1,9 @@
-import { test, expect, type Page } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { getApiKey } from "../../lib/auth";
 
 /**
@@ -21,6 +26,13 @@ import { getApiKey } from "../../lib/auth";
  *   that is the wiring worth proving.
  */
 test.use({ extraHTTPHeaders: {} });
+
+// The file runs in order, in one worker: the sweep at the end must not
+// delete the key the lifecycle test is still using.
+test.describe.configure({ mode: "default" });
+
+/** The account ids this suite creates. */
+const SWEEP_PREFIX = "e2e-ui-";
 
 /** A 1x1 PNG, so the gallery has something real to render. */
 const PIXEL =
@@ -94,6 +106,46 @@ async function unlock(page: Page) {
   await page.fill("#adminKey", managementKey());
   await page.click("#adminUnlock");
   await expect(page.locator("#adminKeys tr").first()).toBeVisible();
+}
+
+/** The headers the admin routes need: both keys, like the client sends. */
+function adminHeaders(): Record<string, string> {
+  return {
+    Authorization: `Bearer ${apiKey()}`,
+    "X-Admin-Key": managementKey(),
+  };
+}
+
+interface HealthKey {
+  id: number;
+  accountId: string | null;
+  enabled: boolean;
+}
+
+async function healthKeys(request: APIRequestContext): Promise<HealthKey[]> {
+  const response = await request.get("/api/admin/health", {
+    headers: adminHeaders(),
+  });
+  expect(response.status()).toBe(200);
+  const body = (await response.json()) as { keys: HealthKey[] };
+  return body.keys ?? [];
+}
+
+/**
+ * Delete every key this suite created.
+ *
+ * The lifecycle test removes its own key, but a run that fails before
+ * that leaves a row behind, and the target's key table should not grow
+ * one run at a time.
+ */
+async function sweep(request: APIRequestContext): Promise<void> {
+  for (const key of await healthKeys(request)) {
+    if ((key.accountId ?? "").startsWith(SWEEP_PREFIX)) {
+      await request.post(`/api/admin/keys/${key.id}/delete`, {
+        headers: adminHeaders(),
+      });
+    }
+  }
 }
 
 test.describe("SPA shell", () => {
@@ -223,7 +275,10 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminKeys tr")).toHaveCount(0);
   });
 
-  test("a key can be added, toggled, rotated and deleted", async ({ page }) => {
+  test("a key can be added, toggled, rotated and deleted", async ({
+    page,
+    request,
+  }) => {
     await signIn(page);
     await page.click("#adminWorkbenchButton");
     await unlock(page);
@@ -232,55 +287,73 @@ test.describe("Workbench", () => {
     // Cloudflare one so the account field is the one under test.
     await page.locator("#adminRail button", { hasText: "Cloudflare" }).click();
 
-    const accountId = `e2e-ui-${Date.now()}`;
-    await page.click("#adminAddKey");
-    await expect(page.locator("#adminSheet")).toBeVisible();
-    await page.fill("#adminSheetAcct", accountId);
-    await page.fill("#adminSheetToken", "ui-e2e-token-value");
-    await page.click("#adminSheetSave");
+    const accountId = `${SWEEP_PREFIX}${Date.now()}`;
+    try {
+      await page.click("#adminAddKey");
+      await expect(page.locator("#adminSheet")).toBeVisible();
+      await page.fill("#adminSheetAcct", accountId);
+      await page.fill("#adminSheetToken", "ui-e2e-token-value");
+      await page.click("#adminSheetSave");
 
-    const row = page.locator("#adminKeys tr").filter({ hasText: accountId });
-    await expect(row).toHaveCount(1);
-    await expect(row).toContainText("v1");
+      const row = page.locator("#adminKeys tr").filter({ hasText: accountId });
+      await expect(row).toHaveCount(1);
+      await expect(row).toContainText("v1");
 
-    // Toggling parks the key, and the state survives a reload.
-    const toggle = row.getByRole("switch");
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
+      // Toggling parks the key, and the state survives a reload. The
+      // switch is optimistic, so wait for the server to agree before
+      // reloading: a reload can outrun the request and the key would
+      // come back enabled.
+      const toggle = row.getByRole("switch");
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await expect
+        .poll(
+          async () =>
+            (await healthKeys(request)).find(
+              (key) => key.accountId === accountId
+            )?.enabled,
+          { timeout: 15000 }
+        )
+        .toBe(false);
 
-    await page.reload();
-    await expect(page.locator("#adminGate")).toBeVisible();
-    await unlock(page);
-    const parked = page
-      .locator("#adminKeys tr")
-      .filter({ hasText: accountId })
-      .getByRole("switch");
-    await expect(parked).toHaveAttribute("aria-checked", "false");
+      await page.reload();
+      await expect(page.locator("#adminGate")).toBeVisible();
+      await unlock(page);
+      const parked = page
+        .locator("#adminKeys tr")
+        .filter({ hasText: accountId })
+        .getByRole("switch");
+      await expect(parked).toHaveAttribute("aria-checked", "false");
 
-    // A new token in the edit drawer rotates the version.
-    await page
-      .locator("#adminKeys tr")
-      .filter({ hasText: accountId })
-      .getByRole("button", { name: /^Edit key/ })
-      .click();
-    await expect(page.locator("#adminSheet")).toBeVisible();
-    await page.fill("#adminSheetToken", "ui-e2e-token-value-rotated");
-    await page.click("#adminSheetSave");
-    await expect(
-      page.locator("#adminKeys tr").filter({ hasText: accountId })
-    ).toContainText("v2");
+      // A new token in the edit drawer rotates the version.
+      await page
+        .locator("#adminKeys tr")
+        .filter({ hasText: accountId })
+        .getByRole("button", { name: /^Edit key/ })
+        .click();
+      await expect(page.locator("#adminSheet")).toBeVisible();
+      await page.fill("#adminSheetToken", "ui-e2e-token-value-rotated");
+      await page.click("#adminSheetSave");
+      await expect(
+        page.locator("#adminKeys tr").filter({ hasText: accountId })
+      ).toContainText("v2");
 
-    // Clean up: the delete is confirmed by the operator.
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page
-      .locator("#adminKeys tr")
-      .filter({ hasText: accountId })
-      .getByRole("button", { name: /^Delete key/ })
-      .click();
-    await expect(
-      page.locator("#adminKeys tr").filter({ hasText: accountId })
-    ).toHaveCount(0);
+      // Clean up: the delete is confirmed by the operator.
+      page.once("dialog", (dialog) => void dialog.accept());
+      await page
+        .locator("#adminKeys tr")
+        .filter({ hasText: accountId })
+        .getByRole("button", { name: /^Delete key/ })
+        .click();
+      await expect(
+        page.locator("#adminKeys tr").filter({ hasText: accountId })
+      ).toHaveCount(0);
+    } finally {
+      // The key is removed even when an assertion fails, so a broken run
+      // does not leave a row behind in the target's key table.
+      await sweep(request);
+    }
   });
 
   test("locking drops the credential data from the page", async ({ page }) => {
@@ -292,5 +365,15 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminGate")).toBeVisible();
     await expect(page.locator("#adminPanel")).toBeHidden();
     await expect(page.locator("#adminKeys tr")).toHaveCount(0);
+  });
+
+  test("no key this suite created is left behind", async ({ request }) => {
+    // Last in the file, so it runs after the lifecycle test: it sweeps
+    // what an earlier broken run left in the target's key table.
+    await sweep(request);
+    const leftovers = (await healthKeys(request)).filter((key) =>
+      (key.accountId ?? "").startsWith(SWEEP_PREFIX)
+    );
+    expect(leftovers).toEqual([]);
   });
 });
