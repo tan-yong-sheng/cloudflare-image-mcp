@@ -118,6 +118,7 @@ Soft, consistent radii define container and interactive boundaries:
 - **Buttons:** Primary (`.btn-primary`) uses `{colors.primary}` with white text and lifts on hover; secondary (`.btn-secondary`) uses `{colors.secondary}` with a `{colors.border}` outline. Buttons suppress the default focus outline but restore a `2px solid` `{colors.primary}` `:focus-visible` ring.
 - **Cards:** Grouped input panels and results use `.card` with `{colors.card-bg}` and `{rounded.card}`.
 - **Modals:** A single centered login dialog (`#loginModal`) renders over a dimmed full-viewport backdrop and is dismissed once session auth is present.
+- **Provider Brand Marks:** A provider family is identified by its own mark next to the family name, in the workbench rail and in the key-table heading. Cloudflare uses the Font Awesome `fa-cloudflare` glyph; Agnes uses the vendor's app icon, inlined as a data URI (`workers/src/config/brand.ts`) so the credential surface never requests a third-party origin. The mark is sized in `em` via `.family-mark` so it tracks the family name's font-size, and it is decorative — `alt=""` and `aria-hidden="true"`, because the family name is always rendered as text beside it.
 
 ## Do's and Don'ts
 
