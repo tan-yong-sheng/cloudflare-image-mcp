@@ -46,7 +46,7 @@ curl -sS -X POST "http://localhost:8787/v1/images/generations" \
   -d '{
     "model": "agnes-image-2.0-flash",
     "prompt": "a cozy reading nook, morning light, film grain",
-    "size": "1024x768",
+    "size": "1152x864",
     "n": 1
   }'
 ```
@@ -71,7 +71,7 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 {
   "model_id": "agnes-image-2.0-flash",
   "prompt": "a cozy reading nook, morning light, film grain",
-  "size": "1024x768"
+  "size": "1152x864"
 }
 ```
 
@@ -104,18 +104,33 @@ curl -sS -X POST "http://localhost:8787/v1/images/edits" \
 
 ## Size Reference
 
-The provider publishes no size matrix for 2.0 and no width/height bounds. The
-docs give the field as "such as" these values:
+The provider publishes no size matrix for 2.0 and no width/height bounds;
+the docs only give example values. What 2.0 actually delivers was probed
+live against the provider (2026-10-21, one request per size, dimensions
+read from the returned PNG):
 
-| Published size | Notes         |
-| -------------- | ------------- |
-| `1024x1024`    | square        |
-| `1024x768`     | landscape 4:3 |
-| `768x1024`     | portrait 3:4  |
+| Verified exact canvas | Notes          |
+| --------------------- | -------------- |
+| `1024x1024`           | square         |
+| `864x1152`            | portrait 3:4   |
+| `1152x864`            | landscape 4:3  |
+| `1312x736`            | landscape 16:9 |
+| `736x1312`            | portrait 9:16  |
+| `832x1248`            | portrait 2:3   |
+| `1248x832`            | landscape 3:2  |
+| `2048x2048`           | square 2K      |
+| `3072x3072`           | square 3K      |
+| `4096x4096`           | square 4K      |
 
-`limits.supportedSizes` in `workers/src/config/models.json` lists exactly
-these three, and `limits.minWidth`/`maxWidth`/`minHeight`/`maxHeight` mirror
-2.5's 512–4096 because 2.0 publishes none of its own. Both are declarations
-for the size picker and MCP `supported_sizes`, and the service clamps to
-them before sending — they are not upstream validation. Widening them requires the provider's own limits, which these
-docs do not state.
+The probe also caught the model **replacing** canvases the vendor text
+suggests it takes: `1024x768` returns `1152x864` and `768x1024` returns
+`864x1152` (same ratio, different pixels), and `1568x672` (21:9) snaps to
+`1312x736`. `limits.supportedSizes` therefore lists only the ten verified
+canvases: the picker, MCP `supported_sizes`, and the examples in this page
+name nothing the provider silently swaps. The
+`limits.minWidth`/`maxWidth`/`minHeight`/`maxHeight` still mirror 2.5's
+512–4096 because 2.0 publishes none of its own; they clamp before sending
+and are not upstream validation.
+
+A future 21:9 or other canvas can join this table only after a live probe
+confirms the provider returns exactly what was requested.

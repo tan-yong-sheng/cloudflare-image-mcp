@@ -724,10 +724,25 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 4096,
       minHeight: 512,
       maxHeight: 4096,
-      // Only these three are published; the docs describe the field as "such
-      // as 1024x768, 1024x1024, or 768x1024" without enumerating the set. The
-      // bounds above are mirrored from 2.5 because 2.0 publishes none.
-      supportedSizes: ["1024x768", "1024x1024", "768x1024"],
+      // Live-probed 2026-10-21: the provider delivers these ten grid sizes
+      // byte-exact. The vendor docs' example sizes 1024x768 and 768x1024
+      // come back as 1152x864 / 864x1152 (right ratio, wrong canvas), and
+      // 1568x672 (21:9) snaps to 1312x736, so only probed-exact sizes are
+      // offered — the picker must never advertise a canvas the model
+      // silently replaces. The bounds above are mirrored from 2.5 because
+      // 2.0 publishes none.
+      supportedSizes: [
+        "1024x1024",
+        "864x1152",
+        "1152x864",
+        "1312x736",
+        "736x1312",
+        "832x1248",
+        "1248x832",
+        "2048x2048",
+        "3072x3072",
+        "4096x4096",
+      ],
     },
   },
 };

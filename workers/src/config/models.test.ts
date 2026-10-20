@@ -59,6 +59,38 @@ describe("model registry validity", () => {
     expect(MODEL_CONFIGS["agnes-image-2.1-flash"].sizeStrategy).toBeUndefined();
   });
 
+  test("the exact-size model's picker lists only provider-verified canvases (live probe 2026-10-21)", () => {
+    // 2.0 snaps several sizes the vendor docs imply it takes: 1024x768 and
+    // 768x1024 come back as 1152x864 / 864x1152, and 1568x672 (21:9) snaps
+    // to 1312x736. The dropdown, MCP supported_sizes, and the picker's
+    // default must only name canvases the provider actually delivers, or a
+    // user picking a size silently gets a different one.
+    // Derivation: what moves this number is a provider-side size change,
+    // re-probe before editing. 11 = 2.5/2.1's published grid; 2.0 lacks the
+    // 21:9 entry (1568x672) and none of the non-grid doc examples.
+    expect(
+      MODEL_CONFIGS["agnes-image-2.0-flash"].limits.supportedSizes
+    ).toEqual([
+      "1024x1024",
+      "864x1152",
+      "1152x864",
+      "1312x736",
+      "736x1312",
+      "832x1248",
+      "1248x832",
+      "2048x2048",
+      "3072x3072",
+      "4096x4096",
+    ]);
+    const sizes = MODEL_CONFIGS["agnes-image-2.0-flash"].limits.supportedSizes;
+    expect(sizes).not.toContain("1024x768");
+    expect(sizes).not.toContain("768x1024");
+    expect(sizes).not.toContain("1568x672");
+    // The picker's default must survive the change: 1024x1024 stays first
+    // for the frontend's "prefer 1024x1024 else [0]" rule.
+    expect(sizes[0]).toBe("1024x1024");
+  });
+
   test("every model declares prompt, tasks, and width/height limits", () => {
     for (const config of Object.values(MODEL_CONFIGS)) {
       expect(config.parameters.prompt.required).toBe(true);
