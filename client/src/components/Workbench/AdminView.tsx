@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AdminApiError,
   useAdminMutations,
@@ -27,8 +27,23 @@ export function AdminView() {
   const session = useAdminSession();
   const { adminKey, unlock, lock } = useAdminKey();
   const { logout } = useAuth();
+
+  // A refused session is a refused session whichever request hit it:
+  // the bearer key is no longer accepted, so the whole session is over
+  // and the management key must not outlive it. The workbench ends its
+  // own session here instead of waiting for the shell to notice the
+  // sign-out, and the reason travels with the sign-out, because the
+  // shell tears this screen down with the session.
+  const endRefusedSession = useCallback(
+    (_failure: AdminApiError) => {
+      logout(SESSION_EXPIRED_MESSAGE);
+      lock();
+    },
+    [lock, logout]
+  );
+
   const health = useHealth(session);
-  const mutations = useAdminMutations(session);
+  const mutations = useAdminMutations(session, endRefusedSession);
 
   const [selected, setSelected] = useState("");
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -72,14 +87,7 @@ export function AdminView() {
     handledError.current = health.error;
     const failure = health.error;
     if (failure instanceof AdminApiError && failure.status === 401) {
-      // The bearer key is no longer accepted, so the whole session is
-      // over, not just the admin half of it. The workbench ends its own
-      // session here instead of waiting for the shell to notice the
-      // sign-out: the management key must not outlive the session that
-      // carried it. The reason travels with the sign-out, because the
-      // shell tears this screen down with the session.
-      logout(SESSION_EXPIRED_MESSAGE);
-      lock();
+      endRefusedSession(failure);
       return;
     }
     // The credential payload could not be read, so the admin session is
@@ -97,7 +105,7 @@ export function AdminView() {
       return;
     }
     setGateError(failure instanceof Error ? failure.message : String(failure));
-  }, [health.isError, health.error, lock, logout]);
+  }, [health.isError, health.error, endRefusedSession, lock]);
 
   // A notice fades on its own, the way the legacy page's did.
   useEffect(() => {

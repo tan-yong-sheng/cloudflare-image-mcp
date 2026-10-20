@@ -8,7 +8,7 @@ import {
   ADMIN_HEALTH_PATH,
   ADMIN_KEYS_PATH,
 } from "../../../workers/src/routes";
-import { apiFetch, type ApiResult } from "./client";
+import { apiFetch, type ApiOptions, type ApiResult } from "./client";
 import { modelsQueryKey } from "./models";
 import type { AdminHealth } from "./types";
 
@@ -164,7 +164,15 @@ export function usePendingAdminKeyIds(): number[] {
  * change which providers can serve, so both the health payload and the
  * model registry are refetched afterwards.
  */
-export function useAdminMutations(session: AdminSession) {
+export function useAdminMutations(
+  session: AdminSession,
+  /**
+   * Called when the server refuses the bearer key. A refused session is
+   * a refused session whichever request hit it, and only the caller
+   * knows what ending the session means outside this screen.
+   */
+  onRefused?: (failure: AdminApiError) => void
+) {
   const queryClient = useQueryClient();
   const healthKey = healthQueryKey(session.sessionId);
 
@@ -177,16 +185,25 @@ export function useAdminMutations(session: AdminSession) {
     queryClient.invalidateQueries({ queryKey: modelsQueryKey });
   };
 
+  // Every key change goes out through this one call, so a refused
+  // session is reported the same way whatever the request was, and no
+  // mutation can forget to report it.
+  const send = async (path: string, options: ApiOptions): Promise<void> => {
+    const result = await apiFetch(path, {
+      ...options,
+      adminKey: session.adminKey,
+      authToken: session.bearerToken,
+    });
+    if (result.ok) return;
+    const failure = toError(result);
+    if (failure.status === 401) onRefused?.(failure);
+    throw failure;
+  };
+
   const addKey = useMutation({
     mutationKey: [...ADMIN_MUTATION_KEY, "add"],
     mutationFn: async (variables: AddKeyVariables) => {
-      const result = await apiFetch(ADMIN_KEYS_PATH, {
-        method: "POST",
-        body: variables,
-        adminKey: session.adminKey,
-        authToken: session.bearerToken,
-      });
-      if (!result.ok) throw toError(result);
+      await send(ADMIN_KEYS_PATH, { method: "POST", body: variables });
     },
     onSuccess: invalidate,
   });
@@ -200,13 +217,10 @@ export function useAdminMutations(session: AdminSession) {
         enabled: variables.enabled,
       };
       if (variables.apiToken) body.apiToken = variables.apiToken;
-      const result = await apiFetch(`${ADMIN_KEYS_PATH}/${variables.keyId}`, {
+      await send(`${ADMIN_KEYS_PATH}/${variables.keyId}`, {
         method: "PATCH",
         body,
-        adminKey: session.adminKey,
-        authToken: session.bearerToken,
       });
-      if (!result.ok) throw toError(result);
     },
     onSuccess: invalidate,
   });
@@ -214,15 +228,9 @@ export function useAdminMutations(session: AdminSession) {
   const deleteKey = useMutation({
     mutationKey: [...ADMIN_MUTATION_KEY, "delete"],
     mutationFn: async (variables: { keyId: number }) => {
-      const result = await apiFetch(
-        `${ADMIN_KEYS_PATH}/${variables.keyId}/delete`,
-        {
-          method: "POST",
-          adminKey: session.adminKey,
-          authToken: session.bearerToken,
-        }
-      );
-      if (!result.ok) throw toError(result);
+      await send(`${ADMIN_KEYS_PATH}/${variables.keyId}/delete`, {
+        method: "POST",
+      });
     },
     onSuccess: invalidate,
   });
@@ -230,13 +238,10 @@ export function useAdminMutations(session: AdminSession) {
   const toggleKey = useMutation({
     mutationKey: [...ADMIN_MUTATION_KEY, "toggle"],
     mutationFn: async (variables: ToggleKeyVariables) => {
-      const result = await apiFetch(`${ADMIN_KEYS_PATH}/${variables.keyId}`, {
+      await send(`${ADMIN_KEYS_PATH}/${variables.keyId}`, {
         method: "PATCH",
         body: { enabled: variables.enabled },
-        adminKey: session.adminKey,
-        authToken: session.bearerToken,
       });
-      if (!result.ok) throw toError(result);
     },
     // The switch shows the operator's choice immediately, and the cache
     // is corrected from the server's answer. A second toggle while the

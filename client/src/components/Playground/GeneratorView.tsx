@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../api/client";
 import { useModels } from "../../api/models";
 import type { GenerationResponse } from "../../api/types";
@@ -53,6 +53,17 @@ export function GeneratorView() {
   // When the current generation started, so the elapsed time is measured
   // to the moment the image is on screen.
   const startedAt = useRef(0);
+
+  // A new session starts with a clean slate: an error that belonged to
+  // the previous session is not an error of this one. The message stays
+  // while the session is over, because it is the only thing that says
+  // why the operator is back at the sign-in prompt.
+  const sessionToken = useRef(token);
+  useEffect(() => {
+    if (sessionToken.current === token) return;
+    sessionToken.current = token;
+    if (token) setError(null);
+  }, [token]);
 
   // Only the models the operator can actually call: the task types the
   // playground supports, and the ones whose provider has a servable key.
