@@ -2,17 +2,22 @@
 // Provider admin API - D1 pool health + key writes (R2, #74)
 // ============================================================================
 // Read first, write second (per #74): health exposes pool counts, labels,
-// exposure, and config version — labels and counts only, never secret
-// values. Key writes seal server-side with PROVIDER_DATA_KEY and ride the
-// R1b ledger: add inserts a version-1 row, rotate revokes+inserts in one
-// transaction, disable flips enabled. Every mutation bumps config_versions
+// exposure, and config version, plus a masked hint per key — enough to tell
+// two keys apart, never enough to use one. Key writes seal server-side with
+// PROVIDER_DATA_KEY and ride the R1b ledger: add inserts a version-1 row,
+// rotate revokes+inserts in one transaction, disable flips enabled. Every
+// mutation bumps config_versions
 // (the pool cache's reload signal) and writes an admin_audit row (actor,
 // action, key). Routes sit behind TWO gates: the existing API_KEYS bearer
 // (401, unchanged) then X-Admin-Key against ADMIN_API_KEY (403) — checked
 // constant-time so a wrong admin key isn't a timing oracle.
 
 import type { Env } from "../types.js";
-import { sealToken } from "../services/provider-crypto.js";
+import {
+  maskToken,
+  openEnvelope,
+  sealToken,
+} from "../services/provider-crypto.js";
 import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
@@ -223,10 +228,17 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
  * GET /api/admin/health — pool counts, key labels, exposure, config
  * version. Active credential versions only; disabled keys are listed with
  * their flag so an operator can see what is parked.
+ *
+ * Each key also carries `maskedKey`, the hint the table shows in place of a
+ * token it must never receive. The mask is computed here because this is
+ * where PROVIDER_DATA_KEY lives: open the active envelope, keep five leading
+ * and four trailing characters. Without a data key there is no hint — the
+ * page still loads, and editing a key reseals one.
  */
 export async function handleAdminHealth(
   store: AdminD1 | null,
-  readiness: CredentialReadiness
+  readiness: CredentialReadiness,
+  dataKey?: string
 ): Promise<Response> {
   if (!store) {
     return json({
@@ -238,7 +250,11 @@ export async function handleAdminHealth(
       hasServableCredentialByProvider: readiness.byProvider,
     });
   }
-  return json(await getAdminHealth(store, readiness));
+  const openMask = dataKey
+    ? async (envelope: string) =>
+        maskToken(await openEnvelope(envelope, dataKey))
+    : undefined;
+  return json(await getAdminHealth(store, readiness, openMask));
 }
 
 /**
@@ -284,10 +300,14 @@ export async function handleAdmin(
       // the global flag; the per-provider map is what routing splits on, so
       // the two can never disagree.
       const pools = await getProviderPools(env);
-      return await handleAdminHealth(active, {
-        any: pools.hasAnyServable(),
-        byProvider: pools.readiness(),
-      });
+      return await handleAdminHealth(
+        active,
+        {
+          any: pools.hasAnyServable(),
+          byProvider: pools.readiness(),
+        },
+        env.PROVIDER_DATA_KEY
+      );
     }
     if (!active) return internalError("no provider store bound");
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {

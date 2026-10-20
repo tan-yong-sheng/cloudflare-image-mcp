@@ -333,7 +333,8 @@ export function getFrontendHTML(options?: {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left opacity-60 border-b border-gray-800">
-                                <th id="adminKeysHead" class="p-3 font-medium">Account ID</th>
+                                <th id="adminKeysHead" class="p-3 font-medium">Key</th>
+                                <th id="adminAcctHead" class="p-3 font-medium">Account ID</th>
                                 <th class="p-3 font-medium"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
@@ -1111,6 +1112,7 @@ export function getFrontendHTML(options?: {
             const familyName = document.getElementById('adminFamilyName');
             const keysBody = document.getElementById('adminKeys');
             const keysHead = document.getElementById('adminKeysHead');
+            const acctHead = document.getElementById('adminAcctHead');
             const emptyLine = document.getElementById('adminEmpty');
             const addKeyBtn = document.getElementById('adminAddKey');
             const chipsActive = document.getElementById('adminChipsActive');
@@ -1455,7 +1457,7 @@ export function getFrontendHTML(options?: {
                 icon.className = 'fa-solid fa-trash';
                 del.appendChild(icon);
                 del.addEventListener('click', async () => {
-                    const who = k.accountId || k.label || ('#' + k.id);
+                    const who = k.maskedKey || k.accountId || k.label || ('#' + k.id);
                     if (!window.confirm('Delete key #' + k.id + ' (' + who + ')? This cannot be undone.')) return;
                     // Serialize per row: a second click while the first is in
                     // flight could delete a key id the refresh has already
@@ -1485,7 +1487,12 @@ export function getFrontendHTML(options?: {
                 // The account-ID column belongs to the transport, not the family:
                 // an openai-compat provider has no Cloudflare account behind it.
                 const hasAcct = !!family && family.transport === 'cloudflare-rest';
-                keysHead.textContent = hasAcct ? 'Account ID' : 'Key';
+                // Key leads: the masked hint is how an operator tells two keys
+                // apart. The account-ID column is only real for cloudflare-rest,
+                // so it hides entirely for an openai-compat family instead of
+                // rendering a column of dashes.
+                keysHead.textContent = 'Key';
+                acctHead.classList.toggle('hidden', !hasAcct);
                 familyName.textContent = '';
                 if (family) {
                     const icon = familyIcon(family.id);
@@ -1498,14 +1505,18 @@ export function getFrontendHTML(options?: {
                     const tr = document.createElement('tr');
                     if (!k.enabled) tr.style.opacity = '.55';
 
-                    const acctCell = document.createElement('td');
-                    acctCell.className = 'p-3 font-mono text-sm';
-                    acctCell.textContent = hasAcct ? (k.accountId || '—') : ('#' + k.id);
+                    const keyCell = document.createElement('td');
+                    keyCell.className = 'p-3 font-mono text-sm';
+                    // The hint is computed server-side: the browser never holds
+                    // a token, so it cannot mask one. A key whose envelope will
+                    // not open arrives without a hint, and reads as a dash
+                    // rather than as an empty cell.
+                    keyCell.textContent = k.maskedKey || '—';
                     if (k.activeVersion !== null && k.activeVersion !== undefined) {
                         const ver = document.createElement('span');
                         ver.className = 'opacity-60 text-xs ml-2';
                         ver.textContent = 'v' + k.activeVersion;
-                        acctCell.appendChild(ver);
+                        keyCell.appendChild(ver);
                     }
 
                     const actions = document.createElement('td');
@@ -1517,7 +1528,13 @@ export function getFrontendHTML(options?: {
                     wrap.appendChild(deleteButton(k));
                     actions.appendChild(wrap);
 
-                    tr.appendChild(acctCell);
+                    tr.appendChild(keyCell);
+                    if (hasAcct) {
+                        const acctCell = document.createElement('td');
+                        acctCell.className = 'p-3 font-mono text-sm';
+                        acctCell.textContent = k.accountId || '—';
+                        tr.appendChild(acctCell);
+                    }
                     tr.appendChild(actions);
                     keysBody.appendChild(tr);
                 });
@@ -1540,7 +1557,9 @@ export function getFrontendHTML(options?: {
                 sheetAcct.value = isEdit ? (key.accountId || '') : '';
                 const wantsAcct = needsAccountId(selected);
                 sheetAcctField.classList.toggle('hidden', !wantsAcct);
-                sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined ? '(blank = keep v' + key.activeVersion + ')' : '';
+                sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined
+                    ? (key.maskedKey ? key.maskedKey + ' · ' : '') + '(blank = keep v' + key.activeVersion + ')'
+                    : '';
                 sheetToken.value = '';
                 sheetToken.type = 'password';
                 sheetTokenEye.innerHTML = '<i class="fa-solid fa-eye"></i>';

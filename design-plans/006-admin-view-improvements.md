@@ -29,12 +29,12 @@
 - Status chips (active keys, provider families) moved to header
 - Escape key closes admin view
 
-### 2. Label Column Removed from UI ✅
+### 2. Label Column Removed from UI ✅ (later reversed for the key column)
 
 **What changed:**
 
 - Removed "Key" column from the keys table
-- Table now shows: `Account ID | Actions`
+- Table showed: `Account ID | Actions`
 - Version badge moved to Account ID cell (e.g., `abc123... v1`)
 - Labels still auto-generated on backend (`imported-1`, `imported-2`, etc.) for audit logs
 - Sheet titles show "Key #42" instead of label names
@@ -42,8 +42,13 @@
 **Rationale:**
 
 - Labels were confusing (not the API token)
-- Account ID + version is sufficient for identification
+- Account ID + version is sufficient to identify the key
 - Keeps backend audit trail intact
+
+**Superseded:** the removal took away the only place a key could identify
+itself, which left an `openai-compat` family (no account id) with a cell
+reading `#1`. A masked hint restores the column without restoring the label:
+see the masked key column below. Account ID keeps its own column.
 
 ### 3. Delete Button Added ✅
 
@@ -88,29 +93,48 @@ audit; only delete cannot be undone from the UI.
 
 ## Known Limitations & Future Work
 
-### 🔴 Masked API Key Column (Not Implemented)
+### 🟢 Masked API Key Column (Implemented)
 
 **User request:**
 
 > "please add 'Keys' column here with masked api key value like: 'Ksga....jks3'"
 
-**Why not implemented:**
+A second report asked the same thing against the Agnes family:
+
+> "why we don't have masked api keys being shown here, where that column field is 'Key'... instead of v1 label, any way that we can show the masked api keys like sk-yt****fa12 ?"
+
+**What shipped (this supersedes the note below):**
+
+- The table is `Key | Account ID | Actions`. `Key` shows a server-computed
+  hint such as `sk-yt****fa12` with the version badge beside it. The
+  Account ID column renders only for `cloudflare-rest` families, since only
+  that transport has an account behind the key.
+- `/api/admin/health` returns `maskedKey` per key: the endpoint opens the
+  active envelope (it holds `PROVIDER_DATA_KEY`) and keeps five leading and
+  four trailing characters. No schema change, no stored prefix.
+- A hint that cannot be computed (unopenable envelope, or no data key) is
+  omitted; the row still renders, so the page that repairs the key keeps
+  working.
+
+**Why the earlier plan below is obsolete:** it proposed storing a
+`token_prefix` column. Opening the active envelope at read time gets the
+same hint without a migration, without a second copy of token material in
+the row, and without a prefix that could drift from the sealed value after
+a rotation.
+
+<details>
+<summary>Earlier proposal (not used)</summary>
+
+**Why it was deferred:**
 
 - Backend never returns token material in `/api/admin/health`
 - Tokens are sealed (encrypted) server-side immediately
-- Would require either:
-  - **Option A:** Store `token_prefix` (first 8 chars) in database when adding keys
-  - **Option B:** Return token prefix from seal operation
-  - **Option C:** Show synthetic identifier (account ID already serves this)
+- Options considered:
+  - **A:** Store `token_prefix` (first 8 chars) in database when adding keys
+  - **B:** Return token prefix from seal operation
+  - **C:** Show synthetic identifier (account ID already serves this)
 
-**Recommendation for next iteration:**
-
-1. Add `token_prefix VARCHAR(12)` column to `provider_keys` table
-2. Store first 8 chars when sealing token (never the full token)
-3. Return prefix in `AdminKeySummary` from health endpoint
-4. Display as `Ksga...` in new "Key Preview" column
-
-**Schema migration needed:**
+**Proposed migration (not needed):**
 
 ```sql
 ALTER TABLE provider_keys ADD COLUMN token_prefix TEXT;
@@ -122,6 +146,8 @@ ALTER TABLE provider_keys ADD COLUMN token_prefix TEXT;
 - First 8 chars is safe (tokens are 32+ chars random)
 - Never store more than 8 chars
 - Prefix is for human identification only, not auth
+
+</details>
 
 ## Verification
 
@@ -159,5 +185,5 @@ workers/src/middleware/auth.ts    |   1 +
 
 1. **Deploy to staging** and verify full-page admin experience
 2. **User acceptance testing** on real browser
-3. **Consider masked key column** as separate feature (requires backend migration)
+3. ✅ **Masked key column** shipped — no backend migration was needed (the hint is opened from the active envelope at read time)
 4. **Document API key management flow** for end users

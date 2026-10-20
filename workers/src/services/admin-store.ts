@@ -80,6 +80,14 @@ export interface AdminKeySummary {
   enabled: boolean;
   activeVersion: number | null;
   accountId: string | null;
+  /**
+   * Masked hint for the sealed token, e.g. `sk-yt****fa12`: enough to tell
+   * two keys apart, never enough to use one. Server-computed — the browser
+   * never holds a token, so it cannot mask one. Present on health reads,
+   * where the hint is opened from the active envelope; absent on write
+   * echoes, which report identity and edited fields only.
+   */
+  maskedKey?: string;
 }
 
 export interface AdminExposureSummary {
@@ -185,13 +193,26 @@ function num(value: unknown): number {
 }
 
 /**
+ * Opens one active envelope and returns its masked hint. Injected by the
+ * endpoint, which holds PROVIDER_DATA_KEY — this module never sees key
+ * material, exactly as it never sees a token on the write side.
+ */
+export type MaskOpener = (envelope: string) => Promise<string>;
+
+/**
  * Health read: pool counts, active key summaries, exposure overrides, and
  * the config cache version. Reads live in the store so endpoints contain
  * zero SQL.
+ *
+ * With an `openMask`, each key also carries the masked hint of its active
+ * token. An envelope that will not open yields no hint instead of an error:
+ * one bad row must not blank the page that is used to repair it — the same
+ * parking decision pool-loader.ts makes for inference.
  */
 export async function getAdminHealth(
   db: AdminD1,
-  readiness: CredentialReadiness
+  readiness: CredentialReadiness,
+  openMask?: MaskOpener
 ): Promise<AdminHealthSummary> {
   const providerRows = rows<Record<string, unknown>>(
     await db.prepare("SELECT id, display_name, transport FROM providers").all()
@@ -211,7 +232,12 @@ export async function getAdminHealth(
                 k.weight AS weight,
                 k.enabled AS enabled,
                 k.external_account_id AS accountId,
-                MAX(v.version) AS activeVersion
+                MAX(v.version) AS activeVersion,
+                (SELECT envelope
+                   FROM credential_versions
+                  WHERE provider_key_id = k.id AND revoked_at IS NULL
+                  ORDER BY version DESC
+                  LIMIT 1) AS envelope
            FROM provider_keys k
            LEFT JOIN credential_versions v
              ON v.provider_key_id = k.id AND v.revoked_at IS NULL
@@ -219,15 +245,31 @@ export async function getAdminHealth(
       )
       .all()
   );
-  const keys: AdminKeySummary[] = keyRows.map((k) => ({
-    id: num(k["id"]),
-    providerId: String(k["providerId"]),
-    label: String(k["label"]),
-    weight: num(k["weight"]),
-    enabled: num(k["enabled"]) === 1,
-    activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
-    accountId: k["accountId"] === null ? null : String(k["accountId"]),
-  }));
+  const keys: AdminKeySummary[] = [];
+  for (const k of keyRows) {
+    const summary: AdminKeySummary = {
+      id: num(k["id"]),
+      providerId: String(k["providerId"]),
+      label: String(k["label"]),
+      weight: num(k["weight"]),
+      enabled: num(k["enabled"]) === 1,
+      activeVersion:
+        k["activeVersion"] === null ? null : num(k["activeVersion"]),
+      accountId: k["accountId"] === null ? null : String(k["accountId"]),
+    };
+    const envelope = k["envelope"];
+    if (openMask && typeof envelope === "string" && envelope.length > 0) {
+      try {
+        const mask = await openMask(envelope);
+        if (mask.length > 0) summary.maskedKey = mask;
+      } catch {
+        console.warn(
+          `provider admin: no key hint for "${summary.label}" (envelope will not open)`
+        );
+      }
+    }
+    keys.push(summary);
+  }
 
   const versionRow = await db
     .prepare("SELECT version FROM config_versions WHERE id = 1")
