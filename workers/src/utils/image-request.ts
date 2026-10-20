@@ -55,7 +55,7 @@ function coerceFormParam(key: string, value: string): any {
   if (value.trim() === "") {
     throw new CollectionError(`Invalid ${key}: must not be blank`);
   }
-  if (key === "steps" || key === "seed") {
+  if (key === "steps" || key === "num_steps" || key === "seed") {
     const parsed = Number(value);
     if (!Number.isInteger(parsed)) {
       throw new CollectionError(

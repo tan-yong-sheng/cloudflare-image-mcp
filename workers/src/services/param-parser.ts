@@ -5,6 +5,13 @@
 
 import type { ParsedParams, ModelConfig } from "../types.js";
 
+/**
+ * The two names a model may declare its step count under. The parser
+ * normalizes both into `steps`; the payload has to restore whichever
+ * one the model declares.
+ */
+const STEP_ALIASES = new Set(["steps", "num_steps"]);
+
 export class ParamParser {
   /**
    * Parse parameters from prompt with --key=value syntax
@@ -72,6 +79,12 @@ export class ParamParser {
     }
     if (mergedParams.size !== undefined) {
       result.size = this.parseSize(mergedParams.size);
+      // Derive the dimensions here as the object path does. A model
+      // that declares width and height consumes those, not the size
+      // string, so without them the size control does nothing.
+      const [width, height] = result.size.split("x").map(Number);
+      result.width = width;
+      result.height = height;
     }
     if (mergedParams.width !== undefined) {
       result.width = this.parseInteger(mergedParams.width, 256, 2048, "width");
@@ -359,9 +372,21 @@ export class ParamParser {
     const dropped: string[] = [];
     const declared = new Set(Object.keys(model.parameters));
 
+    // The parser normalizes both step spellings into `steps`; a model
+    // declares one of them. The value has to reach the provider under
+    // the name the model declares, or the step control is dead.
+    const stepKey = declared.has("steps")
+      ? "steps"
+      : declared.has("num_steps")
+        ? "num_steps"
+        : null;
+
     // Map each supported parameter to its Cloudflare equivalent
     for (const [key, config] of Object.entries(model.parameters)) {
-      const value = (params as any)[key];
+      let value = (params as any)[key];
+      if (value === undefined && key === stepKey) {
+        value = (params as any).steps;
+      }
       if (value !== undefined && value !== null) {
         payload[config.cfParam] = value;
       }
@@ -390,6 +415,9 @@ export class ParamParser {
       if (key === "size") continue; // handled below (derived dims)
       if (aliasOf.has(key)) continue;
       if (!declared.has(key)) {
+        // The step count reached the payload under the other spelling,
+        // so it was consumed, not dropped.
+        if (stepKey && key !== stepKey && STEP_ALIASES.has(key)) continue;
         const value = (params as any)[key];
         if (value !== undefined && value !== null) dropped.push(key);
       }
