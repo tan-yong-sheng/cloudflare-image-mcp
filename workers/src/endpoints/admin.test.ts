@@ -4,8 +4,9 @@
 // Seam: the worker fetch interface with a stubbed D1 + env keys. Expected
 // values are literals from the admin contract: every admin route needs the
 // API_KEYS bearer first (401 through the existing gate, unchanged) and the
-// management key second (403). Health carries labels and counts only — the
-// S3 tripwire asserts no secret character reaches any admin response.
+// management key second (403). Health carries labels, counts, and a masked
+// hint per key — the S3 tripwire asserts no secret character reaches any
+// admin response, and the hint keeps its visible run under that floor.
 
 import { beforeEach, describe, expect, test } from "vitest";
 import worker from "../index.js";
@@ -799,6 +800,7 @@ describe("admin health readiness (ADR-001)", () => {
                     enabled: opts.enabled,
                     accountId: "acct-1",
                     activeVersion: 1,
+                    envelope: opts.envelope,
                   },
                 ],
               };
@@ -866,5 +868,27 @@ describe("admin health readiness (ADR-001)", () => {
     // The per-provider map is what routing splits on (C4): same predicate,
     // so the global flag and the provider's entry must agree.
     expect(body.hasServableCredentialByProvider).toEqual({ cloudflare: true });
+  });
+
+  test("health reports a masked hint, never the token, when the envelope opens", async () => {
+    // The table has no other way to identify a key: the browser never holds
+    // a token, so the hint must be computed server-side and must not be the
+    // token with a few characters shaved off.
+    const envelope = await sealToken("sk-yt9Xq2mKfa12", "r2-test-sealing-key");
+    const body = await healthOf(
+      envWithOneKey({ envelope, enabled: 1, weight: 1 })
+    );
+    const keys = body.keys as { maskedKey?: string }[];
+    expect(keys[0].maskedKey).toBe("sk-yt****fa12");
+    expect(JSON.stringify(body)).not.toContain("sk-yt9Xq2mKfa12");
+  });
+
+  test("an unopenable envelope leaves the hint out and the row in", async () => {
+    const body = await healthOf(
+      envWithOneKey({ envelope: "not-a-v1-envelope", enabled: 1, weight: 1 })
+    );
+    const keys = body.keys as { maskedKey?: string }[];
+    expect(keys).toHaveLength(1);
+    expect(keys[0].maskedKey).toBeUndefined();
   });
 });

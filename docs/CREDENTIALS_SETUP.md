@@ -198,8 +198,13 @@ or logout — never persisted.
   plus `hasServableCredentialByProvider` (per provider id): the same
   servable predicate inference routes on (enabled, weighted, envelope
   opens), so the workbench's "no credentials" warning cannot disagree
-  with what generation will pick. Labels and counts only, never secret
-  values.
+  with what generation will pick. Each key also carries `maskedKey`, a
+  hint such as `sk-yt****fa12`: the server opens the active envelope and
+  keeps five leading and four trailing characters. That is enough to tell
+  two keys apart and not enough to use one — the token itself never
+  leaves the Worker, and the browser cannot mask a value it never holds.
+  A key whose envelope will not open is listed without a hint instead of
+  failing the read, so the page used to repair it still loads.
 - **Add** — `POST /api/admin/keys` with
   `{ "providerId", "label", "apiToken" }` plus optional
   `accountId`, `weight`, `enabled`. The token is sealed

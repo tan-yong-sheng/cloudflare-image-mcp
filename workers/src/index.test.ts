@@ -197,6 +197,7 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
       "adminPanel",
       "adminKeys",
       "adminKeysHead",
+      "adminAcctHead",
       "adminRail",
       "adminAddKey",
       "adminNotice",
