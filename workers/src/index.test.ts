@@ -269,4 +269,50 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     expect(html).toContain('id="adminGate"');
     expect(html).toContain('id="generatorView"');
   });
+
+  test("the image proxy sends CORS, so Download works cross-origin", async () => {
+    // Download reads the stored image with fetch(). The page can be served
+    // from a different origin than the one embedded in the stored URL (a
+    // proxy, a custom domain), and without this header the browser blocks
+    // the response: the image renders but Download fails with an opaque
+    // "Failed to fetch". The header is the fix, so pin it on both the hit
+    // and the miss.
+    const crossOrigin = () =>
+      new Request("https://worker.test/images/2026-01-01/nope.png", {
+        method: "GET",
+        headers: { Origin: "https://proxy.example" },
+      });
+
+    const missing = await worker.fetch(crossOrigin(), env());
+    expect(missing.headers.get("access-control-allow-origin")).toBe("*");
+
+    // A hit needs a real object, so drive the bucket directly.
+    const store = new Map<string, ArrayBuffer>();
+    store.set(
+      "images/2026-01-01/ok.png",
+      new Uint8Array([137, 80, 78, 71]).buffer
+    );
+    const withBucket = {
+      ...env(),
+      IMAGE_BUCKET: {
+        get: async (key: string) =>
+          store.has(key)
+            ? {
+                body: store.get(key),
+                httpMetadata: { contentType: "image/png" },
+              }
+            : null,
+      },
+    } as unknown as Env;
+    const hit = await worker.fetch(
+      new Request("https://worker.test/images/2026-01-01/ok.png", {
+        method: "GET",
+        headers: { Origin: "https://proxy.example" },
+      }),
+      withBucket
+    );
+    expect(hit.status).toBe(200);
+    expect(hit.headers.get("access-control-allow-origin")).toBe("*");
+    expect(hit.headers.get("content-type")).toBe("image/png");
+  });
 });
