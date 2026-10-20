@@ -17,9 +17,11 @@ export default defineConfig({
   },
   // No public directory: Vite would copy it to the root of the build
   // output, and the Worker only serves /assets/ before the auth gate.
-  // A file outside that prefix would answer 401, so the build may not
-  // produce one. A file the client needs belongs in src/ and is
-  // imported, which puts it in /assets/ with a hashed name.
+  // A file outside that prefix is not served: the Worker answers it as
+  // an API path, which is a 401 with API keys configured and a 404
+  // without. Either way the build may not produce one. A file the client
+  // needs belongs in src/ and is imported, which puts it in /assets/
+  // with a hashed name.
   publicDir: false,
   test: {
     environment: "jsdom",

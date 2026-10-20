@@ -615,8 +615,12 @@ describe("the provider credentials workbench", () => {
 
     // The first request answers now. The second drawer is still waiting
     // for its own answer, so its button has to stay disabled. The
-    // answer is applied when the key change refreshes the health
-    // payload, so the assertion waits for that and not for the clock.
+    // invalidation that finishes the first request starts the health
+    // refetch, so that refetch is the signal that the late answer
+    // landed — the assertion waits for it rather than for the clock.
+    // The refetch is initiated by `onSuccess`, which runs before
+    // `mutateAsync` resolves and therefore before the `finally` clears
+    // the busy flag.
     const healthCalls = () =>
       fetchMock.mock.calls.filter(
         (call) => String(call[0]) === "/api/admin/health"
