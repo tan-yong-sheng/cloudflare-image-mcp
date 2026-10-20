@@ -882,6 +882,57 @@ describe("the provider credentials workbench", () => {
     );
   });
 
+  it("ends the session when a key change is refused", async () => {
+    // A refused session is a refused session whichever request hit it.
+    // The bearer key is no longer accepted, so the management key must
+    // not outlive the session that carried it, and the operator has to
+    // be told why they are back at the sign-in prompt.
+    stubApi((route) =>
+      route.path.startsWith("/api/admin/keys/") && route.method === "PATCH"
+        ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
+        : null
+    );
+    const user = userEvent.setup();
+    const { session } = renderWorkbench();
+    await unlock(user);
+
+    await user.click(screen.getByRole("switch", { name: /Disable key-1/i }));
+
+    await waitFor(() =>
+      expect(session.endedReason).toBe(SESSION_EXPIRED_MESSAGE)
+    );
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("ends the session when a key cannot be added", async () => {
+    // The write path refuses the session too, and the drawer is where
+    // an operator meets it.
+    stubApi((route) =>
+      route.path === "/api/admin/keys" && route.method === "POST"
+        ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
+        : null
+    );
+    const user = userEvent.setup();
+    const { session } = renderWorkbench();
+    await unlock(user);
+
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(screen.getByLabelText(/API token/i), "a-long-enough-token");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(session.endedReason).toBe(SESSION_EXPIRED_MESSAGE)
+    );
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+  });
+
   it("ends the session when the credential payload is refused", async () => {
     // A 401 means the bearer key is no longer accepted, so the whole
     // session is over and the operator has to sign in again. The

@@ -66,6 +66,8 @@ The interface uses an indigo primary palette for brand actions, state transition
 
 The interface supports Light and Dark modes toggled via the `#themeToggle` button. Dark mode activates when the root document carries the `.dark` class.
 
+An explicit choice is stored under `theme` and wins over the system preference; with nothing stored the client follows `prefers-color-scheme`. The class is applied by an inline script in `client/index.html` before the bundle loads, so the first paint is already in the right theme; the provider then keeps the class in step and writes storage only for a theme the operator chose.
+
 | Semantic Token  | Light Mode (Default) | Dark Mode (`.dark`) | Application Role                                           |
 | :-------------- | :------------------- | :------------------ | :--------------------------------------------------------- |
 | `primary`       | `#5046e5`            | `#6e67eb`           | Primary action buttons, active slider thumbs, icon accents |
@@ -117,7 +119,7 @@ Soft, consistent radii define container and interactive boundaries:
 
 - **Buttons:** Primary (`.btn-primary`) uses `{colors.primary}` with white text and lifts on hover; secondary (`.btn-secondary`) uses `{colors.secondary}` with a `{colors.border}` outline. Buttons suppress the default focus outline but restore a `2px solid` `{colors.primary}` `:focus-visible` ring.
 - **Cards:** Grouped input panels and results use `.card` with `{colors.card-bg}` and `{rounded.card}`.
-- **Modals:** A single centered login dialog (`#loginModal`) renders over a dimmed full-viewport backdrop and is dismissed once session auth is present.
+- **Modals:** A single centered login dialog (`#loginModal`) renders over a dimmed full-viewport backdrop and is dismissed once session auth is present. Its error line (`#loginError`) carries the reason a session ended, so an operator who was signed out mid-task is told why they are back at the prompt; a sign-out the operator asked for carries no reason.
 - **Provider Brand Marks:** A provider family is identified by its own mark next to the family name, in the workbench rail and in the key-table heading. Cloudflare uses the Font Awesome `fa-cloudflare` glyph; Agnes uses the vendor's app icon, inlined as a data URI (`client/src/config/brand.ts`) so the mark adds no third-party origin. The React client loads nothing from a stylesheet CDN — Tailwind and Font Awesome are bundled from packages — so the credential surface contacts no third-party origin at all. The mark is sized in `em` via `.family-mark` so it tracks the family name's font-size, and it is decorative — `alt=""` and `aria-hidden="true"`, because the family name is always rendered as text beside it. The raster is a fixed-colour brand asset and does not invert with the theme, so it reads at full contrast on the light card and at lower contrast on the dark card; the mark is decorative and the name carries the meaning, so it is left unrestyled rather than restyled away from the vendor's brand.
 
 ## Do's and Don'ts

@@ -22,9 +22,14 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
  * An explicit choice always wins over the system preference; the system
- * preference is only consulted when nothing is stored. Same rule as the
- * legacy page, which read `localStorage.theme` and fell back to
- * `prefers-color-scheme` only when the key was absent.
+ * preference is only consulted when nothing is stored. The legacy page
+ * read `localStorage.theme` and fell back to `prefers-color-scheme` only
+ * when the key was absent.
+ *
+ * One deliberate difference: the legacy treated the *presence* of the
+ * key as decisive, so a value that was neither `"dark"` nor `"light"`
+ * meant light. Here only those two count as a choice and anything else
+ * follows the system, so a corrupted value cannot pin the theme.
  */
 export function resolveInitialTheme(): Theme {
   let stored: string | null = null;

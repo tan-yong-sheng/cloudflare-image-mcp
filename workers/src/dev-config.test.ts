@@ -171,6 +171,14 @@ describe("local dev templates", () => {
     expect(configValue(viteConfig, "publicDir")).toBe("false");
   });
 
+  test("the setting lookup cannot be widened by a metacharacter", () => {
+    // The escape in `configValue` is what keeps a setting name literal.
+    // Without it a name containing `.` would match any character and the
+    // guard could be satisfied by a different setting.
+    const source = '  aXb: "not-this",\n  a.b: "this-one",\n';
+    expect(configValue(source, "a.b")).toBe("this-one");
+  });
+
   test("the local secrets template names only variables the Worker reads", () => {
     const documented = devVars(read("workers/.dev.vars.example"));
     const known = envFields(read("workers/src/types.ts"));

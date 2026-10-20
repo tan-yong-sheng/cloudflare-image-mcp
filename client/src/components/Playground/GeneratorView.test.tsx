@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { AdminKeyProvider } from "../../app/admin-key";
-import { AuthProvider } from "../../app/auth";
+import { AuthProvider, useAuth } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { GeneratorView } from "./GeneratorView";
 
@@ -115,7 +115,20 @@ function stubApi(
   return calls;
 }
 
-function renderGenerator() {
+/** Exposes the sign-in, so a test can start a new session. */
+function SessionProbe({
+  session,
+}: {
+  session: { signIn: null | (() => Promise<void>) };
+}) {
+  const { login } = useAuth();
+  useEffect(() => {
+    session.signIn = () => login("bearer-key");
+  }, [login, session]);
+  return null;
+}
+
+function renderGenerator(session?: { signIn: null | (() => Promise<void>) }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -123,7 +136,10 @@ function renderGenerator() {
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <AuthProvider>
-          <AdminKeyProvider>{children}</AdminKeyProvider>
+          <AdminKeyProvider>
+            {session ? <SessionProbe session={session} /> : null}
+            {children}
+          </AdminKeyProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -299,6 +315,33 @@ describe("the generator", () => {
     // The bearer key is gone, so the tab is signed out.
     await waitFor(() =>
       expect(window.sessionStorage.getItem("api_key")).toBeNull()
+    );
+  });
+
+  it("clears the expiry message when the operator signs in again", async () => {
+    // The message belongs to the session that ended. A new session
+    // starts clean, or the operator is told the session expired after
+    // they have just signed in.
+    stubApi((route) =>
+      route.path === "/v1/images/generations"
+        ? jsonResponse(false, { error: { message: "Unauthorized" } }, 401)
+        : null
+    );
+    const user = userEvent.setup();
+    const session: { signIn: null | (() => Promise<void>) } = { signIn: null };
+    renderGenerator(session);
+    await ready();
+
+    await user.click(document.getElementById("submitButton")!);
+    expect(await screen.findByText(/Session expired/i)).toBeInTheDocument();
+
+    // The operator signs in again.
+    await act(async () => {
+      await session.signIn?.();
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Session expired/i)).toBeNull()
     );
   });
 

@@ -19,13 +19,11 @@ describe("the client's document", () => {
   });
 
   it("references no file outside the served build output", () => {
-    // The Worker serves the build output from /assets/ before the auth
-    // gate. A root-absolute reference to anything else — an image in a
-    // public directory, a stray stylesheet — is answered by the Worker
-    // as an API path: with API keys configured it answers 401, which
-    // reads as a credential problem. The only root-absolute reference
-    // the source document may carry is the Vite entry, which the build
-    // rewrites into a hashed file under /assets/.
+    // A root-absolute reference to a file outside the build output is
+    // answered by the Worker as an API path: with API keys configured it
+    // answers 401, which reads as a credential problem. The only
+    // root-absolute reference the source document may carry is the Vite
+    // entry, which the build rewrites into a hashed file under /assets/.
     const references = [
       ...document.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/g),
     ].map((match) => match[1]);
@@ -35,5 +33,25 @@ describe("the client's document", () => {
       if (!reference.startsWith("/")) continue;
       expect(reference, reference).toMatch(/^\/src\//);
     }
+  });
+
+  it("applies the theme before the bundle paints", () => {
+    // The provider sets the `.dark` class in an effect, which runs after
+    // the first paint, so a dark-preferring operator would see a light
+    // page that snaps dark. The inline script closes that gap: scripts run
+    // in document order and the module entry is deferred, so a script
+    // before it has already run when the bundle executes.
+    const script = /<script>([\s\S]*?)<\/script>/.exec(document)?.[1] ?? "";
+    expect(script).toContain('classList.add("dark")');
+    expect(script).toContain("prefers-color-scheme: dark");
+    // The stored choice is what wins; the system preference is consulted
+    // only when the key holds something that is not a choice.
+    expect(script).toContain('stored === "dark"');
+    expect(script).toContain('stored !== "light"');
+
+    const inlineAt = document.indexOf(script);
+    const entryAt = document.indexOf('type="module"');
+    expect(entryAt).toBeGreaterThan(-1);
+    expect(inlineAt).toBeLessThan(entryAt);
   });
 });
