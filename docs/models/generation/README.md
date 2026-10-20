@@ -509,11 +509,14 @@ it declares `sizeStrategy: "exact"` and the transport withholds `ratio` for it.
 | **Output Size**       | exact `WxH`, sent after the 512–4096 clamp               |
 | **Aspect Ratios**     | not supported by the model                               |
 
-**Published sizes.** The provider docs give `1024x1024`, `1024x768`, and
-`768x1024` as examples without enumerating the set, and publish no width or
-height bounds. `limits` mirrors 2.5's 512-4096 and lists only those three
-sizes; both are declarations for the size picker and MCP `supported_sizes`,
-not upstream validation. Source:
+**Verified sizes.** The provider publishes no size matrix for 2.0 and gives
+only example values, some of which the model replaces — live probe
+(2026-10-21) shows `1024x768`/`768x1024` come back as `1152x864`/`864x1152`
+and `1568x672` snaps to `1312x736`. `limits` mirrors 2.5's 512-4096 bounds
+and lists only the ten canvases the probe confirmed byte-exact: `1024x1024`,
+`864x1152`, `1152x864`, `1312x736`, `736x1312`, `832x1248`, `1248x832`,
+`2048x2048`, `3072x3072`, `4096x4096`. These are declarations for the size
+picker and MCP `supported_sizes`, not upstream validation. Source:
 [`agnes-ai.com/en/docs/agnes-image-20-flash`](https://agnes-ai.com/en/docs/agnes-image-20-flash).
 ---
 
