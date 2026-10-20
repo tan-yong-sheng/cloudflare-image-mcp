@@ -159,15 +159,35 @@ export function getFrontendHTML(options?: {
             box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
         }
 
+        /* The range input needs a box the same height as the size dropdown,
+           with the track drawn thin and centred inside it. The shared
+           input rule above would otherwise give it 40px of padding and a
+           full-size background, which is what made the track look like a
+           fat rectangle with a small circle on it. */
         .slider {
             -webkit-appearance: none;
             appearance: none;
             width: 100%;
-            height: 6px;
-            border-radius: 5px;
-            background: var(--border);
+            height: 2.5rem;
+            min-height: 2.5rem;
+            padding: 0;
+            border: 1px solid transparent;
+            background: transparent;
             outline: none;
-            margin: 10px 0;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .slider::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: var(--border);
+        }
+
+        .slider::-moz-range-track {
+            height: 6px;
+            border-radius: 999px;
+            background: var(--border);
         }
 
         .slider::-webkit-slider-thumb {
@@ -175,10 +195,40 @@ export function getFrontendHTML(options?: {
             appearance: none;
             width: 18px;
             height: 18px;
+            /* Centre an 18px thumb on the 6px track: (6 - 18) / 2. */
+            margin-top: -6px;
+            border: none;
             border-radius: 50%;
             background: var(--primary);
             cursor: pointer;
             transition: all 0.2s ease;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border: none;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        /* The seed field and its randomise button sit in one flex row: the
+           button's own padding made the row 54px tall, and the input
+           stretched to match. Pin both to the shared control height so the
+           row lines up with Size and Steps. */
+        #seed,
+        #randomSeed {
+            height: 2.5rem;
+            min-height: 2.5rem;
+        }
+
+        #randomSeed {
+            padding: 0 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .slider::-webkit-slider-thumb:hover {
@@ -1080,19 +1130,45 @@ export function getFrontendHTML(options?: {
         downloadButton.addEventListener('click', async () => {
             if (!currentImageUrl) return;
 
-            try {
-                const response = await fetch(currentImageUrl);
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
+            const name = 'image-' + Date.now() + '.png';
+            const save = (href) => {
                 const link = document.createElement('a');
-                link.href = url;
-                link.download = 'image-' + Date.now() + '.png';
+                link.href = href;
+                link.download = name;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+            };
+
+            // A data URI is already the image: fetching it back would only
+            // copy bytes in memory for no gain.
+            if (currentImageUrl.startsWith('data:')) {
+                save(currentImageUrl);
+                return;
+            }
+
+            // The stored URL is absolute and built from the request origin.
+            // Served through a proxy or a custom domain, that origin can
+            // differ from the one the page loaded from — so the fetch is
+            // cross-origin and the download attribute would be ignored.
+            // Fetch first (which also gives the file a real name), then fall
+            // back to opening the URL rather than reporting a failure the
+            // operator cannot act on.
+            try {
+                const response = await fetch(currentImageUrl);
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                save(url);
                 window.URL.revokeObjectURL(url);
             } catch (error) {
-                showGenerateError('Download failed: ' + (error instanceof Error ? error.message : String(error)));
+                const opened = window.open(currentImageUrl, '_blank');
+                if (!opened) {
+                    showGenerateError(
+                        'Download failed: ' + (error instanceof Error ? error.message : String(error)) +
+                        '. Open the image in a new tab to save it.'
+                    );
+                }
             }
         });
         // Provider credentials workbench (full-page SPA view, #91)

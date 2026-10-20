@@ -191,16 +191,26 @@ export default {
         try {
           const image = await env.IMAGE_BUCKET.get(imageKey);
           if (!image) {
-            return new Response("Image not found", { status: 404 });
+            return withCors(new Response("Image not found", { status: 404 }));
           }
-          return new Response(image.body, {
-            headers: {
-              "Content-Type": image.httpMetadata?.contentType || "image/png",
-              "Cache-Control": "public, max-age=86400",
-            },
-          });
+          // CORS, because the page that draws these images can be served
+          // from a different origin than the one the stored URL was built
+          // from (a proxy, a custom domain), and a cross-origin read is what
+          // the Download button performs. Without this header the browser
+          // blocks the response and Download fails while the image itself
+          // still renders.
+          return withCors(
+            new Response(image.body, {
+              headers: {
+                "Content-Type": image.httpMetadata?.contentType || "image/png",
+                "Cache-Control": "public, max-age=86400",
+              },
+            })
+          );
         } catch (error) {
-          return new Response("Error fetching image", { status: 500 });
+          return withCors(
+            new Response("Error fetching image", { status: 500 })
+          );
         }
       }
 
