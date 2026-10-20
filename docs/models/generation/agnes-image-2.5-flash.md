@@ -115,3 +115,15 @@ wider or taller than 4096 cannot be requested exactly through this
 integration — the clamped size maps to a nearby tier and ratio, and the
 picker/MCP `supported_sizes` offer the `supportedSizes` subset (agnes-ai.com/
 en/docs/agnes-image-25-flash, "Size and Ratio").
+
+**An exact midpoint between two tiers rounds down.** The tier is chosen by
+area against the square bases (1K = 1024², 2K = 2048², …); anything above
+the midpoint takes the higher tier, and a request landing exactly on it
+keeps the lower one. `2048x1152` (2.36 MP) sits precisely on the 1K/2K
+midpoint, so it is served as `1K` + `16:9` → `1312x736`. That is real
+under-delivery of area, not a bug in the ratio: the ratio is honoured
+exactly, and the provider publishes no cell near 2.36 MP at 16:9 (1K is
+0.97 MP, 2K is 3.86 MP). Rounding down also matches the cheaper tier, so an
+off-grid request never bills at the larger tier by accident. The picker and
+MCP `supported_sizes` only offer on-grid cells, so this only affects
+callers passing a custom `WxH`.

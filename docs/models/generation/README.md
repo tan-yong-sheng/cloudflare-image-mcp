@@ -428,6 +428,40 @@ These models support uploading multiple reference images (up to 4) along with te
 
 ### Agnes AI
 
+#### Provider behavior: intermittent subject substitution
+
+Observed in live testing on 2026-10-21. Requests to the Agnes API
+occasionally return an image of a **different subject than the prompt
+asked for**, with HTTP 200 and a valid image at the requested dimensions.
+The substitutions seen were a domestic portrait of a seated person,
+returned while the prompt asked for an animal in a futuristic setting.
+
+This happens **upstream, not in this Worker**. Reproduced by calling
+`apihub.agnes-ai.com/v1/images/generations` directly with the same body
+the transport builds, bypassing the Worker and the provider pool entirely:
+
+| Same prompt, three consecutive requests | Result                       |
+| --------------------------------------- | ---------------------------- |
+| 1                                       | unrelated subject (portrait) |
+| 2                                       | on-prompt                    |
+| 3                                       | on-prompt                    |
+
+Consequences worth knowing:
+
+- **Nothing in this integration can detect it.** The response is a
+  well-formed image of the requested size, so there is no error, status
+  code, or payload shape to test against. Treat output as advisory.
+- **Retrying is the only mitigation today.** A repeat request usually
+  returns an on-prompt image.
+- **It is prompt-dependent, not model-specific.** Ordinary prompts
+  (a red apple on a table, a retriever puppy in a garden) returned the
+  requested subject on every attempt; the substitutions clustered on a
+  prompt containing "cyberpunk".
+
+If you need prompt-faithful output for a category of prompt that
+substitutes, verify a sample against the provider directly before
+building on it.
+
 #### Agnes Image 2.5 Flash
 
 Agnes AI's text-to-image and image-composition model. Unlike the Cloudflare
