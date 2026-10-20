@@ -44,7 +44,7 @@ when `authToken` is present) opening a workbench modal that mirrors variant A:
 
 - Modal backdrop/dialog: `fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50` + `card` — the `#loginModal` pattern (`frontend.ts:206-224`).
 - Buttons: existing `btn`, `btn-secondary`, `btn-primary` classes; icons FontAwesome `fa-solid`/`fa-brands` already loaded by the page.
-- Fetch/auth: the existing `authToken` + `X-Admin-Key` header idiom; `GET /api/admin/health` for state (counts, labels, weights, flags, active versions — never secrets).
+- Fetch/auth: the existing `authToken` + `X-Admin-Key` header idiom; `GET /api/admin/health` for state (counts, labels, weights, flags, active versions, and the per-key masked hint — never a token).
 - Store: the shared atomic batch in `admin-store.ts` (key + version + config bump + audit) already used by add/rotate/disable — PATCH reuses it; only the field set grows.
 - No inline `onclick` handlers in shipped code (removed-panel precedent used `addEventListener`); prototype's inline handlers are converted.
 

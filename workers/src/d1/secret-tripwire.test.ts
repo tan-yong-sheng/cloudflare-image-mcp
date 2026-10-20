@@ -119,7 +119,7 @@ test("the repo's own config stays clean (scanner calibration)", () => {
 });
 
 describe("admin responses carry no secret material (R2, S3)", () => {
-  test("health fixture: labels and counts pass the scanner", () => {
+  test("health fixture: labels, counts, and masked hints pass the scanner", () => {
     const body = JSON.stringify({
       providers: [{ id: "cloudflare", displayName: "Cloudflare Workers AI" }],
       keys: [
@@ -130,6 +130,9 @@ describe("admin responses carry no secret material (R2, S3)", () => {
           weight: 1,
           enabled: true,
           activeVersion: 1,
+          // The masked hint is the one field that quotes token material; it
+          // must stay under every pattern's floor.
+          maskedKey: "sk-yt****fa12",
         },
       ],
       configVersion: 2,
