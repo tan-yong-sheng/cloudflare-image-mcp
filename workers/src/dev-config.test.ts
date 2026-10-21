@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { CLIENT_ASSET_DIR } from "./routes.js";
 
 const WORKERS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_DIR = join(WORKERS_DIR, "..");
@@ -43,6 +44,19 @@ function vars(toml: string): string[] {
 /** The `main` entry point a manifest points at. */
 function mainEntry(toml: string): string {
   return /^[ \t]*main\s*=\s*"([^"]+)"/m.exec(toml)?.[1] ?? "";
+}
+
+/** The `[assets]` table of a manifest, with quoted values unquoted. */
+function assets(toml: string): Record<string, string> {
+  const start = toml.search(/^[ \t]*\[assets\][ \t]*$/m);
+  if (start < 0) return {};
+  const table: Record<string, string> = {};
+  for (const line of toml.slice(start).split("\n").slice(1)) {
+    if (/^[ \t]*\[/.test(line)) break;
+    const entry = /^[ \t]*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$/.exec(line);
+    if (entry) table[entry[1]] = entry[2].replace(/^"|"$/g, "");
+  }
+  return table;
 }
 
 /** The manifest body the deploy workflow writes into workers/wrangler.toml. */
@@ -77,6 +91,32 @@ function devVars(text: string): { key: string; value: string }[] {
     });
 }
 
+/**
+ * The value of a setting in the client's Vite config.
+ *
+ * A plain search over the file would be satisfied by a commented-out
+ * value, and the first match could be an override that is not the one
+ * in effect. Only a line that starts with the setting name carries a
+ * value, and the setting has to be named exactly once, so neither a
+ * comment nor a second occurrence can hide the value that counts.
+ *
+ * The client asserts the same contract against the effective build
+ * configuration; this is the Worker's side of it, and it keeps the two
+ * packages from drifting apart.
+ */
+function configValue(source: string, setting: string): string | undefined {
+  // The setting name goes into the pattern as a literal, so a name with
+  // a regex character in it cannot match something else.
+  const literal = setting.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [
+    ...source.matchAll(
+      new RegExp(`^\\s*${literal}\\s*:\\s*(?:"([^"]*)"|([^,\\s]+))`, "gm")
+    ),
+  ];
+  if (matches.length !== 1) return undefined;
+  return matches[0][1] ?? matches[0][2];
+}
+
 describe("local dev templates", () => {
   const example = read("workers/wrangler.toml.example");
   const generated = generatedManifest(
@@ -97,6 +137,46 @@ describe("local dev templates", () => {
     expect(bindings(example).sort()).toEqual(bindings(generated).sort());
     expect(vars(example).sort()).toEqual(vars(generated).sort());
     expect(mainEntry(example)).toBe(mainEntry(generated));
+  });
+
+  test("both manifests serve the client from the same build output", () => {
+    // The React client is deployed as Workers Static Assets. A local
+    // manifest pointing somewhere else would make local dev serve a
+    // different document than the one that is deployed.
+    expect(assets(example)).toEqual(assets(generated));
+    expect(assets(example)).toMatchObject({
+      directory: "../client/dist",
+      binding: "ASSETS",
+      // The Worker answers the routes it owns and reaches the client's
+      // files through the binding, so an unknown path keeps the Worker's
+      // error envelope.
+      not_found_handling: "none",
+      run_worker_first: "true",
+    });
+  });
+
+  test("the client build produces only what the Worker serves publicly", () => {
+    // The Worker serves the client's bundle, stylesheet and fonts from
+    // /assets/ before the auth gate, and everything else the client
+    // asks for is the document. The build has to agree: a bundle
+    // directory with another name leaves every bundle request 404ing,
+    // and a file outside /assets/ is served by the Worker as an API
+    // path — with API keys configured it answers 401, which reads as a
+    // credential problem. Nothing else would say so.
+    const viteConfig = read("client/vite.config.ts");
+    expect(configValue(viteConfig, "assetsDir")).toBe(CLIENT_ASSET_DIR);
+    // Vite copies a public directory to the root of the build output.
+    // The build must not have one, or it can produce a file the Worker
+    // would not serve.
+    expect(configValue(viteConfig, "publicDir")).toBe("false");
+  });
+
+  test("the setting lookup cannot be widened by a metacharacter", () => {
+    // The escape in `configValue` is what keeps a setting name literal.
+    // Without it a name containing `.` would match any character and the
+    // guard could be satisfied by a different setting.
+    const source = '  aXb: "not-this",\n  a.b: "this-one",\n';
+    expect(configValue(source, "a.b")).toBe("this-one");
   });
 
   test("the local secrets template names only variables the Worker reads", () => {
