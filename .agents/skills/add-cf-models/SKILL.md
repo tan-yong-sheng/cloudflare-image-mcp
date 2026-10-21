@@ -19,7 +19,7 @@ When adding a new Cloudflare text-to-image model, you need to update:
 2. **Frontend Dropdown** - Add model to the UI selection
 3. **Model Documentation** - Create markdown doc in `docs/models/generation/`
 
-**Note:** MCP automatically picks up new models from the model configuration - no separate MCP code changes are needed. The `list_models` and `describe_model` tools dynamically read from `workers/src/config/models.ts`.
+**Note:** MCP automatically picks up new models from the model configuration - no separate MCP code changes are needed. The `list_models` and `describe_model` tools dynamically read the model registry (`workers/src/config/models.json`, projected into `models.generated.ts`).
 
 ## Prerequisites
 
@@ -42,7 +42,8 @@ workers/
 ├── src/
 │   ├── config/
 │   │   ├── models.json          # Source of truth - JSON schema
-│   │   └── models.ts            # TypeScript runtime config (mirror of JSON)
+│   │   ├── models.generated.ts  # Generated from models.json - never edited
+│   │   └── models.ts            # Registry access (lookup, exposure, listing)
 │   └── endpoints/
 │       └── frontend.ts          # HTML dropdown options
 docs/
@@ -119,46 +120,29 @@ Add a new entry under the `"models"` object:
 
 ### 2. Add Model Alias (Optional)
 
-If the model has a shorter alias, add to `"modelAliases"`:
+A short alias goes in the model's own `exposure` block, which is what
+`resolveModelId` reads:
 
 ```json
-"modelAliases": {
-  "@cf/provider/short-name": "@cf/provider/full-model-name"
+"exposure": {
+  "alias": "short-name"
 }
 ```
 
-### 3. Mirror Changes to `workers/src/config/models.ts`
+The top-level `"modelAliases"` map is read by no code path; leave it alone.
 
-Add the same model configuration in TypeScript format:
+### 3. Regenerate the TypeScript Registry
 
-```typescript
-'@cf/provider/model-name': {
-  id: '@cf/provider/model-name',
-  name: 'Display Name',
-  description: 'Brief description',
-  provider: 'provider-name',
-  inferenceProvider: 'cloudflare-rest',
-  apiVersion: 2,
-  inputFormat: 'json',
-  responseFormat: 'base64',
-  supportedTasks: ['text-to-image'],
-  parameters: {
-    prompt: { cfParam: 'prompt', type: 'string', required: true },
-    steps: { cfParam: 'steps', type: 'integer', default: 4, min: 1, max: 50 },
-    seed: { cfParam: 'seed', type: 'integer' },
-  },
-  limits: {
-    maxPromptLength: 2048,
-    defaultSteps: 4,
-    maxSteps: 50,
-    minWidth: 256,
-    maxWidth: 2048,
-    minHeight: 256,
-    maxHeight: 2048,
-    supportedSizes: ['256x256', '512x512', '768x768', '1024x1024'],
-  },
-},
+`workers/src/config/models.generated.ts` is generated from the JSON — never
+edit it by hand:
+
+```bash
+cd workers
+npm run models:gen
 ```
+
+`npm run check` fails if `models.json` changed without this step, so a
+forgotten regeneration cannot reach a PR. `models.ts` needs no change.
 
 ### 4. Verify the Frontend Dropdown (no code edit)
 

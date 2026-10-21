@@ -93,23 +93,24 @@ Or follow the guide in `.agents/skills/add-cf-models/SKILL.md`.
 ### Quick Steps
 
 1. **Add model configuration** to `workers/src/config/models.json` (source of truth)
-2. **Mirror changes** to `workers/src/config/models.ts` (TypeScript runtime)
+2. **Regenerate the registry**: `cd workers && npm run models:gen`
 3. **Update frontend dropdown** in `workers/src/endpoints/frontend.ts`
 4. **Type check and deploy**
 
 ```bash
-cd workers && npm run check
+cd workers && npm run check   # also fails if the generated registry is stale
 git add . && git commit -m "Add @cf/provider/model-name"
 git push origin <branch> # `main` is protected — open a PR
 ```
 
 ### Model Configuration Files
 
-| File                                | Purpose                                                  |
-| ----------------------------------- | -------------------------------------------------------- |
-| `workers/src/config/models.json`    | Source of truth - JSON schema with all model definitions |
-| `workers/src/config/models.ts`      | TypeScript runtime config (mirror of JSON)               |
-| `workers/src/endpoints/frontend.ts` | Frontend HTML with model dropdown                        |
+| File                                     | Purpose                                                  |
+| ---------------------------------------- | -------------------------------------------------------- |
+| `workers/src/config/models.json`         | Source of truth - all model definitions                  |
+| `workers/src/config/models.generated.ts` | Generated registry (`npm run models:gen`) - never edited |
+| `workers/src/config/models.ts`           | Hand-written registry access (lookup, exposure, listing) |
+| `workers/src/endpoints/frontend.ts`      | Frontend HTML with model dropdown                        |
 
 See the skill documentation for detailed parameter definitions and examples.
 

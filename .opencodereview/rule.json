@@ -17,7 +17,7 @@
     },
     {
       "path": "workers/src/config/*",
-      "rule": "workers/src/config/models.json is the source of truth; models.ts must mirror it exactly. Flag any model field present in one but not the other.",
+      "rule": "workers/src/config/models.json is the source of truth; models.generated.ts is generated from it by scripts/generate-models.mjs (npm run models:gen) and must never be hand-edited. Flag a hand-edit to the generated file, or a models.json change that leaves the generated file stale.",
       "merge_system_rule": true
     },
     {
