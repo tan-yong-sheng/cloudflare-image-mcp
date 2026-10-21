@@ -498,7 +498,7 @@ export function getFrontendHTML(options?: {
                     <div id="advancedOptions" class="space-y-3 hidden">
                         <div id="sizeWrap">
                             <label for="size" class="block text-sm font-medium mb-1">
-                                <i class="fa-solid fa-expand mr-1"></i>Size
+                                <i class="fa-solid fa-expand mr-1"></i>Size (W × H)
                             </label>
                             <select id="size" class="w-full">
                                 <option value="">Loading sizes…</option>
