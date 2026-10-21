@@ -120,6 +120,9 @@ describe("POST /v1/images/generations contract", () => {
     expect(body.error.message).toBeTruthy();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toHaveProperty("url");
+    // `created` is part of the documented partial envelope (docs/API.md,
+    // CODING_STANDARDS.md); without this it could be dropped silently.
+    expect(typeof body.created).toBe("number");
   });
 
   test("a partial batch honours b64_json, not url", async () => {
@@ -161,7 +164,7 @@ describe("POST /v1/images/generations contract", () => {
     expect(body.data[0]).not.toHaveProperty("url");
   });
 
-  test("a batch that fails on the first image returns no data at all", async () => {
+  test("a batch where every image fails returns no data at all", async () => {
     // The contract has two halves: partial results ride along, and `data` is
     // absent when nothing succeeded. Without this, a caller cannot tell
     // "0 of n" from "field absent", and a change could start emitting an
