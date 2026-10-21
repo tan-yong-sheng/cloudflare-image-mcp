@@ -409,6 +409,8 @@ Models accepting JSON payloads:
 - SD 1.5 Img2Img
 - SD 1.5 Inpainting
 - Agnes Image 2.5 Flash
+- Agnes Image 2.1 Flash
+- Agnes Image 2.0 Flash
 
 Send parameters as a JSON object in the request body.
 
