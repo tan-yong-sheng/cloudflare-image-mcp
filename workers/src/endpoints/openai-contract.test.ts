@@ -81,6 +81,47 @@ describe("POST /v1/images/generations contract", () => {
     }
   });
 
+  test("a batch that fails part-way still returns the images that succeeded", async () => {
+    // Ask for 3, succeed on 1, fail on the second: runMany's contract is
+    // that completed images survive the failure, and the endpoint used to
+    // discard them and return a bare error. The caller paid for the one
+    // that worked, so it must come back — alongside the error and a 5xx
+    // status, so a status-only caller still sees the failure.
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        if (calls === 1) {
+          return Response.json(
+            { result: { image: FIXTURE_PNG_B64 } },
+            { headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ errors: [{ message: "rate limited" }] }),
+          { status: 429, headers: { "Content-Type": "application/json" } }
+        );
+      })
+    );
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+
+    const res = await endpoint.handle(
+      post("/v1/images/generations", {
+        prompt: "a beach",
+        model: SCHNELL,
+        n: 3,
+        response_format: "url",
+      })
+    );
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toBeTruthy();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toHaveProperty("url");
+  });
+
   test("b64_json format returns only b64_json field", async () => {
     stubInference("json");
     const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
