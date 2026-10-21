@@ -298,12 +298,18 @@ jobs:
             const required = {
               DEPLOYED_AT: process.env.DEPLOYED_AT,
               COMMIT_SHA: process.env.COMMIT_SHA,
-              CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
-              CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
             };
+            // Runtime secrets only. CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN
+            // and AI_ACCOUNTS are deliberately absent: ADR-001 made inference
+            // credentials database-only, so the Worker reads none of them
+            // (src/types.ts declares no AI_ACCOUNTS; src/services/pool-loader
+            // .test.ts pins that legacy vars with an empty store yield zero
+            // credentials). They stay GitHub secrets because this workflow
+            // itself needs the CF pair for wrangler, and AI_ACCOUNTS is the
+            // one-shot D1 import source — shipping them to the Worker only
+            // widened blast radius for values nothing reads.
             const optional = {
               API_KEYS: process.env.API_KEYS_VALUE,
-              AI_ACCOUNTS: process.env.AI_ACCOUNTS_VALUE,
               PROVIDER_DATA_KEY: process.env.PROVIDER_DATA_KEY_VALUE,
               ADMIN_API_KEY: process.env.ADMIN_API_KEY_VALUE,
               TZ: process.env.TZ_VALUE,
@@ -317,7 +323,6 @@ jobs:
           DEPLOYED_AT: ${{ env.DEPLOYED_AT }}
           COMMIT_SHA: ${{ github.sha }}
           API_KEYS_VALUE: ${{ secrets.API_KEYS }}
-          AI_ACCOUNTS_VALUE: ${{ secrets.AI_ACCOUNTS }}
           PROVIDER_DATA_KEY_VALUE: ${{ secrets.PROVIDER_DATA_KEY }}
           ADMIN_API_KEY_VALUE: ${{ secrets.ADMIN_API_KEY }}
           TZ_VALUE: ${{ secrets.TZ }}
@@ -387,9 +392,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Secrets Configured (role each secret serves)" >> $GITHUB_STEP_SUMMARY
           echo "- CLOUDFLARE_API_TOKEN: ✅ Configured (role: management API / deploy token; pre-flight verified)" >> $GITHUB_STEP_SUMMARY
-          echo "- CLOUDFLARE_ACCOUNT_ID: ✅ Configured (role: Cloudflare account for deploy + fallback AI inference)" >> $GITHUB_STEP_SUMMARY
+          echo "- CLOUDFLARE_ACCOUNT_ID: ✅ Configured (role: Cloudflare account for deploy/migrations; not a runtime inference fallback — ADR-001)" >> $GITHUB_STEP_SUMMARY
           echo "- API_KEYS: ${{ secrets.API_KEYS != '' && '✅ Configured (role: endpoint auth — MCP + OpenAI + frontend)' || '❌ Missing (role: endpoint auth — endpoints are public)' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Configured (role: AI inference — multi-account)' || 'ℹ️ Not set (role: AI inference — falls back to deploy credentials)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- AI_ACCOUNTS: ${{ secrets.AI_ACCOUNTS != '' && '✅ Set (role: one-shot D1 import source only — never a runtime credential; ADR-001)' || 'ℹ️ Not set (role: one-shot D1 import source only)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- AI_ACCOUNTS → D1 import: ${{ inputs.import_credentials == true && '✅ Ran this deploy (envelopes applied; row evidence above)' || 'ℹ️ Not run (opt-in via the import_credentials workflow_dispatch input)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- D1 provider store: binding PROVIDER_DB (role: provider schema/migrations applied before deploy; /api/admin/* reads and writes it — R2 #74)" >> $GITHUB_STEP_SUMMARY
           echo "- PROVIDER_DATA_KEY: ${{ secrets.PROVIDER_DATA_KEY != '' && '✅ Configured (role: AES-GCM envelope data key — consumed from R1b)' || 'ℹ️ Not set (role: AES-GCM envelope data key — needed before R1b reads D1)' }}" >> $GITHUB_STEP_SUMMARY

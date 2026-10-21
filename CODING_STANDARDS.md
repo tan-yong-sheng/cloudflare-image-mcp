@@ -62,11 +62,16 @@ to the 400 envelope _before_ the service call. Clamp to
 
 ## Logging (no logger lib — `console` only, by severity)
 
-- `console.error` = failed operation (`index.ts:146`,
-  `services/image-generator.ts:279`, `services/r2-storage.ts:292`).
-- `console.warn` = degraded-config fallback only
-  (`image-generator.ts:98,103,110`, `AI_ACCOUNTS` fallback).
-- `console.log` = cron summary only (`index.ts:163`).
+- `console.error` = failed operation (`index.ts:210`,
+  `services/image-generator.ts:238`, `services/r2-storage.ts:199`).
+- `console.warn` = degraded-config or recovered-failure path only
+  (`services/pool-cache.ts` stale-snapshot fallbacks,
+  `services/generation-adapters.ts` key parking,
+  `services/provider-pool.ts` unknown-key skip, `endpoints/admin.ts` missing
+  `API_KEYS`). There is no `AI_ACCOUNTS` fallback to warn about: ADR-001 made
+  credentials database-only, so the Worker reads no credential environment
+  variable.
+- `console.log` = cron summary only (`index.ts:232`).
   No request logging, no structured logger.
 
 ## Naming / layout
