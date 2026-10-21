@@ -87,13 +87,18 @@ export class ParamParser {
       result.height = height;
     }
     if (mergedParams.width !== undefined) {
-      result.width = this.parseInteger(mergedParams.width, 256, 2048, "width");
+      result.width = this.parseInteger(
+        mergedParams.width,
+        256,
+        this.dimensionCeiling(modelConfig, "width"),
+        "width"
+      );
     }
     if (mergedParams.height !== undefined) {
       result.height = this.parseInteger(
         mergedParams.height,
         256,
-        2048,
+        this.dimensionCeiling(modelConfig, "height"),
         "height"
       );
     }
@@ -292,6 +297,26 @@ export class ParamParser {
     const width = parseInt(match[1], 10);
     const height = parseInt(match[2], 10);
     return `${width}x${height}`;
+  }
+
+  /**
+   * Upper bound for an explicit width/height before the model clamp runs.
+   *
+   * The model's own limit is the real ceiling — anything above it is clamped
+   * afterwards anyway — so a hard 2048 here silently refused canvases a model
+   * declares (lucid-origin's 2500, the Agnes 512-4096 range). The 2048 default
+   * stays for callers that pass no model, which keeps the previous behaviour
+   * where there is no declared limit to prefer.
+   */
+  private static dimensionCeiling(
+    modelConfig: ModelConfig | undefined,
+    axis: "width" | "height"
+  ): number {
+    const declared =
+      axis === "width"
+        ? modelConfig?.limits.maxWidth
+        : modelConfig?.limits.maxHeight;
+    return typeof declared === "number" && declared > 0 ? declared : 2048;
   }
 
   /**
