@@ -115,7 +115,12 @@ jobs:
 
   e2e-tests:
     name: E2E Tests (${{ inputs.environment || 'staging' }})
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`: the browser install aborts on a runner
+    # image Playwright has no build for ("Playwright does not support
+    # chromium on ubuntu26.04-x64"), which failed this gate on every branch
+    # the moment `ubuntu-latest` rolled forward — before a single test ran.
+    # Bump this deliberately, together with e2e/package.json's Playwright.
+    runs-on: ubuntu-24.04
     needs: [deploy_staging]
     # Full generation matrix needs headroom; a hung Playwright/browser
     # step must fail the gate, never hold the required check indefinitely.
