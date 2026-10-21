@@ -277,8 +277,13 @@ export class ParamParser {
         Math.min(limits.maxHeight, height)
       );
       params.size = `${clampedWidth}x${clampedHeight}`;
-      if (params.width !== undefined) params.width = clampedWidth;
-      if (params.height !== undefined) params.height = clampedHeight;
+      // Carry the clamped dims into width/height only when they still hold the
+      // value derived from `size`. An explicit width/height outranks `size`
+      // (both parse paths apply it after deriving from size), so overwriting
+      // unconditionally silently discards the caller's explicit parameter and
+      // reverses that precedence.
+      if (params.width === width) params.width = clampedWidth;
+      if (params.height === height) params.height = clampedHeight;
     }
     if (params.width !== undefined) {
       params.width = Math.max(

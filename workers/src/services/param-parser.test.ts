@@ -153,6 +153,23 @@ describe("ParamParser.parse with string input", () => {
     expect(result.size).toBe("2048x512");
   });
 
+  test("an explicit width survives the size clamp", () => {
+    // Explicit params outrank the `size` string -- that is the documented
+    // precedence and the shape `run_model` produces, where `size` and
+    // `cf_params.width` both land in explicitParams. The size clamp used to
+    // write its size-derived dims back over width/height unconditionally, so
+    // an explicit width was silently discarded. Clamping `size` must not
+    // touch a dim the caller set.
+    const sizeOnly = sizeOnlyConfig();
+    const result = ParamParser.parse(
+      "cat",
+      { size: "1024x1024", width: 768 },
+      sizeOnly
+    );
+    expect(result.size).toBe("1024x1024");
+    expect(result.width).toBe(768);
+  });
+
   test("width outside hard parse bounds throws before clamping", () => {
     expect(() => ParamParser.parse("cat --width=100", {}, fluxConfig)).toThrow(
       "width must be between 256 and 2048"
