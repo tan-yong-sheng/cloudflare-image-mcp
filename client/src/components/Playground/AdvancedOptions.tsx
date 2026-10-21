@@ -60,7 +60,7 @@ export function AdvancedOptions({
           <div id="sizeWrap">
             <label htmlFor="size" className="block text-sm font-medium mb-1">
               <i className="fa-solid fa-expand mr-1" />
-              Size
+              Size (W × H)
             </label>
             <select
               id="size"
