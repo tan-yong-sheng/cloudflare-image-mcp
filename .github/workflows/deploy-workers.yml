@@ -323,7 +323,6 @@ jobs:
           DEPLOYED_AT: ${{ env.DEPLOYED_AT }}
           COMMIT_SHA: ${{ github.sha }}
           API_KEYS_VALUE: ${{ secrets.API_KEYS }}
-          AI_ACCOUNTS_VALUE: ${{ secrets.AI_ACCOUNTS }}
           PROVIDER_DATA_KEY_VALUE: ${{ secrets.PROVIDER_DATA_KEY }}
           ADMIN_API_KEY_VALUE: ${{ secrets.ADMIN_API_KEY }}
           TZ_VALUE: ${{ secrets.TZ }}

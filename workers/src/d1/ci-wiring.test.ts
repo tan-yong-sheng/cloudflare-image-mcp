@@ -104,17 +104,30 @@ describe("migrations run before deploy (R1a)", () => {
     // of them, so shipping them widened blast radius for nothing.
     // Asserting on the bulk payload rather than the whole file is the point:
     // a whole-file check passes even while the payload still carries them.
-    const bulkStep = WORKFLOW.slice(
-      WORKFLOW.indexOf("const optional = {"),
-      WORKFLOW.indexOf("npx wrangler secret bulk")
-    );
-    expect(bulkStep).not.toBe("");
+    // Both objects are in scope — a name added to `required` reaches the
+    // Worker just as surely as one in `optional`. Only real `KEY:` assignment
+    // lines count: the step's own comment names these variables to explain
+    // their absence, and a substring search over raw text would trip on it.
+    const from = WORKFLOW.indexOf("const required = {");
+    const to = WORKFLOW.indexOf("npx wrangler secret bulk");
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    const assigned = WORKFLOW.slice(from, to)
+      .split("\n")
+      .map((line) => /^\s*([A-Z][A-Z0-9_]*)\s*:/.exec(line)?.[1])
+      .filter((key): key is string => Boolean(key));
     for (const key of [
       "AI_ACCOUNTS",
       "CLOUDFLARE_ACCOUNT_ID",
       "CLOUDFLARE_API_TOKEN",
     ]) {
-      expect(bulkStep).not.toContain(key);
+      expect(assigned).not.toContain(key);
+    }
+    // The secrets that DO belong in the payload stay asserted positive, so
+    // an over-eager deletion here fails instead of silently shipping an
+    // unauthenticated Worker.
+    for (const key of ["API_KEYS", "PROVIDER_DATA_KEY", "ADMIN_API_KEY"]) {
+      expect(assigned).toContain(key);
     }
   });
 

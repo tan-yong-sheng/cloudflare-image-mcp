@@ -133,6 +133,24 @@ curl https://<your-worker-url>/health
 
 You should see `{"status":"healthy", ...}` with version, timezone, and `authEnabled`.
 
+### Removing secrets a Worker already has
+
+`wrangler secret bulk` only sets the keys in its payload — it never deletes
+anything. So after the payload stops shipping a secret (e.g. the deprecated
+`AI_ACCOUNTS`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`), **already
+deployed Workers keep them** until you remove them deliberately:
+
+```bash
+npx wrangler secret delete AI_ACCOUNTS --name <worker-name>
+npx wrangler secret delete CLOUDFLARE_ACCOUNT_ID --name <worker-name>
+npx wrangler secret delete CLOUDFLARE_API_TOKEN --name <worker-name>
+```
+
+None of them is read at runtime (ADR-001), so leaving them is harmless — the
+benefit is a smaller blast radius if a Worker is ever compromised. Removing
+them does not affect deploy: the workflow keeps its own copies as GitHub
+secrets for wrangler and the one-shot D1 import.
+
 ---
 
 ## 📁 How CI/CD Works
