@@ -43,6 +43,51 @@ describe("router public paths", () => {
     expect(html).toContain("<!DOCTYPE html>");
   });
 
+  test("the model picker is told which providers can actually serve", async () => {
+    const response = await worker.fetch(get("/api/internal/models"), env());
+
+    expect(response.status).toBe(200);
+    const models = (await response.json()) as Array<{
+      provider: string;
+      available: boolean;
+    }>;
+    expect(models.length).toBeGreaterThan(0);
+    // This env has no D1 binding, so no provider row is servable and every
+    // entry says so. Availability is per model, from the pool readiness
+    // map — not a per-provider list the client has to join itself.
+    expect(models.every((model) => model.available === false)).toBe(true);
+  });
+
+  test("an unservable pool leaves the picker blank, not disabled-with-models", async () => {
+    const html = await (await worker.fetch(get("/"), env())).text();
+
+    // Options exist only for models the request path would accept...
+    expect(html).toContain("m.available === true");
+    // ...and the empty state is a genuinely empty <select> (no placeholder
+    // masquerading as a choice) plus the shared no-keys title.
+    expect(html).toContain("modelSelect.innerHTML = ''");
+    expect(html).not.toContain('value="">No models');
+    expect(html).toContain("selectableModels === 0");
+    // A failed refetch drops the stale list instead of keeping options that
+    // may no longer be servable (the picker would otherwise offer a model the
+    // request path refuses), while the user's choice survives for the next
+    // successful load. Submit follows the same predicate, so an empty picker
+    // never sits under an enabled button.
+    expect(html).toContain("selectableModels = 0;");
+    expect(html).toContain(
+      "lastModelValue = modelSelect.value || lastModelValue;"
+    );
+    expect(html).toContain(
+      "inFlight || !credentialsConfigured || selectableModels === 0;"
+    );
+    // Overlapping refetches are sequenced: a slow older response must not
+    // reinstate the list a newer one already replaced.
+    expect(html).toContain("if (request !== modelRequest) return;");
+    // Models that declare a single `size` parameter (Agnes) get the same
+    // size control as models that declare width+height.
+    expect(html).toContain("|| has('size')");
+  });
+
   test("login modal validates the key against an authenticated route", async () => {
     const response = await worker.fetch(get("/"), env());
     const html = await response.text();
@@ -80,6 +125,12 @@ describe("router public paths", () => {
     // Slice D: labels associated, live regions announced, toggle exposes state.
     // #65+#66: width/height sliders gone; size + steps labels remain.
     expect(html).toContain('for="size"');
+    // The size value is width-first (the parser splits on "x" into
+    // [width, height]), so the label names that order. Without it a reader
+    // can take 1312x736 as height-first and transpose it — and six of the
+    // Agnes sizes have a transposed twin in the same list, so the mistake
+    // would pick a real but wrong canvas rather than an invalid one.
+    expect(html).toContain("Size (W × H)");
     expect(html).toContain('for="steps"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('role="status"');
@@ -102,7 +153,9 @@ describe("router public paths", () => {
     expect(html).toContain("applyCredentialWarning");
     // The model picker greys out with the same flag, so an unconfigured
     // pool never offers a model the user then cannot generate with.
-    expect(html).toContain("modelSelect.disabled = !credentialsConfigured;");
+    expect(html).toContain(
+      "modelSelect.disabled = !credentialsConfigured || selectableModels === 0;"
+    );
     expect(html).not.toContain("fetch(API_BASE + '/admin/health'");
   });
 
@@ -149,10 +202,13 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
       "adminError",
       "adminPanel",
       "adminKeys",
+      "adminKeysHead",
+      "adminAcctHead",
       "adminRail",
       "adminAddKey",
       "adminNotice",
       "adminSheet",
+      "adminSheetAcctField",
       "adminSheetAcct",
       "adminSheetToken",
       "adminSheetWeight",
@@ -218,5 +274,51 @@ describe("provider credentials workbench (R2 follow-up, #91)", () => {
     expect(html).toContain('id="adminView"');
     expect(html).toContain('id="adminGate"');
     expect(html).toContain('id="generatorView"');
+  });
+
+  test("the image proxy sends CORS, so Download works cross-origin", async () => {
+    // Download reads the stored image with fetch(). The page can be served
+    // from a different origin than the one embedded in the stored URL (a
+    // proxy, a custom domain), and without this header the browser blocks
+    // the response: the image renders but Download fails with an opaque
+    // "Failed to fetch". The header is the fix, so pin it on both the hit
+    // and the miss.
+    const crossOrigin = () =>
+      new Request("https://worker.test/images/2026-01-01/nope.png", {
+        method: "GET",
+        headers: { Origin: "https://proxy.example" },
+      });
+
+    const missing = await worker.fetch(crossOrigin(), env());
+    expect(missing.headers.get("access-control-allow-origin")).toBe("*");
+
+    // A hit needs a real object, so drive the bucket directly.
+    const store = new Map<string, ArrayBuffer>();
+    store.set(
+      "images/2026-01-01/ok.png",
+      new Uint8Array([137, 80, 78, 71]).buffer
+    );
+    const withBucket = {
+      ...env(),
+      IMAGE_BUCKET: {
+        get: async (key: string) =>
+          store.has(key)
+            ? {
+                body: store.get(key),
+                httpMetadata: { contentType: "image/png" },
+              }
+            : null,
+      },
+    } as unknown as Env;
+    const hit = await worker.fetch(
+      new Request("https://worker.test/images/2026-01-01/ok.png", {
+        method: "GET",
+        headers: { Origin: "https://proxy.example" },
+      }),
+      withBucket
+    );
+    expect(hit.status).toBe(200);
+    expect(hit.headers.get("access-control-allow-origin")).toBe("*");
+    expect(hit.headers.get("content-type")).toBe("image/png");
   });
 });

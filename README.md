@@ -187,18 +187,23 @@ Open your worker URL in a browser for an interactive UI.
 
 📋 **[Detailed Model Specifications →](docs/models/generation/README.md)** — Full parameter reference, feature comparison, and capability matrix.
 
-| Model             | Tasks                                                  | Provider          |
-| ----------------- | ------------------------------------------------------ | ----------------- |
-| FLUX.1 [schnell]  | text-to-image                                          | Black Forest Labs |
-| FLUX.2 [klein]    | text-to-image, image-to-image                          | Black Forest Labs |
-| FLUX.2 [dev]      | text-to-image, image-to-image                          | Black Forest Labs |
-| SDXL Base 1.0     | text-to-image, image-to-image (img2img + masked edits) | Stability AI      |
-| SDXL Lightning    | text-to-image                                          | ByteDance         |
-| Dreamshaper 8 LCM | text-to-image, image-to-image (img2img)                | Lykon             |
-| Lucid Origin      | text-to-image                                          | Leonardo          |
-| Phoenix 1.0       | text-to-image                                          | Leonardo          |
-| SD 1.5 Img2Img    | image-to-image (img2img)                               | Runway ML         |
-| SD 1.5 Inpainting | image-to-image (requires mask)                         | Runway ML         |
+| Model                 | Tasks                                                  | Provider          | Hosted By  |
+| --------------------- | ------------------------------------------------------ | ----------------- | ---------- |
+| FLUX.1 [schnell]      | text-to-image                                          | Black Forest Labs | Cloudflare |
+| FLUX.2 [klein]        | text-to-image, image-to-image                          | Black Forest Labs | Cloudflare |
+| FLUX.2 [dev]          | text-to-image, image-to-image                          | Black Forest Labs | Cloudflare |
+| SDXL Base 1.0         | text-to-image, image-to-image (img2img + masked edits) | Stability AI      | Cloudflare |
+| SDXL Lightning        | text-to-image                                          | ByteDance         | Cloudflare |
+| Dreamshaper 8 LCM     | text-to-image, image-to-image (img2img)                | Lykon             | Cloudflare |
+| Lucid Origin          | text-to-image                                          | Leonardo.AI       | Cloudflare |
+| Phoenix 1.0           | text-to-image                                          | Leonardo.AI       | Cloudflare |
+| SD 1.5 Img2Img        | image-to-image (img2img)                               | Runway ML         | Cloudflare |
+| SD 1.5 Inpainting     | image-to-image (requires mask)                         | Runway ML         | Cloudflare |
+| Agnes Image 2.5 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
+| Agnes Image 2.1 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
+| Agnes Image 2.0 Flash | text-to-image, image-to-image                          | Agnes AI          | Agnes AI   |
+
+> **Provider** = who built the model. **Hosted By** = who actually serves the inference API (and bills for it): Cloudflare Workers AI for the `@cf/*` models, Agnes AI's own OpenAI-compatible endpoint for `agnes-image-*`. Cloudflare's ids are namespaced (`@cf/{provider}/{model}`); the Agnes id is the bare upstream model name, which is what the transport sends.
 
 ---
 

@@ -262,6 +262,29 @@ export class ParamParser {
   ): void {
     const limits = model.limits;
 
+    // `size` is the declared output-size parameter for models that map it to a
+    // tier upstream (Agnes). It bypasses the width/height clamps below, so a
+    // raw `999999x100` would pick a ratio outside the model's limits; clamp its
+    // dimensions here and keep any already-derived dims consistent.
+    if (typeof params.size === "string") {
+      const [width, height] = params.size.split("x").map(Number);
+      const clampedWidth = Math.max(
+        limits.minWidth,
+        Math.min(limits.maxWidth, width)
+      );
+      const clampedHeight = Math.max(
+        limits.minHeight,
+        Math.min(limits.maxHeight, height)
+      );
+      params.size = `${clampedWidth}x${clampedHeight}`;
+      // Carry the clamped dims into width/height only when they still hold the
+      // value derived from `size`. An explicit width/height outranks `size`
+      // (both parse paths apply it after deriving from size), so overwriting
+      // unconditionally silently discards the caller's explicit parameter and
+      // reverses that precedence.
+      if (params.width === width) params.width = clampedWidth;
+      if (params.height === height) params.height = clampedHeight;
+    }
     if (params.width !== undefined) {
       params.width = Math.max(
         limits.minWidth,

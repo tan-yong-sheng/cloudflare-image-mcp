@@ -16,11 +16,79 @@ import {
 import modelsJson from "./models.json" with { type: "json" };
 
 describe("model registry validity", () => {
-  test("every model id matches its @cf/provider/name key", () => {
+  test("every model id matches its registry key", () => {
     for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
       expect(config.id).toBe(key);
-      expect(key.startsWith("@cf/")).toBe(true);
     }
+  });
+
+  test("the @cf/ namespace is exactly the Cloudflare transport's models", () => {
+    // R3-Agnes (#75) added a non-Cloudflare provider, so the namespace now
+    // scopes the models the Cloudflare REST transport serves rather than
+    // "every model": a @cf/* id on another transport would be a misread of
+    // which credentials pay for it.
+    for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
+      expect(key.startsWith("@cf/")).toBe(
+        config.inferenceProvider === "cloudflare-rest"
+      );
+    }
+  });
+
+  test("the second provider registers un-namespaced upstream ids (R3-Agnes)", () => {
+    // The id is the upstream model name, not a @provider/ mirror: the
+    // openai-compat transport sends it verbatim.
+    for (const id of [
+      "agnes-image-2.5-flash",
+      "agnes-image-2.1-flash",
+      "agnes-image-2.0-flash",
+    ]) {
+      const agnes = MODEL_CONFIGS[id];
+      expect(agnes).toBeDefined();
+      expect(agnes.id).toBe(id);
+      expect(agnes.provider).toBe("agnes");
+      expect(agnes.inferenceProvider).toBe("openai-compat");
+    }
+  });
+
+  test("only the model without a ratio parameter uses the exact size strategy", () => {
+    // 2.0 publishes an exact `size` and no `ratio` (agnes-ai.com/en/docs/
+    // agnes-image-20-flash); 2.5/2.1 take a tier plus a ratio, which is the
+    // transport's default, so a stray "exact" on them would send a raw WxH.
+    expect(MODEL_CONFIGS["agnes-image-2.0-flash"].sizeStrategy).toBe("exact");
+    expect(MODEL_CONFIGS["agnes-image-2.5-flash"].sizeStrategy).toBeUndefined();
+    expect(MODEL_CONFIGS["agnes-image-2.1-flash"].sizeStrategy).toBeUndefined();
+  });
+
+  test("the exact-size model's picker lists only provider-verified canvases (live probe 2026-10-21)", () => {
+    // 2.0 snaps several sizes the vendor docs imply it takes: 1024x768 and
+    // 768x1024 come back as 1152x864 / 864x1152, and 1568x672 (21:9) snaps
+    // to 1312x736. The dropdown, MCP supported_sizes, and the picker's
+    // default must only name canvases the provider actually delivers, or a
+    // user picking a size silently gets a different one.
+    // Derivation: what moves this number is a provider-side size change,
+    // re-probe before editing. 11 = 2.5/2.1's published grid; 2.0 lacks the
+    // 21:9 entry (1568x672) and none of the non-grid doc examples.
+    expect(
+      MODEL_CONFIGS["agnes-image-2.0-flash"].limits.supportedSizes
+    ).toEqual([
+      "1024x1024",
+      "864x1152",
+      "1152x864",
+      "1312x736",
+      "736x1312",
+      "832x1248",
+      "1248x832",
+      "2048x2048",
+      "3072x3072",
+      "4096x4096",
+    ]);
+    const sizes = MODEL_CONFIGS["agnes-image-2.0-flash"].limits.supportedSizes;
+    expect(sizes).not.toContain("1024x768");
+    expect(sizes).not.toContain("768x1024");
+    expect(sizes).not.toContain("1568x672");
+    // The picker's default must survive the change: 1024x1024 stays first
+    // for the frontend's "prefer 1024x1024 else [0]" rule.
+    expect(sizes[0]).toBe("1024x1024");
   });
 
   test("every model declares prompt, tasks, and width/height limits", () => {
@@ -143,6 +211,22 @@ describe("model registry validity", () => {
       expect(entry.limits.minWidth).toBeLessThanOrEqual(entry.limits.maxWidth);
     }
   });
+
+  test("listModels carries the transport, not the author, that routing joins on", () => {
+    // Availability in /api/internal/models resolves credentials by
+    // inferenceProvider. `provider` names the model's author, so joining
+    // on it finds no pool for any @cf model — the picker would hide every
+    // model while generation still worked.
+    const listed = listModels();
+    expect(
+      Array.from(new Set(listed.map((m) => m.inferenceProvider))).sort()
+    ).toEqual(["cloudflare-rest", "openai-compat"]);
+    for (const entry of listed) {
+      expect(entry.inferenceProvider).toBe(
+        entry.id.startsWith("@cf/") ? "cloudflare-rest" : "openai-compat"
+      );
+    }
+  });
 });
 
 describe("models.json mirror", () => {
@@ -167,6 +251,37 @@ describe("models.json mirror", () => {
       expect(jcfg.inferenceProvider).not.toBe("");
       expect(MODEL_CONFIGS[id].inferenceProvider).toBe(jcfg.inferenceProvider);
     }
+  });
+
+  test("every JSON field mirrors the registry", () => {
+    // The earlier mirror test compared ids, transport, parameters, limits,
+    // and sizeStrategy only, which left name/description/apiVersion/
+    // inputFormat/responseFormat/supportedTasks/maxInputImages free to
+    // drift. Compare every JSON field both ways so a data edit cannot
+    // change what the API or the picker offers without this test failing.
+    const json = modelsJson as {
+      models: Record<string, Record<string, unknown>>;
+    };
+    const drift: string[] = [];
+    for (const [id, jcfg] of Object.entries(json.models)) {
+      const tcfg = MODEL_CONFIGS[id] as unknown as Record<string, unknown>;
+      if (!tcfg) {
+        drift.push(`${id}: missing in models.ts`);
+        continue;
+      }
+      for (const [key, jval] of Object.entries(jcfg)) {
+        if (key === "$comment") continue;
+        if (JSON.stringify(tcfg[key]) !== JSON.stringify(jval)) {
+          drift.push(
+            `${id}.${key}: ts=${JSON.stringify(tcfg[key])} json=${JSON.stringify(jval)}`
+          );
+        }
+      }
+      for (const key of Object.keys(tcfg)) {
+        if (!(key in jcfg)) drift.push(`${id}.${key}: only in models.ts`);
+      }
+    }
+    expect(drift).toEqual([]);
   });
 
   test("parameter metadata mirrors the JSON source of truth (#53)", () => {

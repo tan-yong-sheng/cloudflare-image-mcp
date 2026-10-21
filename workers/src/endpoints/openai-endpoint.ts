@@ -22,6 +22,15 @@ import {
   type ExposureOverlay,
 } from "../config/exposure-overlay.js";
 
+/**
+ * The OpenAI `owned_by` value. Namespaced ids (@cf/{provider}/{model}) report
+ * their namespace; an un-namespaced id (agnes-image-2.5-flash) has none, so it
+ * reports the provider that serves it instead of echoing the whole model id.
+ */
+function ownedBy(id: string, provider: string | undefined): string {
+  return id.includes("/") ? id.split("/")[0] : provider || id;
+}
+
 // Per-route input configs: which CF params to extract and which defaults
 // apply. Handlers keep routing only; gathering lives in the shared module.
 const GENERATIONS_CONFIG: CollectConfig = {
@@ -368,7 +377,7 @@ export class OpenAIEndpoint {
           id: m.id,
           object: "model",
           created: Math.floor(Date.now() / 1000),
-          owned_by: m.id.split("/")[0],
+          owned_by: ownedBy(m.id, m.provider),
         })),
         object: "list",
       }),
@@ -390,7 +399,10 @@ export class OpenAIEndpoint {
         id: modelId,
         object: "model",
         created: Math.floor(Date.now() / 1000),
-        owned_by: modelId.split("/")[0],
+        owned_by: ownedBy(
+          modelId,
+          this.generator.getModelConfig(modelId)?.provider
+        ),
         description: help,
       }),
       {

@@ -162,7 +162,7 @@ Add the same model configuration in TypeScript format:
 
 ### 4. Verify the Frontend Dropdown (no code edit)
 
-The dropdown populates dynamically from the registry via `/api/internal/models` — do not add `<option>` elements by hand. Run the Worker locally and confirm the new model id appears in the dropdown (model ids only, as per project convention).
+The dropdown populates dynamically from the registry via `/api/internal/models` — do not add `<option>` elements by hand. Run the Worker locally and confirm the new model id appears in the dropdown (model ids only, as per project convention). The picker lists only models whose provider holds a servable key, so publish a key for the model's provider first, or the entry is correctly absent.
 
 ### 5. Create Model Documentation
 

@@ -39,6 +39,26 @@ export async function sealToken(
   return `${ENVELOPE_VERSION}.${arrayBufferToBase64(iv.buffer as ArrayBuffer)}.${arrayBufferToBase64(ciphertext)}`;
 }
 
+const MASK_STARS = "****";
+const MASK_HEAD = 5;
+const MASK_TAIL = 4;
+const MASK_MIN_HIDDEN = 4;
+
+/**
+ * Masked hint for a stored token: enough to tell two keys apart, never enough
+ * to use one. Shows the first five and last four characters, so a prefix such
+ * as `sk-` stays recognisable, and stars everything between them.
+ *
+ * A value too short to hide at least four characters becomes stars alone:
+ * a hint that shows all but one character is the token with a typo.
+ */
+export function maskToken(token: string): string {
+  const value = token.trim();
+  if (value.length === 0) return "";
+  if (value.length < MASK_HEAD + MASK_TAIL + MASK_MIN_HIDDEN) return MASK_STARS;
+  return value.slice(0, MASK_HEAD) + MASK_STARS + value.slice(-MASK_TAIL);
+}
+
 /** Open an envelope; throws when the key is wrong or bytes were tampered. */
 export async function openEnvelope(
   envelope: string,
