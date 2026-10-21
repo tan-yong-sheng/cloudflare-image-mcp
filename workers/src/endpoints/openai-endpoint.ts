@@ -210,7 +210,10 @@ export class OpenAIEndpoint {
     );
 
     if (!result.success) {
-      return this.failureResponse(result);
+      return this.failureResponse(result, {
+        returnBase64,
+        origin: new URL(request.url).origin,
+      });
     }
 
     // Build response based on response_format
@@ -286,7 +289,10 @@ export class OpenAIEndpoint {
         );
 
     if (!result.success) {
-      return this.failureResponse(result);
+      return this.failureResponse(result, {
+        returnBase64,
+        origin: new URL(request.url).origin,
+      });
     }
 
     // Build OpenAI-compatible response (same pattern as handleGenerations)
@@ -341,7 +347,10 @@ export class OpenAIEndpoint {
     );
 
     if (!result.success) {
-      return this.failureResponse(result);
+      return this.failureResponse(result, {
+        returnBase64,
+        origin: new URL(request.url).origin,
+      });
     }
 
     // Build OpenAI-compatible response
@@ -403,22 +412,39 @@ export class OpenAIEndpoint {
    * Map a failed seam result to the OpenAI envelope. Validation failures
    * (invalid caller input) are 400 invalid_request_error; operational
    * failures are 500 api_error. Every envelope carries code: null.
+   *
+   * A batch that failed part-way still carries the images that succeeded
+   * (runMany's contract), so they ride along under `data`. Without them the
+   * caller loses working output it already paid for — ask for 4, get 2, and
+   * the two that worked are discarded because one failed. The error field
+   * still explains the failure and the status stays 4xx/5xx, so a caller
+   * that only checks the status is unaffected; one that knows to look can
+   * recover the partial result.
    */
-  private failureResponse(result: BatchResult): Response {
+  private failureResponse(
+    result: BatchResult,
+    options: { returnBase64: boolean; origin: string }
+  ): Response {
     const validation = result.validationError === true;
-    return new Response(
-      JSON.stringify({
-        error: {
-          message: result.error,
-          type: validation ? "invalid_request_error" : "api_error",
-          code: null,
-        },
-      }),
-      {
-        status: validation ? 400 : 500,
-        headers: { ...this.corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    const body: Record<string, unknown> = {
+      error: {
+        message: result.error,
+        type: validation ? "invalid_request_error" : "api_error",
+        code: null,
+      },
+    };
+    if (result.images.length > 0) {
+      const partial = buildImageResponse(result.images, {
+        returnBase64: options.returnBase64,
+        origin: options.origin,
+      });
+      body["created"] = partial.created;
+      body["data"] = partial.data;
+    }
+    return new Response(JSON.stringify(body), {
+      status: validation ? 400 : 500,
+      headers: { ...this.corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   /**

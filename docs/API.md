@@ -286,6 +286,26 @@ The API returns standard HTTP status codes:
 }
 ```
 
+**Partial batches.** `n` generates the images one at a time. If one fails
+mid-batch, the request still fails with a `4xx`/`5xx` and an `error`, but
+the images that already succeeded come back in `data`:
+
+```json
+{
+  "error": {
+    "message": "Cloudflare AI API error (429): rate limited",
+    "type": "api_error",
+    "code": null
+  },
+  "created": 1704067200,
+  "data": [{ "url": "https://.../images/2026-01-01/abc.png" }]
+}
+```
+
+Ask for 4 and get 2, and those 2 are in `data` rather than discarded.
+`data` is absent when nothing succeeded, so check `error` (and the status)
+before assuming a full batch; `data.length` tells you how many arrived.
+
 ## CORS
 
 All endpoints return `Access-Control-Allow-Origin: *` with
