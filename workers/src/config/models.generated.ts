@@ -877,7 +877,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       ],
     },
   },
-  // 2.0 takes an exact WxH in size and publishes no ratio, unlike 2.5/2.1, so sizeStrategy is exact and the transport withholds ratio. Only the three sizes below are published; the docs give them as examples without enumerating the set, and 2.0 publishes no width/height bounds, so the bounds mirror 2.5's.
+  // 2.0 takes an exact WxH in size and publishes no ratio, unlike 2.5/2.1, so sizeStrategy is exact and the transport withholds ratio. The size list is the live-probed set (2026-10-21): 2.0 delivers these ten grid sizes byte-exact, while 1568x672 (21:9) snaps to 1312x736 and the vendor doc's example sizes 1024x768/768x1024 come back as 1152x864/864x1152 — right ratio, wrong canvas — so only probed-exact sizes are offered. Bounds mirror 2.5's because 2.0 publishes none of its own.
   "agnes-image-2.0-flash": {
     id: "agnes-image-2.0-flash",
     name: "Agnes Image 2.0 Flash",
@@ -914,7 +914,18 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxWidth: 4096,
       minHeight: 512,
       maxHeight: 4096,
-      supportedSizes: ["1024x768", "1024x1024", "768x1024"],
+      supportedSizes: [
+        "1024x1024",
+        "864x1152",
+        "1152x864",
+        "1312x736",
+        "736x1312",
+        "832x1248",
+        "1248x832",
+        "2048x2048",
+        "3072x3072",
+        "4096x4096",
+      ],
     },
   },
 };
