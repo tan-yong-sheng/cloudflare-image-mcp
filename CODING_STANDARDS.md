@@ -11,6 +11,11 @@ steps see `CONTRIB.md`. For deployment secrets see
   `type:'invalid_request_error'`); 400 edits/variations missing input;
   400 malformed JSON body; 500 service failure (`type:'api_error'`);
   catch-all helper `errorResponse`.
+  A **failed batch** additionally carries `created` + `data` when some
+  images were produced before the failure (`failureResponse`), so a
+  partial result is recoverable; `data` is omitted when nothing succeeded.
+  This is deliberately outside the OpenAI error schema (additive, status
+  unchanged) and is documented in `docs/API.md`.
 - **Worker top level** (`index.ts`): 404 uses the OpenAI error envelope
   (`{ error:{message,type:'invalid_request_error',code:null} }` — the router
   serves `/v1/*`); 500 `{ error:'Internal server error', message }`.
