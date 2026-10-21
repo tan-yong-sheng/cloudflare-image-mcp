@@ -88,15 +88,33 @@ describe("migrations run before deploy (R1a)", () => {
     for (const key of [
       "DEPLOYED_AT",
       "COMMIT_SHA",
-      "CLOUDFLARE_ACCOUNT_ID",
-      "CLOUDFLARE_API_TOKEN",
       "API_KEYS_VALUE",
-      "AI_ACCOUNTS_VALUE",
       "PROVIDER_DATA_KEY_VALUE",
       "ADMIN_API_KEY_VALUE",
       "TZ_VALUE",
     ]) {
       expect(WORKFLOW).toContain(key);
+    }
+  });
+
+  test("deprecated credential vars stay out of the Worker's secrets", () => {
+    // ADR-001 made inference credentials database-only. These three names
+    // still exist as GitHub secrets (the CF pair drives wrangler itself,
+    // AI_ACCOUNTS is the one-shot import source) but the Worker reads none
+    // of them, so shipping them widened blast radius for nothing.
+    // Asserting on the bulk payload rather than the whole file is the point:
+    // a whole-file check passes even while the payload still carries them.
+    const bulkStep = WORKFLOW.slice(
+      WORKFLOW.indexOf("const optional = {"),
+      WORKFLOW.indexOf("npx wrangler secret bulk")
+    );
+    expect(bulkStep).not.toBe("");
+    for (const key of [
+      "AI_ACCOUNTS",
+      "CLOUDFLARE_ACCOUNT_ID",
+      "CLOUDFLARE_API_TOKEN",
+    ]) {
+      expect(bulkStep).not.toContain(key);
     }
   });
 

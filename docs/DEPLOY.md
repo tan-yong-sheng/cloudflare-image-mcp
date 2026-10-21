@@ -45,8 +45,16 @@ https://github.com/YOUR_USERNAME/cloudflare-image-mcp/settings/secrets/actions
 ```
 
 Click **New repository secret** and add `CLOUDFLARE_ACCOUNT_ID` (required) and
-`CLOUDFLARE_API_TOKEN` (required). Optional secrets (`API_KEYS`, `AI_ACCOUNTS`, `TZ`)
-— see [Credentials Setup](CREDENTIALS_SETUP.md#optional-secrets).
+`CLOUDFLARE_API_TOKEN` (required). Both are consumed by the **deploy workflow
+itself** (wrangler, migrations) and are deliberately **not** shipped to the
+Worker as runtime secrets — ADR-001 made inference credentials database-only.
+Optional runtime secrets are `API_KEYS`, `TZ`, `PROVIDER_DATA_KEY`, and
+`ADMIN_API_KEY` — see
+[Credentials Setup](CREDENTIALS_SETUP.md#optional-secrets).
+
+`AI_ACCOUNTS`, if present, is a **one-shot D1 import source only** and is never
+read by the Worker. See
+[Server-side migration](CREDENTIALS_SETUP.md#migrating-ai_accounts-to-d1-one-shot-import).
 
 `D1_DATABASE_ID` is also required for deploy, but it is **environment-scoped**, not
 repository-scoped — see Step 3b.
