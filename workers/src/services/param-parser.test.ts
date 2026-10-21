@@ -150,6 +150,27 @@ describe("ParamParser.parse with string input", () => {
     );
   });
 
+  test("the parse ceiling is the model's own limit, not a fixed 2048", () => {
+    // A model that declares a canvas wider than 2048 could never be driven
+    // there through --width: the hard bound rejected it before the model
+    // clamp ran, so the declared limit was unreachable. The ceiling now comes
+    // from the model, and anything above it still fails rather than being
+    // silently accepted.
+    const wide = {
+      ...fluxConfig,
+      limits: { ...fluxConfig.limits, maxWidth: 2500, maxHeight: 2500 },
+    };
+    expect(ParamParser.parse("cat --width=2500", {}, wide).width).toBe(2500);
+    expect(() => ParamParser.parse("cat --width=2501", {}, wide)).toThrow(
+      "width must be between 256 and 2500"
+    );
+    // No model supplied: there is no declared limit to prefer, so the old
+    // default still governs.
+    expect(() => ParamParser.parse("cat --width=2049", {}, undefined)).toThrow(
+      "width must be between 256 and 2048"
+    );
+  });
+
   test("guidance out of range throws", () => {
     expect(() => ParamParser.parse("cat --guidance=99")).toThrow(
       "guidance must be between 1 and 30"
