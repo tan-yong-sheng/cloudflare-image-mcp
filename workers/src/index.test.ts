@@ -125,6 +125,12 @@ describe("router public paths", () => {
     // Slice D: labels associated, live regions announced, toggle exposes state.
     // #65+#66: width/height sliders gone; size + steps labels remain.
     expect(html).toContain('for="size"');
+    // The size value is width-first (the parser splits on "x" into
+    // [width, height]), so the label names that order. Without it a reader
+    // can take 1312x736 as height-first and transpose it — and six of the
+    // Agnes sizes have a transposed twin in the same list, so the mistake
+    // would pick a real but wrong canvas rather than an invalid one.
+    expect(html).toContain("Size (W × H)");
     expect(html).toContain('for="steps"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('role="status"');
