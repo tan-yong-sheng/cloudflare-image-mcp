@@ -186,6 +186,29 @@ describe("publicImageUrl", () => {
       expect(() => publicImageUrl(target, HOST)).toThrow(OpenAITransportError);
     }
   });
+
+  test("refuses a port or userinfo on the provider host", () => {
+    // The host pin alone is not the whole origin: a different port on the
+    // same hostname is a different service, and userinfo makes the URL read
+    // as the provider's origin while carrying someone else's credentials.
+    // Both stay confined to the one origin this transport already trusts.
+    for (const target of [
+      `https://${HOST}:8443/out.png`,
+      `https://user:pass@${HOST}/out.png`,
+      `https://user@${HOST}/out.png`,
+    ]) {
+      expect(() => publicImageUrl(target, HOST)).toThrow(OpenAITransportError);
+    }
+    // An explicit :443 is the https default, so URL drops it and the origin
+    // is unchanged — that must keep working, not be mistaken for a stray
+    // port. Same for a non-default path and query.
+    expect(publicImageUrl(`https://${HOST}:443/out.png`, HOST)).toBe(
+      `https://${HOST}/out.png`
+    );
+    expect(publicImageUrl(`https://${HOST}/a/b/out.png?v=1`, HOST)).toBe(
+      `https://${HOST}/a/b/out.png?v=1`
+    );
+  });
 });
 
 describe("OpenAITransport.run", () => {

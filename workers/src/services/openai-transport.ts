@@ -423,6 +423,16 @@ export function publicImageUrl(raw: string, allowedHost: string): string {
       "retry"
     );
   }
+  // Pinning the hostname still lets a response reach a different service on
+  // the same host (an admin port), and userinfo makes the origin read as the
+  // provider while the request carries attacker-supplied credentials. Only
+  // the provider's default https origin is a legitimate image location.
+  if (url.port !== "" || url.username !== "" || url.password !== "") {
+    throw new OpenAITransportError(
+      "Agnes API returned an image URL with a port or userinfo on the provider host",
+      "retry"
+    );
+  }
 
   return url.toString();
 }
