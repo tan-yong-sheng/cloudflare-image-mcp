@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 interface ResultPanelProps {
+  /** Changes on every generation, so the image remounts and fires load. */
+  generationId?: number;
   /** The images of the current response, in order. */
   images: string[];
   activeIndex: number;
@@ -24,6 +26,7 @@ interface ResultPanelProps {
  * result in place rather than replacing it with a broken image.
  */
 export function ResultPanel({
+  generationId,
   images,
   activeIndex,
   onSelect,
@@ -105,6 +108,7 @@ export function ResultPanel({
           <p>Click generate to create an image</p>
         </div>
         <img
+          key={generationId}
           id="aiImage"
           className={`max-h-full max-w-full rounded${current ? "" : " hidden"}`}
           alt="Generated image"

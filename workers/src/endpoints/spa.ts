@@ -49,7 +49,14 @@ export async function serveClientAsset(
 ): Promise<Response | null> {
   if (!env.ASSETS) return null;
   const method = request.method === "HEAD" ? "HEAD" : "GET";
-  const response = await env.ASSETS.fetch(new Request(request.url, { method }));
+  const headers = new Headers();
+  for (const name of ["if-none-match", "if-modified-since"]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  const response = await env.ASSETS.fetch(
+    new Request(request.url, { method, headers })
+  );
   if (response.status === 404) return null;
   return response;
 }

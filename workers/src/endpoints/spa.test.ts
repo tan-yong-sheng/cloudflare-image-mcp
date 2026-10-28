@@ -84,4 +84,30 @@ describe("serveClientAsset", () => {
     );
     expect(method).toBe("GET");
   });
+
+  it("forwards conditional cache headers to the asset worker", async () => {
+    let forwardedIfNoneMatch: string | null = null;
+    let forwardedIfModifiedSince: string | null = null;
+    let forwardedAuth: string | null = null;
+    const env = envWithAssets(async (request) => {
+      forwardedIfNoneMatch = request.headers.get("if-none-match");
+      forwardedIfModifiedSince = request.headers.get("if-modified-since");
+      forwardedAuth = request.headers.get("authorization");
+      return new Response(null, { status: 304 });
+    });
+    const response = await serveClientAsset(
+      new Request("https://example.com/assets/app.js", {
+        headers: {
+          "if-none-match": '"etag-123"',
+          "if-modified-since": "Wed, 21 Oct 2026 07:28:00 GMT",
+          authorization: "Bearer secret",
+        },
+      }),
+      env
+    );
+    expect(response?.status).toBe(304);
+    expect(forwardedIfNoneMatch).toBe('"etag-123"');
+    expect(forwardedIfModifiedSince).toBe("Wed, 21 Oct 2026 07:28:00 GMT");
+    expect(forwardedAuth).toBeNull();
+  });
 });

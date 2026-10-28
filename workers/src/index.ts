@@ -118,7 +118,10 @@ export default {
       // /admin path, which the legacy shell also served).
       if (path === "/" || path === "/index.html" || path === "/admin") {
         const clientDocument = await serveClientAsset(
-          new Request(url.origin + "/", { method: "GET" }),
+          new Request(url.origin + "/", {
+            method: "GET",
+            headers: request.headers,
+          }),
           env
         );
         if (clientDocument) return clientDocument;

@@ -415,4 +415,57 @@ describe("the generator", () => {
       "hidden"
     );
   });
+
+  it("records the model that submitted the request, not the picker selection at load time", async () => {
+    const twoModels = [
+      ...MODELS,
+      {
+        id: "flux",
+        name: "FLUX",
+        description: "Another text-to-image model.",
+        taskTypes: ["text-to-image"],
+        parameters: {},
+        limits: MODELS[0].limits,
+        provider: "cloudflare",
+        inferenceProvider: "cloudflare",
+        available: true,
+      },
+    ];
+    let release: (() => void) | null = null;
+    const deferred = new Promise<Response>((resolve) => {
+      release = () =>
+        resolve(jsonResponse(true, { data: [{ b64_json: "AAA" }] }));
+    });
+    stubApi((route) => {
+      if (route.path === "/api/internal/models") {
+        return jsonResponse(true, twoModels);
+      }
+      if (route.path === "/v1/images/generations") return deferred;
+      return null;
+    });
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    const submit = document.getElementById("submitButton") as HTMLButtonElement;
+    await user.click(submit);
+    await waitFor(() => expect(submit.disabled).toBe(true));
+
+    // Change model in picker while request is in flight
+    const select = document.getElementById("model") as HTMLSelectElement;
+    await user.selectOptions(select, "flux");
+
+    release!();
+    await waitFor(() => expect(submit.disabled).toBe(false));
+
+    // Simulate image onLoad
+    const img = document.getElementById("aiImage") as HTMLImageElement;
+    act(() => {
+      img.dispatchEvent(new Event("load"));
+    });
+
+    await waitFor(() => {
+      expect(document.getElementById("usedModel")?.textContent).toBe("sdxl");
+    });
+  });
 });

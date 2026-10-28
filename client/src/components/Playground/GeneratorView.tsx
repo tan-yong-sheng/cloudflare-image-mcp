@@ -49,6 +49,8 @@ export function GeneratorView() {
     elapsed: string;
   } | null>(null);
   const [pendingImages, setPendingImages] = useState<string[] | null>(null);
+  const pendingModel = useRef("");
+  const [generationId, setGenerationId] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   // When the current generation started, so the elapsed time is measured
   // to the moment the image is on screen.
@@ -138,6 +140,7 @@ export function GeneratorView() {
 
     setError(null);
     startedAt.current = Date.now();
+    pendingModel.current = modelId;
     try {
       const data = await generate.mutateAsync(
         buildGenerationBody(
@@ -166,6 +169,7 @@ export function GeneratorView() {
         return;
       }
       setActiveIndex(0);
+      setGenerationId((prev) => prev + 1);
       setPendingImages(produced);
     } catch (cause) {
       if (cause instanceof SessionExpired) {
@@ -192,7 +196,7 @@ export function GeneratorView() {
     if (!pendingImages) return;
     setResult({
       images: pendingImages,
-      model: modelId,
+      model: pendingModel.current || modelId,
       elapsed: ((Date.now() - startedAt.current) / 1000).toFixed(1) + "s",
     });
     setPendingImages(null);
@@ -365,6 +369,7 @@ export function GeneratorView() {
 
         <div className="w-full lg:w-3/5">
           <ResultPanel
+            generationId={generationId}
             images={images}
             activeIndex={activeIndex}
             onSelect={setActiveIndex}
