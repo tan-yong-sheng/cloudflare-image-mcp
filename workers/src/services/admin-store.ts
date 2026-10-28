@@ -66,6 +66,10 @@ export class AdminStoreError extends Error {
 export interface AdminProviderSummary {
   id: string;
   displayName: string;
+  // The registry key ADR-002 binds to a transport. The workbench reads it to
+  // decide which key fields apply: external_account_id is meaningful only for
+  // cloudflare-rest, which addresses /accounts/{id}/ai/run.
+  transport: string;
 }
 
 export interface AdminKeySummary {
@@ -76,6 +80,14 @@ export interface AdminKeySummary {
   enabled: boolean;
   activeVersion: number | null;
   accountId: string | null;
+  /**
+   * Masked hint for the sealed token, e.g. `sk-yt****fa12`: enough to tell
+   * two keys apart, never enough to use one. Server-computed — the browser
+   * never holds a token, so it cannot mask one. Present on health reads,
+   * where the hint is opened from the active envelope; absent on write
+   * echoes, which report identity and edited fields only.
+   */
+  maskedKey?: string;
 }
 
 export interface AdminExposureSummary {
@@ -181,20 +193,34 @@ function num(value: unknown): number {
 }
 
 /**
+ * Opens one active envelope and returns its masked hint. Injected by the
+ * endpoint, which holds PROVIDER_DATA_KEY — this module never sees key
+ * material, exactly as it never sees a token on the write side.
+ */
+export type MaskOpener = (envelope: string) => Promise<string>;
+
+/**
  * Health read: pool counts, active key summaries, exposure overrides, and
  * the config cache version. Reads live in the store so endpoints contain
  * zero SQL.
+ *
+ * With an `openMask`, each key also carries the masked hint of its active
+ * token. An envelope that will not open yields no hint instead of an error:
+ * one bad row must not blank the page that is used to repair it — the same
+ * parking decision pool-loader.ts makes for inference.
  */
 export async function getAdminHealth(
   db: AdminD1,
-  readiness: CredentialReadiness
+  readiness: CredentialReadiness,
+  openMask?: MaskOpener
 ): Promise<AdminHealthSummary> {
   const providerRows = rows<Record<string, unknown>>(
-    await db.prepare("SELECT id, display_name FROM providers").all()
+    await db.prepare("SELECT id, display_name, transport FROM providers").all()
   );
   const providers: AdminProviderSummary[] = providerRows.map((p) => ({
     id: String(p["id"]),
     displayName: String(p["display_name"]),
+    transport: String(p["transport"]),
   }));
 
   const keyRows = rows<Record<string, unknown>>(
@@ -206,7 +232,12 @@ export async function getAdminHealth(
                 k.weight AS weight,
                 k.enabled AS enabled,
                 k.external_account_id AS accountId,
-                MAX(v.version) AS activeVersion
+                MAX(v.version) AS activeVersion,
+                (SELECT envelope
+                   FROM credential_versions
+                  WHERE provider_key_id = k.id AND revoked_at IS NULL
+                  ORDER BY version DESC
+                  LIMIT 1) AS envelope
            FROM provider_keys k
            LEFT JOIN credential_versions v
              ON v.provider_key_id = k.id AND v.revoked_at IS NULL
@@ -214,15 +245,31 @@ export async function getAdminHealth(
       )
       .all()
   );
-  const keys: AdminKeySummary[] = keyRows.map((k) => ({
-    id: num(k["id"]),
-    providerId: String(k["providerId"]),
-    label: String(k["label"]),
-    weight: num(k["weight"]),
-    enabled: num(k["enabled"]) === 1,
-    activeVersion: k["activeVersion"] === null ? null : num(k["activeVersion"]),
-    accountId: k["accountId"] === null ? null : String(k["accountId"]),
-  }));
+  const keys: AdminKeySummary[] = [];
+  for (const k of keyRows) {
+    const summary: AdminKeySummary = {
+      id: num(k["id"]),
+      providerId: String(k["providerId"]),
+      label: String(k["label"]),
+      weight: num(k["weight"]),
+      enabled: num(k["enabled"]) === 1,
+      activeVersion:
+        k["activeVersion"] === null ? null : num(k["activeVersion"]),
+      accountId: k["accountId"] === null ? null : String(k["accountId"]),
+    };
+    const envelope = k["envelope"];
+    if (openMask && typeof envelope === "string" && envelope.length > 0) {
+      try {
+        const mask = await openMask(envelope);
+        if (mask.length > 0) summary.maskedKey = mask;
+      } catch {
+        console.warn(
+          `provider admin: no key hint for "${summary.label}" (envelope will not open)`
+        );
+      }
+    }
+    keys.push(summary);
+  }
 
   const versionRow = await db
     .prepare("SELECT version FROM config_versions WHERE id = 1")
@@ -279,15 +326,26 @@ async function keyRow(db: AdminD1, keyId: number): Promise<KeyRow | null> {
     .first<KeyRow>();
 }
 
-async function providerExists(
+/** Registry transport for a provider row; null when the row is unknown. */
+async function providerTransport(
   db: AdminD1,
   providerId: string
-): Promise<boolean> {
+): Promise<string | null> {
   const row = await db
-    .prepare("SELECT 1 AS one FROM providers WHERE id = ?")
+    .prepare("SELECT transport FROM providers WHERE id = ?")
     .bind(providerId)
-    .first<{ one: number }>();
-  return row !== null;
+    .first<{ transport: string }>();
+  return row ? String(row["transport"]) : null;
+}
+
+/**
+ * Only cloudflare-rest addresses inference through /accounts/{id}/ai/run, so
+ * the account id is a field of that transport rather than of a provider name
+ * (ADR-002). Keying the server gate on the transport keeps it in step with
+ * the workbench, which already shows the field by transport.
+ */
+function transportNeedsAccountId(transport: string): boolean {
+  return transport === "cloudflare-rest";
 }
 
 function bumpWrite(): AdminWrite {
@@ -361,11 +419,12 @@ export async function addProviderKey(
     throw new AdminStoreError(400, "apiToken is required");
   }
   assertTokenLength(apiToken);
-  if (!(await providerExists(db, providerId))) {
+  const transport = await providerTransport(db, providerId);
+  if (transport === null) {
     throw new AdminStoreError(400, `unknown provider '${providerId}'`);
   }
   const accountId = input.accountId !== undefined ? clean(input.accountId) : "";
-  if (providerId === "cloudflare" && accountId.length === 0) {
+  if (transportNeedsAccountId(transport) && accountId.length === 0) {
     throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
   const weight = input.weight !== undefined ? assertWeight(input.weight) : 1;
@@ -567,8 +626,9 @@ async function activeVersionOf(
  * Update a key: field edits (account id, weight, enabled) with optional
  * rotate-on-save, one transaction. A present token rides the same
  * revoke-before-insert ledger order as rotateProviderKey so a save can
- * never fork versions. The cloudflare account id is load-bearing for
- * inference, so a change that would leave it empty is rejected.
+ * never fork versions. The account id is load-bearing for the
+ * cloudflare-rest transport, so a change that would leave it empty is
+ * rejected for those keys.
  */
 export async function updateProviderKey(
   db: AdminD1,
@@ -583,7 +643,11 @@ export async function updateProviderKey(
     input.accountId !== undefined
       ? clean(input.accountId)
       : (key.external_account_id ?? "");
-  if (key.provider_id === "cloudflare" && accountId.length === 0) {
+  const transport = await providerTransport(db, key.provider_id);
+  if (transport === null) {
+    throw new AdminStoreError(400, `unknown provider '${key.provider_id}'`);
+  }
+  if (transportNeedsAccountId(transport) && accountId.length === 0) {
     throw new AdminStoreError(400, "accountId is required for cloudflare keys");
   }
   const storedAccountId = accountId.length > 0 ? accountId : null;

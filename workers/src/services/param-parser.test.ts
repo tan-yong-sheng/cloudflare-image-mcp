@@ -144,6 +144,32 @@ describe("ParamParser.parse with string input", () => {
     expect(result.height).toBe(2000);
   });
 
+  test("a size string clamps to the model's width/height bounds", () => {
+    // Models that declare only `size` (Agnes) forward it verbatim and map it
+    // to a tier upstream, so an out-of-range WxH must be clamped here or it
+    // picks a ratio outside the model's limits.
+    const sizeOnly = sizeOnlyConfig();
+    const result = ParamParser.parse("cat --size=999999x100", {}, sizeOnly);
+    expect(result.size).toBe("2048x512");
+  });
+
+  test("an explicit width survives the size clamp", () => {
+    // Explicit params outrank the `size` string -- that is the documented
+    // precedence and the shape `run_model` produces, where `size` and
+    // `cf_params.width` both land in explicitParams. The size clamp used to
+    // write its size-derived dims back over width/height unconditionally, so
+    // an explicit width was silently discarded. Clamping `size` must not
+    // touch a dim the caller set.
+    const sizeOnly = sizeOnlyConfig();
+    const result = ParamParser.parse(
+      "cat",
+      { size: "1024x1024", width: 768 },
+      sizeOnly
+    );
+    expect(result.size).toBe("1024x1024");
+    expect(result.width).toBe(768);
+  });
+
   test("width outside hard parse bounds throws before clamping", () => {
     expect(() => ParamParser.parse("cat --width=100", {}, fluxConfig)).toThrow(
       "width must be between 256 and 2048"
@@ -185,6 +211,17 @@ describe("ParamParser.parse with object input", () => {
     expect(result.n).toBe(2);
     expect(result.width).toBe(1024);
     expect(result.height).toBe(1024);
+  });
+
+  test("an OpenAI size field clamps through the same limits", () => {
+    const result = ParamParser.parse(
+      { prompt: "cat", size: "999999x100" },
+      {},
+      sizeOnlyConfig()
+    );
+    expect(result.size).toBe("2048x512");
+    expect(result.width).toBe(2048);
+    expect(result.height).toBe(512);
   });
 
   test("n out of range throws", () => {

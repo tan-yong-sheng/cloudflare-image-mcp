@@ -23,7 +23,7 @@ import {
   updateProviderKey,
   type AdminD1,
 } from "./admin-store.js";
-import { openEnvelope, sealToken } from "./provider-crypto.js";
+import { maskToken, openEnvelope, sealToken } from "./provider-crypto.js";
 
 const DATA_KEY = "r2-harness-data-key";
 const seal = (token: string) => sealToken(token, DATA_KEY);
@@ -234,9 +234,9 @@ describe("admin store against the real migrations (S2)", () => {
     expect(versionOf(db)).toBe(1);
   });
 
-  test("add requires an account id for cloudflare keys", async () => {
+  test("add requires an account id for cloudflare-rest keys", async () => {
     // Inference addresses /accounts/{account_id}/ai/run — the account id
-    // is load-bearing, so add refuses a cloudflare key without one.
+    // is load-bearing, so add refuses a cloudflare-rest key without one.
     const db = freshDb();
     await expect(
       addProviderKey(asD1(db), seal, {
@@ -246,6 +246,47 @@ describe("admin store against the real migrations (S2)", () => {
       })
     ).rejects.toMatchObject({ status: 400 });
     expect(versionOf(db)).toBe(1);
+  });
+
+  test("the account-id gate follows the transport, not the provider name", async () => {
+    // ADR-002: external_account_id belongs to cloudflare-rest. A second
+    // provider on that transport must require it, and a non-cloudflare-rest
+    // provider must not be forced to carry one.
+    const db = freshDb();
+    const d1 = asD1(db);
+    db.prepare(
+      "INSERT INTO providers (id, display_name, transport) VALUES (?, ?, ?)"
+    ).run("cf-eu", "Cloudflare EU", "cloudflare-rest");
+
+    await expect(
+      addProviderKey(d1, seal, {
+        providerId: "cf-eu",
+        label: "eu-no-acct",
+        apiToken: "t",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+
+    const added = await addProviderKey(d1, seal, {
+      providerId: "cf-eu",
+      label: "eu-acct",
+      apiToken: "t",
+      accountId: "acct-eu",
+    });
+    expect(added.providerId).toBe("cf-eu");
+
+    // The empty-account guard on update follows the same transport rule.
+    await expect(
+      updateProviderKey(d1, seal, { keyId: added.id, accountId: "" })
+    ).rejects.toMatchObject({ status: 400 });
+
+    // Agnes is openai-compat: no account id is part of its contract.
+    await expect(
+      addProviderKey(d1, seal, {
+        providerId: "agnes",
+        label: "agnes-no-acct",
+        apiToken: "t",
+      })
+    ).resolves.toMatchObject({ providerId: "agnes" });
   });
 
   test("disable parks the key, keeps the row, bumps, audits", async () => {
@@ -529,7 +570,12 @@ describe("admin health exposure rows (S2)", () => {
       byProvider: { cloudflare: true },
     });
     expect(health.providers).toEqual([
-      { id: "cloudflare", displayName: "Cloudflare Workers AI" },
+      {
+        id: "cloudflare",
+        displayName: "Cloudflare Workers AI",
+        transport: "cloudflare-rest",
+      },
+      { id: "agnes", displayName: "Agnes AI", transport: "openai-compat" },
     ]);
     expect(health.keys).toEqual([
       {
@@ -554,6 +600,70 @@ describe("admin health exposure rows (S2)", () => {
       isDefault: true,
       scopes: ["s1"],
     });
+  });
+
+  test("health carries the masked hint of each key's active envelope", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    await addProviderKey(d1, seal, {
+      providerId: "agnes",
+      label: "hinted-key",
+      apiToken: "sk-yt9Xq2mKfa12",
+    });
+
+    const health = await getAdminHealth(
+      d1,
+      { any: true, byProvider: { agnes: true } },
+      async (envelope) => maskToken(await openEnvelope(envelope, DATA_KEY))
+    );
+    expect(health.keys).toEqual([
+      {
+        id: expect.any(Number),
+        providerId: "agnes",
+        label: "hinted-key",
+        weight: 1,
+        enabled: true,
+        activeVersion: 1,
+        accountId: null,
+        maskedKey: "sk-yt****fa12",
+      },
+    ]);
+  });
+
+  test("an envelope that will not open costs the hint, not the page", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    await addProviderKey(d1, seal, {
+      providerId: "agnes",
+      label: "parked-key",
+      apiToken: "sk-yt9Xq2mKfa12",
+    });
+
+    const health = await getAdminHealth(
+      d1,
+      { any: false, byProvider: { agnes: false } },
+      // A data key that does not match the one the row was sealed with.
+      async (envelope) => maskToken(await openEnvelope(envelope, "other-key"))
+    );
+    expect(health.keys).toHaveLength(1);
+    expect(health.keys[0].maskedKey).toBeUndefined();
+    expect(health.keys[0].activeVersion).toBe(1);
+  });
+
+  test("no opener means no hint: the summary shape stays as it was", async () => {
+    const db = freshDb();
+    const d1 = asD1(db);
+    await addProviderKey(d1, seal, {
+      providerId: "agnes",
+      label: "plain-key",
+      apiToken: "sk-yt9Xq2mKfa12",
+    });
+
+    const health = await getAdminHealth(d1, {
+      any: true,
+      byProvider: { agnes: true },
+    });
+    expect(health.keys[0].maskedKey).toBeUndefined();
   });
 
   test("exposure rows serialize model flags with scopes", async () => {

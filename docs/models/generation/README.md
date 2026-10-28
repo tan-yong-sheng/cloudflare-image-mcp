@@ -15,11 +15,14 @@ This document describes all available image generation models in the Cloudflare 
 | `@cf/black-forest-labs/flux-2-dev`              | FLUX.2 [dev]                 | Black Forest Labs | High-quality image model with multi-reference support                    |      ✅       |       ✅       |      ❌      |
 | `@cf/black-forest-labs/flux-2-klein-9b`         | FLUX.2 [klein] 9B            | Black Forest Labs | Ultra-fast, distilled 9B image model with enhanced quality               |      ✅       |       ✅       |      ❌      |
 | `@cf/stabilityai/stable-diffusion-xl-base-1.0`  | Stable Diffusion XL Base 1.0 | Stability AI      | High-quality diffusion model                                             |      ✅       |       ✅       |      ✅      |
-| `@cf/bytedance/stable-diffusion-xl-lightning`   | SDXL Lightning               | Bytedance         | Lightning-fast SDXL model for high-quality 1024px images                 |      ✅       |       ❌       |      ❌      |
+| `@cf/bytedance/stable-diffusion-xl-lightning`   | SDXL Lightning               | ByteDance         | Lightning-fast SDXL model for high-quality 1024px images                 |      ✅       |       ❌       |      ❌      |
 | `@cf/lykon/dreamshaper-8-lcm`                   | Dreamshaper 8 LCM            | Lykon             | Enhanced photorealistic SD model with LCM acceleration                   |      ✅       |       ✅       |      ❌      |
 | `@cf/leonardo/lucid-origin`                     | Lucid Origin                 | Leonardo.AI       | Most adaptable and prompt-responsive model                               |      ✅       |       ❌       |      ❌      |
 | `@cf/leonardo/phoenix-1.0`                      | Phoenix 1.0                  | Leonardo.AI       | Model with exceptional prompt adherence and coherent text                |      ✅       |       ❌       |      ❌      |
 | `@cf/runwayml/stable-diffusion-v1-5-inpainting` | SD 1.5 Inpainting            | Runway ML         | Stable Diffusion for masked edits (requires mask)                        |      ❌       |       ✅       |   Required   |
+| `agnes-image-2.5-flash`                         | Agnes Image 2.5 Flash        | Agnes AI          | Text-to-image and image-composition with 1K-4K tiers and ratios          |      ✅       |       ✅       |      ❌      |
+| `agnes-image-2.1-flash`                         | Agnes Image 2.1 Flash        | Agnes AI          | Same 1K-4K tiers and ratios as 2.5, tuned for high-density visuals       |      ✅       |       ✅       |      ❌      |
+| `agnes-image-2.0-flash`                         | Agnes Image 2.0 Flash        | Agnes AI          | Exact-size canvas; publishes no aspect-ratio parameter                   |      ✅       |       ✅       |      ❌      |
 
 ---
 
@@ -370,6 +373,9 @@ Models returning Base64-encoded images:
 
 - All FLUX models (`@cf/black-forest-labs/*`)
 - Lucid Origin (`@cf/leonardo/lucid-origin`)
+- Agnes Image 2.5 Flash (`agnes-image-2.5-flash`)
+- Agnes Image 2.1 Flash (`agnes-image-2.1-flash`)
+- Agnes Image 2.0 Flash (`agnes-image-2.0-flash`)
 
 The response includes the image data as a base64 string in the JSON response body.
 
@@ -402,6 +408,9 @@ Models accepting JSON payloads:
 - Phoenix 1.0
 - SD 1.5 Img2Img
 - SD 1.5 Inpainting
+- Agnes Image 2.5 Flash
+- Agnes Image 2.1 Flash
+- Agnes Image 2.0 Flash
 
 Send parameters as a JSON object in the request body.
 
@@ -415,6 +424,136 @@ Models accepting multipart/form-data:
 
 These models support uploading multiple reference images (up to 4) along with text parameters.
 
+---
+
+## Non-Cloudflare Providers
+
+### Agnes AI
+
+#### Provider behavior: intermittent subject substitution
+
+Observed in live testing on 2026-10-21. Requests to the Agnes API
+occasionally return an image of a **different subject than the prompt
+asked for**, with HTTP 200 and a valid image at the requested dimensions.
+The substitutions seen were a domestic portrait of a seated person,
+returned while the prompt asked for an animal in a futuristic setting.
+
+This happens **upstream, not in this Worker**. Reproduced by calling
+`apihub.agnes-ai.com/v1/images/generations` directly with the same body
+the transport builds, bypassing the Worker and the provider pool entirely:
+
+| Same prompt, three consecutive requests | Result                       |
+| --------------------------------------- | ---------------------------- |
+| 1                                       | unrelated subject (portrait) |
+| 2                                       | on-prompt                    |
+| 3                                       | on-prompt                    |
+
+Consequences worth knowing:
+
+- **Nothing in this integration can detect it.** The response is a
+  well-formed image of the requested size, so there is no error, status
+  code, or payload shape to test against. Treat output as advisory.
+- **Retrying is the only mitigation today.** A repeat request usually
+  returns an on-prompt image.
+- **It is prompt-dependent, not model-specific.** Ordinary prompts
+  (a red apple on a table, a retriever puppy in a garden) returned the
+  requested subject on every attempt; the substitutions clustered on a
+  prompt containing "cyberpunk".
+
+If you need prompt-faithful output for a category of prompt that
+substitutes, verify a sample against the provider directly before
+building on it.
+
+#### Agnes Image 2.5 Flash
+
+Agnes AI's text-to-image and image-composition model. Unlike the Cloudflare
+models it is served through the OpenAI-compatible transport, and its
+credentials are published for the `agnes` provider in the admin workbench
+(see [Credentials Setup](../../CREDENTIALS_SETUP.md)) — no Worker secret
+carries them.
+
+| Attribute             | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| **Model ID**          | `agnes-image-2.5-flash`                                  |
+| **Upstream Model**    | `agnes-image-2.5-flash`                                  |
+| **Input Format**      | JSON                                                     |
+| **Response Format**   | Base64                                                   |
+| **API Version**       | 1                                                        |
+| **Max Prompt Length** | 2048 characters                                          |
+| **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
+| **Output Tiers**      | 1K, 2K, 3K, 4K                                           |
+| **Aspect Ratios**     | 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9                |
+
+**Parameters:**
+
+| Parameter | Type   | Required | Default     | Description                                                                   |
+| --------- | ------ | -------- | ----------- | ----------------------------------------------------------------------------- |
+| `prompt`  | string | ✅       | —           | Text description of the image                                                 |
+| `size`    | string | ❌       | `1024x1024` | Output size as `WxH`; mapped to the nearest 1K/2K/3K/4K tier and aspect ratio |
+
+**Size mapping.** The requested `WxH` is normalized to a published tier (by
+area) and aspect ratio (by log-distance) before the upstream call. For example
+`2048x2048` → `2K` `1:1` and `1312x736` → `1K` `16:9`. Input images may be
+public URLs or data-URI base64; both pass through unchanged.
+
+**Unit pricing** (re-checked 2026-10-16; source
+[`agnes-ai.com/en/docs/agnes-image-25-flash`](https://agnes-ai.com/en/docs/agnes-image-25-flash)
+and [`wiki.agnes-ai.com/en/docs/pricing`](https://wiki.agnes-ai.com/en/docs/pricing)):
+$0.010 (1K), $0.018 (2K), $0.021 (3K), $0.024 (4K) per image list price, plus
+$0.003 per input reference from the fourth onward. The provider currently
+charges $0 for this model; pricing is not hardcoded in the service.
+
+#### Agnes Image 2.1 Flash
+
+Agnes AI's upgraded flash-tier model, tuned for high-information-density
+visuals, complex compositions, and detail-rich scenes. It publishes the same
+parameter schema and the same 1K-4K × eight-ratio matrix as 2.5, so it uses
+the same tier strategy; only the upstream model name differs.
+
+| Attribute             | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| **Model ID**          | `agnes-image-2.1-flash`                                  |
+| **Upstream Model**    | `agnes-image-2.1-flash`                                  |
+| **Input Format**      | JSON                                                     |
+| **Response Format**   | Base64                                                   |
+| **API Version**       | 1                                                        |
+| **Max Prompt Length** | 2048 characters                                          |
+| **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
+| **Output Tiers**      | 1K, 2K, 3K, 4K                                           |
+| **Aspect Ratios**     | 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9                |
+
+**Parameters** are identical to 2.5 (`prompt`, `size`); the size mapping
+normalizes the requested `WxH` to a tier and ratio the same way. Sources:
+[`agnes-ai.com/en/docs/agnes-image-21-flash`](https://agnes-ai.com/en/docs/agnes-image-21-flash)
+and [`wiki.agnes-ai.com/en/docs/pricing`](https://wiki.agnes-ai.com/en/docs/pricing).
+
+#### Agnes Image 2.0 Flash
+
+Agnes AI's first flash-tier generation and editing model. It is the one Agnes
+model that takes an **exact** `WxH` in `size` and publishes **no `ratio`**, so
+it declares `sizeStrategy: "exact"` and the transport withholds `ratio` for it.
+
+| Attribute             | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| **Model ID**          | `agnes-image-2.0-flash`                                  |
+| **Upstream Model**    | `agnes-image-2.0-flash`                                  |
+| **Input Format**      | JSON                                                     |
+| **Response Format**   | Base64                                                   |
+| **API Version**       | 1                                                        |
+| **Max Prompt Length** | 2048 characters                                          |
+| **Supported Tasks**   | text-to-image, image-to-image (up to 4 reference images) |
+| **Output Size**       | exact `WxH`, sent after the 512–4096 clamp               |
+| **Aspect Ratios**     | not supported by the model                               |
+
+**Verified sizes.** The provider publishes no size matrix for 2.0 and gives
+only example values, some of which the model replaces — live probe
+(2026-10-21) shows `1024x768`/`768x1024` come back as `1152x864`/`864x1152`
+and `1568x672` snaps to `1312x736`. `limits` mirrors 2.5's 512-4096 bounds
+and lists only the ten canvases the probe confirmed byte-exact: `1024x1024`,
+`864x1152`, `1152x864`, `1312x736`, `736x1312`, `832x1248`, `1248x832`,
+`2048x2048`, `3072x3072`, `4096x4096`. These are declarations for the size
+picker and MCP `supported_sizes`, not upstream validation. Source:
+[`agnes-ai.com/en/docs/agnes-image-20-flash`](https://agnes-ai.com/en/docs/agnes-image-20-flash).
 ---
 
 ## Notes

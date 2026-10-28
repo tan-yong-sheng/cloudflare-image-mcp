@@ -165,9 +165,21 @@ export default {
 
       // Route: API endpoints
       if (path === "/api/internal/models") {
+        // Availability rides along with the descriptors, and it reads the
+        // same predicate the request path does: a model is offered only
+        // when its transport resolves a pool. Resolving by transport, not
+        // by `provider`, is what keeps this in step with routing —
+        // `provider` names the model's author, and several authors share
+        // one set of credentials. The picker is public, so this reveals
+        // which transports are configured, not which models exist: the
+        // page already reports that much in its no-keys warning (ADR-001).
+        const pools = await getProviderPools(env);
         const models = listModels(
           overlayRegistry(MODEL_CONFIGS, await getExposureOverlay(env))
-        );
+        ).map((model) => ({
+          ...model,
+          available: pools.forTransport(model.inferenceProvider) !== undefined,
+        }));
         return new Response(JSON.stringify(models), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -179,16 +191,26 @@ export default {
         try {
           const image = await env.IMAGE_BUCKET.get(imageKey);
           if (!image) {
-            return new Response("Image not found", { status: 404 });
+            return withCors(new Response("Image not found", { status: 404 }));
           }
-          return new Response(image.body, {
-            headers: {
-              "Content-Type": image.httpMetadata?.contentType || "image/png",
-              "Cache-Control": "public, max-age=86400",
-            },
-          });
+          // CORS, because the page that draws these images can be served
+          // from a different origin than the one the stored URL was built
+          // from (a proxy, a custom domain), and a cross-origin read is what
+          // the Download button performs. Without this header the browser
+          // blocks the response and Download fails while the image itself
+          // still renders.
+          return withCors(
+            new Response(image.body, {
+              headers: {
+                "Content-Type": image.httpMetadata?.contentType || "image/png",
+                "Cache-Control": "public, max-age=86400",
+              },
+            })
+          );
         } catch (error) {
-          return new Response("Error fetching image", { status: 500 });
+          return withCors(
+            new Response("Error fetching image", { status: 500 })
+          );
         }
       }
 

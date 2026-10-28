@@ -198,20 +198,30 @@ or logout — never persisted.
   plus `hasServableCredentialByProvider` (per provider id): the same
   servable predicate inference routes on (enabled, weighted, envelope
   opens), so the workbench's "no credentials" warning cannot disagree
-  with what generation will pick. Labels and counts only, never secret
-  values.
+  with what generation will pick. Each key also carries `maskedKey`, a
+  hint such as `sk-yt****fa12`: the server opens the active envelope and
+  keeps five leading and four trailing characters. That is enough to tell
+  two keys apart and not enough to use one — the token itself never
+  leaves the Worker, and the browser cannot mask a value it never holds.
+  A key whose envelope will not open is listed without a hint instead of
+  failing the read, so the page used to repair it still loads.
 - **Add** — `POST /api/admin/keys` with
   `{ "providerId", "label", "apiToken" }` plus optional
   `accountId`, `weight`, `enabled`. The token is sealed
   server-side with `PROVIDER_DATA_KEY`; the response echoes identity only
   (`id`, `label`, `providerId`, `activeVersion`). Duplicate labels fail
-  with 409; unknown providers with 400. Cloudflare keys require
-  `accountId` (inference addresses `/accounts/{account_id}/ai/run`).
+  with 409; unknown providers with 400. A key whose provider row declares
+  `transport: "cloudflare-rest"` requires `accountId` (inference addresses
+  `/accounts/{account_id}/ai/run`); the gate follows the transport, not the
+  provider name. `GET /api/admin/health` reports each provider's
+  `transport` in `providers[]`.
   `providerId` rides on every write, so a second provider needs no API
-  change — today `"cloudflare"` is the only row in the catalog. Each
-  `providers` row names its seam by protocol in `transport`, and a model
-  reaches that provider's credentials by declaring the same string as its
-  `inferenceProvider` (ADR-002).
+  change — the catalog seeds `"cloudflare"` (migration 0001) and `"agnes"`
+  (migration 0005). Each `providers` row names its seam by protocol in
+  `transport`, and a model reaches that provider's credentials by declaring
+  the same string as its `inferenceProvider` (ADR-002). An Agnes key needs
+  no `accountId`: that field is a Cloudflare account reference, and the
+  OpenAI-compatible transport authenticates with the bearer key alone.
 - **Edit / rotate-on-save** — `PATCH /api/admin/keys/:id` with any of
   `{ "accountId", "weight", "enabled", "apiToken" }`. A present
   token revokes the active version and inserts the next one in the same

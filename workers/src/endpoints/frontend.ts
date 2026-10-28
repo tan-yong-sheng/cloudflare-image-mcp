@@ -3,6 +3,8 @@
 // Responsive web UI for image generation
 // ============================================================================
 
+import { AGNES_LOGO_DATA_URI } from "../config/brand.js";
+
 export function getFrontendHTML(options?: {
   hasCredentials?: boolean;
 }): string {
@@ -68,6 +70,15 @@ export function getFrontendHTML(options?: {
         }
 
         .text-primary { color: var(--primary); }
+
+        /* Provider brand mark. Sized in em so it tracks the family name's
+           font-size, the way a Font Awesome glyph does. */
+        .family-mark {
+            width: 1.15em;
+            height: 1.15em;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
 
         @keyframes fade-in {
             from { opacity: 0; }
@@ -148,15 +159,35 @@ export function getFrontendHTML(options?: {
             box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
         }
 
+        /* The range input needs a box the same height as the size dropdown,
+           with the track drawn thin and centred inside it. The shared
+           input rule above would otherwise give it 40px of padding and a
+           full-size background, which is what made the track look like a
+           fat rectangle with a small circle on it. */
         .slider {
             -webkit-appearance: none;
             appearance: none;
             width: 100%;
-            height: 6px;
-            border-radius: 5px;
-            background: var(--border);
+            height: 2.5rem;
+            min-height: 2.5rem;
+            padding: 0;
+            border: 1px solid transparent;
+            background: transparent;
             outline: none;
-            margin: 10px 0;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .slider::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: var(--border);
+        }
+
+        .slider::-moz-range-track {
+            height: 6px;
+            border-radius: 999px;
+            background: var(--border);
         }
 
         .slider::-webkit-slider-thumb {
@@ -164,10 +195,40 @@ export function getFrontendHTML(options?: {
             appearance: none;
             width: 18px;
             height: 18px;
+            /* Centre an 18px thumb on the 6px track: (6 - 18) / 2. */
+            margin-top: -6px;
+            border: none;
             border-radius: 50%;
             background: var(--primary);
             cursor: pointer;
             transition: all 0.2s ease;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border: none;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        /* The seed field and its randomise button sit in one flex row: the
+           button's own padding made the row 54px tall, and the input
+           stretched to match. Pin both to the shared control height so the
+           row lines up with Size and Steps. */
+        #seed,
+        #randomSeed {
+            height: 2.5rem;
+            min-height: 2.5rem;
+        }
+
+        #randomSeed {
+            padding: 0 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .slider::-webkit-slider-thumb:hover {
@@ -322,7 +383,8 @@ export function getFrontendHTML(options?: {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left opacity-60 border-b border-gray-800">
-                                <th class="p-3 font-medium">Account ID</th>
+                                <th id="adminKeysHead" class="p-3 font-medium">Key</th>
+                                <th id="adminAcctHead" class="p-3 font-medium">Account ID</th>
                                 <th class="p-3 font-medium"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
@@ -341,7 +403,7 @@ export function getFrontendHTML(options?: {
             <h3 id="adminSheetTitle" class="text-lg font-bold mb-1"></h3>
             <p id="adminSheetNote" class="text-xs opacity-60 mb-3"></p>
             <div class="space-y-3 flex-1">
-                <div>
+                <div id="adminSheetAcctField">
                     <label for="adminSheetAcct" class="block text-xs opacity-60 mb-1">Cloudflare account ID</label>
                     <input id="adminSheetAcct" class="w-full" placeholder="e.g. abc123def456" autocomplete="off" autocapitalize="off" spellcheck="false">
                     <p class="text-xs opacity-60 mt-1">Required — inference calls <code>/accounts/{account_id}/ai/run/…</code>. Stored alongside the key (not sealed).</p>
@@ -436,7 +498,7 @@ export function getFrontendHTML(options?: {
                     <div id="advancedOptions" class="space-y-3 hidden">
                         <div id="sizeWrap">
                             <label for="size" class="block text-sm font-medium mb-1">
-                                <i class="fa-solid fa-expand mr-1"></i>Size
+                                <i class="fa-solid fa-expand mr-1"></i>Size (W × H)
                             </label>
                             <select id="size" class="w-full">
                                 <option value="">Loading sizes…</option>
@@ -635,19 +697,43 @@ export function getFrontendHTML(options?: {
         const modelSelect = document.getElementById('model');
 
         let credentialsConfigured = HAS_CREDENTIALS;
+        // Models whose provider holds a servable key. The picker offers
+        // nothing until one does, so a blank select is the honest empty
+        // state rather than a list of models that cannot run.
+        let selectableModels = 0;
+        // Survives a failed refetch so a transient error does not also
+        // discard the model the user had picked.
+        let lastModelValue = '';
+        // Sequence token for loadModels: a health render can start a second
+        // refetch while the first is in flight, and the older response must
+        // not overwrite the newer list.
+        let modelRequest = 0;
+        // A generation in flight keeps Submit disabled: render(health) reruns
+        // the predicate below, and without this a health refetch arriving
+        // mid-request would re-enable the button and allow a duplicate POST.
+        let inFlight = false;
         function applyCredentialWarning() {
             noKeysWarning.classList.toggle('hidden', credentialsConfigured);
-            submitButton.disabled = !credentialsConfigured;
+            // No credentials, or no model the request path would accept:
+            // both leave generation impossible, so the button matches the
+            // disabled picker instead of looking actionable.
+            submitButton.disabled =
+                inFlight || !credentialsConfigured || selectableModels === 0;
             // Grey the model picker too: an unconfigured pool must not offer
             // a model the user then cannot generate with.
-            modelSelect.disabled = !credentialsConfigured;
-            modelSelect.classList.toggle('opacity-60', !credentialsConfigured);
+            modelSelect.disabled = !credentialsConfigured || selectableModels === 0;
+            modelSelect.classList.toggle('opacity-60', modelSelect.disabled);
+            if (modelSelect.disabled) {
+                modelSelect.title = credentialsConfigured
+                    ? 'No model available for the configured keys'
+                    : 'No API keys configured';
+            } else {
+                modelSelect.removeAttribute('title');
+            }
             if (credentialsConfigured) {
                 submitButton.removeAttribute('title');
-                modelSelect.removeAttribute('title');
             } else {
                 submitButton.title = 'No API keys configured';
-                modelSelect.title = 'No API keys configured';
             }
         }
         function setCredentialsConfigured(hasCredentials) {
@@ -740,9 +826,11 @@ export function getFrontendHTML(options?: {
             const params = config.parameters || {};
             const limits = config.limits || {};
             const has = (key) => params[key] !== undefined;
-            // Size sliders need width+height params; steps needs steps or
-            // num_steps (backend parses both, payload maps via cfParam).
-            const showSize = has('width') && has('height');
+            // Size control: width+height models drive it from their bounds,
+            // and Agnes models declare a single size parameter instead
+            // (2.0 takes an exact WxH, 2.5/2.1 a tier-mapped WxH), so the
+            // same select serves both shapes.
+            const showSize = (has('width') && has('height')) || has('size');
             const showSteps = has('steps') || has('num_steps');
             const showGuidance = has('guidance');
             const showNegative = has('negative_prompt');
@@ -773,15 +861,21 @@ export function getFrontendHTML(options?: {
         }
 
         async function loadModels() {
+            const request = ++modelRequest;
             try {
                 const response = await fetch('/api/internal/models');
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 modelRegistry = await response.json();
+                if (request !== modelRequest) return;
+                const previous = modelSelect.value || lastModelValue;
                 modelSelect.innerHTML = '';
                 // Prompt-only UI: image-to-image-only models have no
                 // input-image control, so exclude them (CodeRabbit + OCR).
+                // Also exclude models whose provider has no servable key:
+                // the available flag is the routing predicate, so the
+                // picker can never offer a model the request path refuses.
                 const textModels = modelRegistry.filter((m) =>
-                    (m.taskTypes || []).includes('text-to-image')
+                    (m.taskTypes || []).includes('text-to-image') && m.available === true
                 );
                 for (const m of textModels) {
                     const option = document.createElement('option');
@@ -789,8 +883,27 @@ export function getFrontendHTML(options?: {
                     option.textContent = m.id;
                     modelSelect.appendChild(option);
                 }
+                selectableModels = textModels.length;
+                // Keep the user's choice across a reload (adding a key
+                // refetches this list); it only moves if it is gone.
+                if (previous && textModels.some((m) => m.id === previous)) {
+                    modelSelect.value = previous;
+                }
+                lastModelValue = modelSelect.value;
+                modelError.classList.add('hidden');
+                applyCredentialWarning();
                 applyModelControls();
             } catch (error) {
+                // A newer refetch already owns the list and the error line.
+                if (request !== modelRequest) return;
+                // A failed refetch must not leave a stale list on screen: those
+                // options may no longer be servable, and offering one is how a
+                // blank-picker state ends up submitting anyway. Drop them and
+                // keep the choice for the next successful load.
+                lastModelValue = modelSelect.value || lastModelValue;
+                modelSelect.innerHTML = '';
+                selectableModels = 0;
+                applyCredentialWarning();
                 modelError.textContent = 'Could not load models: ' + (error instanceof Error ? error.message : String(error));
                 modelError.classList.remove('hidden');
             }
@@ -804,6 +917,12 @@ export function getFrontendHTML(options?: {
 
         // Generate image
         submitButton.addEventListener('click', async () => {
+            // The button may be disabled by the time the click handler fires
+            // (e.g. the DOM shim in tests calls listeners regardless of
+            // disabled, and a browser that queued the event before the flag
+            // flipped is equivalent). Guard here so a mid-flight click does
+            // not start a second generation request.
+            if (submitButton.disabled) return;
             const model = modelSelect.value;
             const prompt = document.getElementById('prompt').value;
             const config = currentModelConfig();
@@ -815,7 +934,7 @@ export function getFrontendHTML(options?: {
             // declared key, not the UI alias (OCR: steps was still dead
             // on SDXL/Leonardo).
             const body = { model: model, prompt: prompt, n: parseInt(document.getElementById('n').value) };
-            if (has('width') && has('height')) {
+            if ((has('width') && has('height')) || has('size')) {
                 body.size = document.getElementById('size').value;
             }
             if (has('num_steps')) {
@@ -864,6 +983,7 @@ export function getFrontendHTML(options?: {
             }
             document.getElementById('usedModel').textContent = '…';
             document.getElementById('generationTime').textContent = '…';
+            inFlight = true;
             submitButton.disabled = true;
             loadingOverlay.classList.remove('hidden');
 
@@ -881,9 +1001,13 @@ export function getFrontendHTML(options?: {
             let settled = false;
             const finish = () => {
                 settled = true;
+                inFlight = false;
                 clearTimeout(abortTimer);
                 loadingOverlay.classList.add('hidden');
-                submitButton.disabled = !credentialsConfigured;
+                // Same predicate as the initial state: readiness and a
+                // selectable model, so a completed run cannot re-enable a
+                // picker that has since emptied.
+                applyCredentialWarning();
             };
             const imageFailed = () => {
                 finish();
@@ -1006,19 +1130,45 @@ export function getFrontendHTML(options?: {
         downloadButton.addEventListener('click', async () => {
             if (!currentImageUrl) return;
 
-            try {
-                const response = await fetch(currentImageUrl);
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
+            const name = 'image-' + Date.now() + '.png';
+            const save = (href) => {
                 const link = document.createElement('a');
-                link.href = url;
-                link.download = 'image-' + Date.now() + '.png';
+                link.href = href;
+                link.download = name;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+            };
+
+            // A data URI is already the image: fetching it back would only
+            // copy bytes in memory for no gain.
+            if (currentImageUrl.startsWith('data:')) {
+                save(currentImageUrl);
+                return;
+            }
+
+            // The stored URL is absolute and built from the request origin.
+            // Served through a proxy or a custom domain, that origin can
+            // differ from the one the page loaded from — so the fetch is
+            // cross-origin and the download attribute would be ignored.
+            // Fetch first (which also gives the file a real name), then fall
+            // back to opening the URL rather than reporting a failure the
+            // operator cannot act on.
+            try {
+                const response = await fetch(currentImageUrl);
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                save(url);
                 window.URL.revokeObjectURL(url);
             } catch (error) {
-                showGenerateError('Download failed: ' + (error instanceof Error ? error.message : String(error)));
+                const opened = window.open(currentImageUrl, '_blank');
+                if (!opened) {
+                    showGenerateError(
+                        'Download failed: ' + (error instanceof Error ? error.message : String(error)) +
+                        '. Open the image in a new tab to save it.'
+                    );
+                }
             }
         });
         // Provider credentials workbench (full-page SPA view, #91)
@@ -1037,6 +1187,8 @@ export function getFrontendHTML(options?: {
             const rail = document.getElementById('adminRail');
             const familyName = document.getElementById('adminFamilyName');
             const keysBody = document.getElementById('adminKeys');
+            const keysHead = document.getElementById('adminKeysHead');
+            const acctHead = document.getElementById('adminAcctHead');
             const emptyLine = document.getElementById('adminEmpty');
             const addKeyBtn = document.getElementById('adminAddKey');
             const chipsActive = document.getElementById('adminChipsActive');
@@ -1045,6 +1197,7 @@ export function getFrontendHTML(options?: {
             const sheetEyebrow = document.getElementById('adminSheetEyebrow');
             const sheetTitle = document.getElementById('adminSheetTitle');
             const sheetNote = document.getElementById('adminSheetNote');
+            const sheetAcctField = document.getElementById('adminSheetAcctField');
             const sheetAcct = document.getElementById('adminSheetAcct');
             const sheetToken = document.getElementById('adminSheetToken');
             const sheetTokenHint = document.getElementById('adminSheetTokenHint');
@@ -1228,6 +1381,10 @@ export function getFrontendHTML(options?: {
                 // predicate the pool uses (enabled, weighted, envelope
                 // opens), so the warning cannot disagree with generation.
                 setCredentialsConfigured(health.hasServableCredential === true);
+                // Key mutations land here, and they change which providers
+                // can serve, so the model list is refetched with the same
+                // freshness as the health read it came from.
+                loadModels();
                 if (!selected || !providers.some((p) => p.id === selected)) {
                     selected = providers.length ? providers[0].id : '';
                 }
@@ -1237,6 +1394,40 @@ export function getFrontendHTML(options?: {
                 addKeyBtn.classList.toggle('hidden', !selected);
                 renderRail(providers, keys);
                 renderTable(providers, keys);
+            }
+
+            // Only cloudflare-rest addresses keys through /accounts/{id}/ai/run,
+            // so external_account_id is a field of that transport, not of a
+            // provider name. Routing it off the transport (ADR-002) keeps a
+            // future non-Cloudflare provider from inheriting the field.
+            function needsAccountId(providerId) {
+                const family = (lastHealth && lastHealth.providers || []).find((p) => p.id === providerId);
+                return !!family && family.transport === 'cloudflare-rest';
+            }
+
+            // Cloudflare ships a brand mark in Font Awesome. Agnes ships an
+            // app icon, inlined as a data URI so the mark adds no new
+            // third-party origin (see config/brand.ts).
+            const FAMILY_ICONS = { cloudflare: 'fa-brands fa-cloudflare' };
+            const FAMILY_LOGOS = { agnes: '${AGNES_LOGO_DATA_URI}' };
+            function familyIcon(providerId) {
+                // Own-property lookups: a provider id such as "constructor"
+                // would otherwise resolve through Object.prototype and take
+                // the logo branch with a function value.
+                const logo = Object.hasOwn(FAMILY_LOGOS, providerId) ? FAMILY_LOGOS[providerId] : null;
+                if (logo) {
+                    const img = document.createElement('img');
+                    img.src = logo;
+                    img.alt = '';
+                    img.className = 'family-mark mr-2';
+                    img.setAttribute('aria-hidden', 'true');
+                    return img;
+                }
+                if (!Object.hasOwn(FAMILY_ICONS, providerId)) return null;
+                const icon = document.createElement('i');
+                icon.className = FAMILY_ICONS[providerId] + ' mr-2';
+                icon.setAttribute('aria-hidden', 'true');
+                return icon;
             }
 
             function renderRail(providers, keys) {
@@ -1256,12 +1447,8 @@ export function getFrontendHTML(options?: {
                     });
                     const title = document.createElement('div');
                     title.className = 'flex items-center text-sm font-medium';
-                    if (p.id === 'cloudflare') {
-                        const icon = document.createElement('i');
-                        icon.className = 'fa-brands fa-cloudflare mr-2';
-                        icon.setAttribute('aria-hidden', 'true');
-                        title.appendChild(icon);
-                    }
+                    const icon = familyIcon(p.id);
+                    if (icon) title.appendChild(icon);
                     title.appendChild(document.createTextNode(p.displayName || p.id));
                     const familyKeys = keys.filter((k) => k.providerId === p.id);
                     const meta = document.createElement('div');
@@ -1346,7 +1533,7 @@ export function getFrontendHTML(options?: {
                 icon.className = 'fa-solid fa-trash';
                 del.appendChild(icon);
                 del.addEventListener('click', async () => {
-                    const who = k.accountId || k.label || ('#' + k.id);
+                    const who = k.maskedKey || k.accountId || k.label || ('#' + k.id);
                     if (!window.confirm('Delete key #' + k.id + ' (' + who + ')? This cannot be undone.')) return;
                     // Serialize per row: a second click while the first is in
                     // flight could delete a key id the refresh has already
@@ -1373,14 +1560,19 @@ export function getFrontendHTML(options?: {
 
             function renderTable(providers, keys) {
                 const family = providers.find((p) => p.id === selected);
+                // The account-ID column belongs to the transport, not the family:
+                // an openai-compat provider has no Cloudflare account behind it.
+                const hasAcct = !!family && family.transport === 'cloudflare-rest';
+                // Key leads: the masked hint is how an operator tells two keys
+                // apart. The account-ID column is only real for cloudflare-rest,
+                // so it hides entirely for an openai-compat family instead of
+                // rendering a column of dashes.
+                keysHead.textContent = 'Key';
+                acctHead.classList.toggle('hidden', !hasAcct);
                 familyName.textContent = '';
                 if (family) {
-                    if (family.id === 'cloudflare') {
-                        const icon = document.createElement('i');
-                        icon.className = 'fa-brands fa-cloudflare mr-2';
-                        icon.setAttribute('aria-hidden', 'true');
-                        familyName.appendChild(icon);
-                    }
+                    const icon = familyIcon(family.id);
+                    if (icon) familyName.appendChild(icon);
                     familyName.appendChild(document.createTextNode(family.displayName || family.id));
                 }
                 const rows = keys.filter((k) => k.providerId === selected);
@@ -1389,14 +1581,18 @@ export function getFrontendHTML(options?: {
                     const tr = document.createElement('tr');
                     if (!k.enabled) tr.style.opacity = '.55';
 
-                    const acctCell = document.createElement('td');
-                    acctCell.className = 'p-3 font-mono text-sm';
-                    acctCell.textContent = k.accountId || '—';
+                    const keyCell = document.createElement('td');
+                    keyCell.className = 'p-3 font-mono text-sm';
+                    // The hint is computed server-side: the browser never holds
+                    // a token, so it cannot mask one. A key whose envelope will
+                    // not open arrives without a hint, and reads as a dash
+                    // rather than as an empty cell.
+                    keyCell.textContent = k.maskedKey || '—';
                     if (k.activeVersion !== null && k.activeVersion !== undefined) {
                         const ver = document.createElement('span');
                         ver.className = 'opacity-60 text-xs ml-2';
                         ver.textContent = 'v' + k.activeVersion;
-                        acctCell.appendChild(ver);
+                        keyCell.appendChild(ver);
                     }
 
                     const actions = document.createElement('td');
@@ -1408,7 +1604,13 @@ export function getFrontendHTML(options?: {
                     wrap.appendChild(deleteButton(k));
                     actions.appendChild(wrap);
 
-                    tr.appendChild(acctCell);
+                    tr.appendChild(keyCell);
+                    if (hasAcct) {
+                        const acctCell = document.createElement('td');
+                        acctCell.className = 'p-3 font-mono text-sm';
+                        acctCell.textContent = k.accountId || '—';
+                        tr.appendChild(acctCell);
+                    }
                     tr.appendChild(actions);
                     keysBody.appendChild(tr);
                 });
@@ -1429,7 +1631,11 @@ export function getFrontendHTML(options?: {
                     ? 'Leave the token blank to keep the current version. Filling it rotates as part of save.'
                     : 'The key will be sealed server-side on save.';
                 sheetAcct.value = isEdit ? (key.accountId || '') : '';
-                sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined ? '(blank = keep v' + key.activeVersion + ')' : '';
+                const wantsAcct = needsAccountId(selected);
+                sheetAcctField.classList.toggle('hidden', !wantsAcct);
+                sheetTokenHint.textContent = isEdit && key.activeVersion !== null && key.activeVersion !== undefined
+                    ? (key.maskedKey ? key.maskedKey + ' · ' : '') + '(blank = keep v' + key.activeVersion + ')'
+                    : '';
                 sheetToken.value = '';
                 sheetToken.type = 'password';
                 sheetTokenEye.innerHTML = '<i class="fa-solid fa-eye"></i>';
@@ -1440,7 +1646,8 @@ export function getFrontendHTML(options?: {
                 sheetSave.disabled = false;
                 hideError(sheetError);
                 sheet.classList.remove('hidden');
-                sheetAcct.focus();
+                // Focus the first field the operator can actually fill.
+                if (wantsAcct) sheetAcct.focus(); else sheetToken.focus();
             }
 
             function closeSheet() {
@@ -1466,7 +1673,7 @@ export function getFrontendHTML(options?: {
                 const token = sheetToken.value.trim();
                 const weightRaw = sheetWeight.value.trim();
                 const weight = weightRaw === '' ? 1 : Number(weightRaw);
-                if (selected === 'cloudflare' && !accountId) {
+                if (needsAccountId(selected) && !accountId) {
                     showError(sheetError, 'Cloudflare account ID is required.');
                     sheetAcct.focus();
                     return;
