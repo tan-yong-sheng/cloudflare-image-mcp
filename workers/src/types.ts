@@ -121,4 +121,11 @@ export interface Env {
   DEPLOYED_AT?: string;
   COMMIT_SHA?: string;
   TZ?: string; // Timezone for logging and folder creation (default: UTC)
+  /**
+   * Workers Static Assets binding serving the React client (client/).
+   * Absent when the client is not deployed, in which case the Worker
+   * answers the client's routes with an explicit `client_not_built`
+   * error instead of a document.
+   */
+  ASSETS?: Fetcher;
 }

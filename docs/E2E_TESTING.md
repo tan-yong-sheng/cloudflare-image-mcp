@@ -11,6 +11,8 @@ live backend (`TEST_BASE_URL` + `/health`). Tests use Playwright to validate:
 - MCP endpoints (`/mcp/*`)
 - Model listing and description
 - Image generation, editing, and variations
+- The React SPA journey: login, the playground form, and the provider
+  credentials workbench
 
 ## Test Structure
 
@@ -20,6 +22,8 @@ e2e/
 │   ├── health.spec.ts           # Health checks
 │   ├── openai/                  # /v1/* tests (models, generations, edits, variations, SDK)
 │   └── mcp/                     # MCP tests (initialize, tools, SSE, SDK)
+├── tests/ui/
+│   └── spa.spec.ts              # React SPA journey (login, playground, workbench)
 ├── lib/                         # target.ts (TEST_TARGET/TEST_BASE_URL), auth.ts
 ├── playwright.config.ts         # Playwright configuration
 ├── global-setup.ts              # Global test setup
@@ -59,6 +63,9 @@ npx playwright test tests/api/mcp
 
 # Test specific file
 npx playwright test tests/api/openai/generations.spec.ts
+
+# Test the React SPA journey only
+npx playwright test tests/ui
 ```
 
 ### Debugging

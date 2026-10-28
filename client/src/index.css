@@ -1,0 +1,375 @@
+/* ==========================================================================
+   The React client's stylesheet
+   ==========================================================================
+   Tailwind's three layers, then the ported token and component stylesheet.
+   The ported sheet is unlayered, so it outranks every Tailwind layer the
+   way the legacy page's <style> block outranked the Tailwind CDN sheet.
+   ========================================================================== */
+
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Design tokens and component classes
+   ==========================================================================
+   Ported from the legacy single-file frontend's <style> block so the two
+   frontends render identically, and kept in step with DESIGN.md's token
+   table.
+
+   The legacy block came after the Tailwind stylesheet in the document, so
+   it won every cascade tie. This file is deliberately NOT inside a
+   Tailwind @layer: unlayered rules outrank every layered rule, which
+   reproduces that same outcome under Tailwind 3's layer model.
+
+   Each token also has an -rgb companion holding the same colour as
+   channels. Tailwind's alpha modifier (bg-primary/10) can only be applied
+   to a channel triplet, never to a hex or a bare var(), so the companion
+   is what the Tailwind theme reads. The two are derived from one hex and
+   a test asserts they agree.
+   ========================================================================== */
+
+:root {
+  --primary: #5046e5;
+  --primary-rgb: 80 70 229;
+  --primary-light: #6e67eb;
+  --primary-light-rgb: 110 103 235;
+  --primary-dark: #4338ca;
+  --primary-dark-rgb: 67 56 202;
+  --secondary: #f0f4f8;
+  --secondary-rgb: 240 244 248;
+  --text: #1a202c;
+  --text-rgb: 26 32 44;
+  --text-light: #4a5568;
+  --text-light-rgb: 74 85 104;
+  --background: #ffffff;
+  --background-rgb: 255 255 255;
+  --card-bg: #f7fafc;
+  --card-bg-rgb: 247 250 252;
+  --border: #e2e8f0;
+  --border-rgb: 226 232 240;
+  --success: #10b981;
+  --success-rgb: 16 185 129;
+  --error: #ef4444;
+  --error-rgb: 239 68 68;
+  --warning: #f59e0b;
+  --warning-rgb: 245 158 11;
+  --info: #3b82f6;
+  --info-rgb: 59 130 246;
+}
+
+.dark {
+  --primary: #6e67eb;
+  --primary-rgb: 110 103 235;
+  --primary-light: #8a84ee;
+  --primary-light-rgb: 138 132 238;
+  --primary-dark: #5046e5;
+  --primary-dark-rgb: 80 70 229;
+  --secondary: #2d3748;
+  --secondary-rgb: 45 55 72;
+  --text: #f7fafc;
+  --text-rgb: 247 250 252;
+  --text-light: #cbd5e0;
+  --text-light-rgb: 203 213 224;
+  --background: #111827;
+  --background-rgb: 17 24 39;
+  --card-bg: #1f2937;
+  --card-bg-rgb: 31 41 55;
+  --border: #374151;
+  --border-rgb: 55 65 81;
+  --success: #10b981;
+  --success-rgb: 16 185 129;
+  --error: #ef4444;
+  --error-rgb: 239 68 68;
+  --warning: #f59e0b;
+  --warning-rgb: 245 158 11;
+  --info: #3b82f6;
+  --info-rgb: 59 130 246;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+.btn {
+  padding: 1rem 1.5rem;
+  border-radius: 0.375rem;
+  transition: all 0.3s;
+}
+
+.btn:focus {
+  outline: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+/* Provider brand mark. Sized in em so it tracks the family name's
+   font-size, the way a Font Awesome glyph does. */
+.family-mark {
+  width: 1.15em;
+  height: 1.15em;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.3s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-light);
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.btn-secondary {
+  background-color: var(--secondary);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background-color: transparent;
+  color: var(--error);
+  border: 1px solid var(--border);
+}
+
+.btn-danger:hover {
+  background-color: var(--error);
+  color: white;
+  border-color: var(--error);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+input,
+select,
+textarea {
+  background-color: var(--background);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 2.5rem;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
+}
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 5px;
+  background: var(--border);
+  outline: none;
+  margin: 10px 0;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.2);
+}
+
+.loading-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.6);
+  border-radius: 0.5rem;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.image-container {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--card-bg);
+  position: relative;
+  border-radius: 0.5rem;
+  max-height: 400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Provider credentials workbench (variant A, #91) */
+.chip {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+}
+.chip-ok {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+}
+.tswitch {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 19px;
+  flex: none;
+  cursor: pointer;
+}
+.tswitch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.tswitch .track {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.tswitch .thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background: var(--text-light);
+  transition:
+    left 0.2s,
+    background 0.2s;
+}
+.tswitch input:checked + .track {
+  background: rgba(16, 185, 129, 0.35);
+  border-color: var(--success);
+}
+.tswitch input:checked + .track .thumb {
+  left: 17px;
+  background: var(--success);
+}
+.tswitch input:focus-visible + .track {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (max-width: 768px) {
+  .mobile-flex-col {
+    flex-direction: column;
+  }
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1200px;
+  }
+}

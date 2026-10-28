@@ -37,7 +37,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: workers/package-lock.json
+          cache-dependency-path: |
+            workers/package-lock.json
+            client/package-lock.json
 
       - name: Install dependencies
         working-directory: workers
@@ -47,13 +49,45 @@ jobs:
         working-directory: workers
         run: npm run check
 
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Client type check
+        working-directory: client
+        run: npm run check
+
+      - name: Client build
+        # The build is part of the gate: a client that does not bundle is
+        # a client that cannot be deployed, and the deploy workflow builds
+        # the same output.
+        working-directory: client
+        run: npm run build
+
+      - name: Client unit tests
+        working-directory: client
+        run: npm test
+
+      - name: Client format check
+        working-directory: client
+        # The whole client tree is new, so a blanket check is affordable
+        # here; the workers tree predates the repo formatter config and
+        # keeps its scoped check.
+        # --no-install: prettier is a pinned dev dependency of this
+        # package, so the gate uses the version in the lockfile instead
+        # of fetching whatever npx considers current.
+        run: npx --no-install prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
+
       - name: Format check
         working-directory: workers
         # Scoped to files this pipeline owns: pre-existing sources predate
         # the repo formatter config and would fail a blanket check. The
         # test-support directory and tsconfigs are included because the
         # D1 migration harness and its config landed formatter-clean.
-        run: npx prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" "../.github/workflows/pr-checks.yml"
+        # --no-install: prettier is a pinned dev dependency of this
+        # package, so the gate uses the version in the lockfile instead
+        # of fetching whatever npx considers current.
+        run: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" "../.github/workflows/pr-checks.yml"
 
       - name: Unit tests
         working-directory: workers

@@ -70,14 +70,49 @@ expect() { # label got want
   if [ "$2" = "$3" ]; then echo "ok    $1 ($2)"; else echo "fail  $1 (got $2, want $3)"; failures=$((failures + 1)); fi
 }
 
+expect_body() { # label pattern
+  if grep -qF -- "$2" "$BODY_FILE"; then
+    echo "ok    $1"
+  else
+    echo "fail  $1 (body lacks '$2')"; failures=$((failures + 1))
+  fi
+}
+
+expect_no_body() { # label pattern
+  if grep -qF -- "$2" "$BODY_FILE"; then
+    echo "fail  $1 (body still carries '$2')"; failures=$((failures + 1))
+  else
+    echo "ok    $1"
+  fi
+}
+
 echo "battery -> $OUT"
 
 expect "health is public" \
   "$(probe 'GET /health (public)' GET /health)" 200
 expect "frontend / is public" \
   "$(probe 'GET / (public)' GET /)" 200
+# The frontend is the React client now. The served document mounts into an
+# empty #root and the client renders the rest; the legacy template shipped
+# the login modal's markup inline, so its absence is what proves the
+# cutover rather than a page that merely answers 200.
+expect_body "frontend / serves the React client shell" 'id="root"'
+expect_no_body "frontend / no longer serves the legacy template" 'id="loginModal"'
+# The built bundle must be public too: every browser downloads it, and
+# the asset binding is what serves it. The name is hashed, so it is read
+# out of the document the client just served.
+BUNDLE="$(grep -o '/assets/index-[A-Za-z0-9_-]*\.js' "$BODY_FILE" | head -1)"
+if [ -z "$BUNDLE" ]; then
+  echo "fail  the client document names no bundle"; failures=$((failures + 1))
+else
+  expect "the client bundle is public" \
+    "$(probe "GET $BUNDLE (public)" GET "$BUNDLE")" 200
+fi
+expect "/index.html serves the client" \
+  "$(probe 'GET /index.html (public)' GET /index.html)" 200
 expect "/admin page is public" \
   "$(probe 'GET /admin (public)' GET /admin)" 200
+expect_body "/admin serves the React client shell" 'id="root"'
 expect "models without key is 401" \
   "$(probe 'GET /v1/models (no key)' GET /v1/models)" 401
 expect "models with key is 200" \
