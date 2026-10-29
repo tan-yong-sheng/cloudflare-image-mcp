@@ -5,12 +5,13 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  ADMIN_CALLER_KEYS_PATH,
   ADMIN_HEALTH_PATH,
   ADMIN_KEYS_PATH,
 } from "../../../workers/src/routes";
 import { apiFetch, type ApiOptions, type ApiResult } from "./client";
 import { modelsQueryKey } from "./models";
-import type { AdminHealth } from "./types";
+import type { AdminCallerKeys, AdminHealth } from "./types";
 
 /**
  * The admin API client.
@@ -34,6 +35,15 @@ export const healthQueryKey = (sessionId: number) =>
  * published to whichever payload is on screen.
  */
 export const HEALTH_QUERY_FAMILY = ["admin", "health"] as const;
+
+/**
+ * The family the caller-key list belongs to.
+ *
+ * Caller keys are a different list from the provider health payload, but
+ * they carry the same rule: a locked panel must leave nothing behind to
+ * read, so this family is dropped on lock like the health one.
+ */
+export const CALLER_KEYS_QUERY_FAMILY = ["admin", "caller-keys"] as const;
 
 /** An error the admin API returned, with the status and code it carried. */
 export class AdminApiError extends Error {
@@ -102,6 +112,42 @@ export function useHealth(session: AdminSession) {
     // the generator reads the same query, and a mount there would
     // otherwise send the management key once more after the operator
     // left the workbench.
+    refetchOnMount: false,
+    retry: false,
+  });
+}
+
+/**
+ * Read the caller-key list.
+ *
+ * The list carries names, masked hints, and the enabled flag. The server
+ * never sends the secret, so there is nothing here that could be used as
+ * a key — the client cannot leak one it never received.
+ */
+export async function fetchCallerKeys(
+  session: AdminSession,
+  signal?: AbortSignal
+): Promise<AdminCallerKeys> {
+  const result = await apiFetch<AdminCallerKeys>(ADMIN_CALLER_KEYS_PATH, {
+    adminKey: session.adminKey,
+    authToken: session.bearerToken,
+    signal,
+  });
+  if (!result.ok) throw toError(result);
+  return result.data as AdminCallerKeys;
+}
+
+/**
+ * The caller-key list, read once the operator unlocks the workbench.
+ *
+ * Scoped to the unlock session like the health payload, so one operator's
+ * list is never served from another operator's session.
+ */
+export function useCallerKeys(session: AdminSession) {
+  return useQuery({
+    queryKey: [...CALLER_KEYS_QUERY_FAMILY, session.sessionId],
+    queryFn: ({ signal }) => fetchCallerKeys(session, signal),
+    enabled: session.adminKey !== null,
     refetchOnMount: false,
     retry: false,
   });

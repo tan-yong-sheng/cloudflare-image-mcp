@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { HEALTH_QUERY_FAMILY } from "../api/admin";
+import { CALLER_KEYS_QUERY_FAMILY, HEALTH_QUERY_FAMILY } from "../api/admin";
 import { useAuth } from "./auth";
 
 /**
@@ -51,8 +51,10 @@ export function AdminKeyProvider({ children }: { children: ReactNode }) {
     keyRef.current = null;
     setAdminKey(null);
     // The credential metadata the panel fetched goes with the key: a
-    // locked panel must leave nothing behind to read.
+    // locked panel must leave nothing behind to read. The caller-key list
+    // goes too — it is part of the same panel.
     queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
+    queryClient.removeQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
   }, [queryClient]);
 
   // Teardown: neither the key nor the payload outlives the provider.
@@ -60,6 +62,7 @@ export function AdminKeyProvider({ children }: { children: ReactNode }) {
     return () => {
       keyRef.current = null;
       queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
+      queryClient.removeQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
     };
   }, [queryClient]);
 

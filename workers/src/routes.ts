@@ -15,6 +15,15 @@ export const ADMIN_HEALTH_PATH = "/api/admin/health";
 /** The collection the key mutations are written to. */
 export const ADMIN_KEYS_PATH = "/api/admin/keys";
 
+/**
+ * The collection the caller-key reads are served from.
+ *
+ * Caller keys are the bearer tokens clients send to reach /v1/* and /mcp*
+ * — a different kind of secret from the provider keys above, so they have
+ * their own path rather than sharing one.
+ */
+export const ADMIN_CALLER_KEYS_PATH = "/api/admin/caller-keys";
+
 /** The public model registry the picker reads. */
 export const INTERNAL_MODELS_PATH = "/api/internal/models";
 

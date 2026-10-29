@@ -1,5 +1,5 @@
 // ============================================================================
-// Provider admin API - D1 pool health + key writes (R2, #74)
+// Admin API - D1 pool health, provider key writes (R2, #74), caller keys (#125)
 // ============================================================================
 // Read first, write second (per #74): health exposes pool counts, labels,
 // exposure, and config version, plus a masked hint per key — enough to tell
@@ -11,14 +11,24 @@
 // action, key). Routes sit behind TWO gates: the existing API_KEYS bearer
 // (401, unchanged) then X-Admin-Key against ADMIN_API_KEY (403) — checked
 // constant-time so a wrong admin key isn't a timing oracle.
+//
+// Caller keys are the other kind of secret this API touches: the bearer
+// tokens a client sends to reach /v1/* and /mcp*. They are read-only here
+// for now (#125): the list carries names, masked hints, and the enabled
+// flag, and never a verifier or a secret.
 
 import type { Env } from "../types.js";
-import { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH } from "../routes.js";
+import {
+  ADMIN_CALLER_KEYS_PATH,
+  ADMIN_HEALTH_PATH,
+  ADMIN_KEYS_PATH,
+} from "../routes.js";
 import {
   maskToken,
   openEnvelope,
   sealToken,
 } from "../services/provider-crypto.js";
+import { listCallerKeys } from "../services/caller-store.js";
 import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
@@ -36,7 +46,7 @@ import {
 } from "../services/admin-store.js";
 
 /** Routes the client also calls; workers/src/routes.ts is the shared source. */
-export { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH };
+export { ADMIN_CALLER_KEYS_PATH, ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH };
 
 /**
  * Ids arrive as path text. Anything past a safe integer cannot address a row
@@ -309,7 +319,13 @@ export async function handleAdmin(
         env.PROVIDER_DATA_KEY
       );
     }
-    if (!active) return internalError("no provider store bound");
+    if (!active) return internalError("no admin store bound");
+    if (request.method === "GET" && path === ADMIN_CALLER_KEYS_PATH) {
+      // Caller keys are the bearer tokens clients send to reach /v1/* and
+      // /mcp*. The list carries names, masked hints, and the enabled flag —
+      // never a verifier, never a secret.
+      return json({ keys: await listCallerKeys(active) });
+    }
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
