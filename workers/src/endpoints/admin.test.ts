@@ -892,3 +892,135 @@ describe("admin health readiness (ADR-001)", () => {
     expect(keys[0].maskedKey).toBeUndefined();
   });
 });
+
+describe("caller-key list (#125)", () => {
+  // A caller key is the bearer token a client sends to reach /v1/* and
+  // /mcp*. The list is the operator's window onto them: names, masked
+  // hints, and whether each is enabled. What it must never carry is the
+  // verifier — the one column that would let the browser use a key.
+
+  /** D1-shaped fake carrying caller-key rows. */
+  function dbWithCallerKeys(rows: Record<string, unknown>[]): unknown {
+    const db = {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => null,
+          all: async () =>
+            sql.includes("FROM caller_keys")
+              ? { results: rows }
+              : { results: [] },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return { ...stmt, bind: (..._p: unknown[]) => ({ ...stmt }) };
+      },
+      batch: async () => [],
+    };
+    return db;
+  }
+
+  const CALLER_KEY_ROWS = [
+    {
+      id: 1,
+      name: "Laptop",
+      prefix: "sk-mgmt-",
+      suffix: "a1b2",
+      enabled: 1,
+      created_at: 1_700_000_000,
+      updated_at: 1_700_000_000,
+    },
+    {
+      id: 2,
+      name: "CI",
+      prefix: "",
+      suffix: "c3d4",
+      enabled: 0,
+      created_at: 1_700_000_100,
+      updated_at: 1_700_000_100,
+    },
+  ];
+
+  function envWithCallerKeys(): Env {
+    return {
+      ...env(),
+      PROVIDER_DB: dbWithCallerKeys(CALLER_KEY_ROWS),
+    } as unknown as Env;
+  }
+
+  test("no bearer at all is a 401 through the existing gate", async () => {
+    const response = await worker.fetch(
+      get("/api/admin/caller-keys", { "X-Admin-Key": "admin-key" }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("right bearer but wrong admin key is a 403", async () => {
+    const response = await worker.fetch(
+      get(
+        "/api/admin/caller-keys",
+        bearer("user-key", { "X-Admin-Key": "wrong-admin-key" })
+      ),
+      env()
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("the list carries names, masked hints, and the enabled flag", async () => {
+    const response = await handleAdmin(
+      get(
+        "/api/admin/caller-keys",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      "/api/admin/caller-keys",
+      envWithCallerKeys()
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response!.json()) as {
+      keys: {
+        id: number;
+        name: string;
+        maskedKey: string;
+        enabled: boolean;
+      }[];
+    };
+    expect(body.keys).toEqual([
+      {
+        id: 1,
+        name: "Laptop",
+        maskedKey: "sk-mgmt-…a1b2",
+        enabled: true,
+        createdAt: 1_700_000_000,
+        updatedAt: 1_700_000_000,
+      },
+      {
+        id: 2,
+        name: "CI",
+        maskedKey: "…c3d4",
+        enabled: false,
+        createdAt: 1_700_000_100,
+        updatedAt: 1_700_000_100,
+      },
+    ]);
+  });
+
+  test("the list never carries the verifier", async () => {
+    const response = await handleAdmin(
+      get(
+        "/api/admin/caller-keys",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      "/api/admin/caller-keys",
+      envWithCallerKeys()
+    );
+    const text = await response!.text();
+    // The verifier is the one column that would let the browser use a key.
+    // It is not in the response under any name.
+    expect(text).not.toContain("secret_hash");
+    expect(text).not.toContain("secretHash");
+    expect(
+      Object.keys(
+        (JSON.parse(text) as { keys: Record<string, unknown>[] }).keys[0] ?? {}
+      ).sort()
+    ).toEqual(["createdAt", "enabled", "id", "maskedKey", "name", "updatedAt"]);
+  });
+});

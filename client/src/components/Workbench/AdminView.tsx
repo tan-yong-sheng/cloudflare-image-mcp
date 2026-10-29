@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AdminApiError,
   useAdminMutations,
+  useCallerKeys,
   useHealth,
   usePendingAdminKeyIds,
 } from "../../api/admin";
@@ -9,6 +10,7 @@ import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
+import { CallerKeyTable } from "./CallerKeyTable";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
@@ -44,6 +46,11 @@ export function AdminView() {
 
   const health = useHealth(session);
   const mutations = useAdminMutations(session, endRefusedSession);
+  // Caller keys are a second list: the bearer tokens clients send to reach
+  // this Worker, as opposed to the provider credentials the Worker sends
+  // to Cloudflare. It is read on its own so one list failing does not take
+  // the other down with it.
+  const callerKeys = useCallerKeys(session);
 
   const [selected, setSelected] = useState("");
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -60,6 +67,7 @@ export function AdminView() {
   const [panelError, setPanelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
+  const handledCallerError = useRef<unknown>(null);
 
   const unlocked = adminKey !== null;
   const providers = health.data?.providers ?? [];
@@ -106,6 +114,34 @@ export function AdminView() {
     }
     setGateError(failure instanceof Error ? failure.message : String(failure));
   }, [health.isError, health.error, endRefusedSession, lock]);
+
+  // A caller-key failure is not the provider payload's business: the
+  // provider workbench keeps working. Only a refused session or a refused
+  // gate ends the panel; anything else is reported and the rest of the
+  // workbench carries on.
+  useEffect(() => {
+    if (!callerKeys.isError) {
+      handledCallerError.current = null;
+      return;
+    }
+    if (handledCallerError.current === callerKeys.error) return;
+    handledCallerError.current = callerKeys.error;
+    const failure = callerKeys.error;
+    if (failure instanceof AdminApiError && failure.status === 401) {
+      endRefusedSession(failure);
+      return;
+    }
+    if (failure instanceof AdminApiError && failure.status === 403) {
+      lock();
+      setGateError(
+        failure.code === "admin_disabled"
+          ? failure.message
+          : "Management key rejected."
+      );
+      return;
+    }
+    setPanelError(failure instanceof Error ? failure.message : String(failure));
+  }, [callerKeys.isError, callerKeys.error, endRefusedSession, lock]);
 
   // A notice fades on its own, the way the legacy page's did.
   useEffect(() => {
@@ -279,7 +315,7 @@ export function AdminView() {
               className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
             >
               <i className="fa-solid fa-server mr-2 text-primary" />
-              AI Providers
+              Administration
             </h1>
             <FamilyRail
               providers={providers}
@@ -344,6 +380,10 @@ export function AdminView() {
             </div>
           </div>
         </div>
+        <CallerKeyTable
+          keys={callerKeys.data?.keys ?? []}
+          loading={callerKeys.isPending}
+        />
       </div>
 
       <UnlockGate
