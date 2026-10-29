@@ -34,7 +34,9 @@ workers/.wrangler
 *.log
 
 # Local verification artifacts (verify-cloudflare-image-mcp skill)
+.audit/
 .verify/
 evidence/
+
 
 
