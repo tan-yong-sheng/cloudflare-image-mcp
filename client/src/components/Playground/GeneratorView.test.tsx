@@ -628,6 +628,26 @@ describe("the generator", () => {
     expect(document.getElementById("loadingOverlay")).toBeNull();
   });
 
+  it("shows generation failed when a 2xx response contains no usable images", async () => {
+    stubApi((route) =>
+      route.path === "/v1/images/generations"
+        ? jsonResponse(true, { data: [] })
+        : null
+    );
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    await user.click(document.getElementById("submitButton")!);
+
+    expect(
+      await screen.findByText("0 of 1 images generated.")
+    ).toBeInTheDocument();
+    expect(document.getElementById("generateError")?.textContent).toBe(
+      "Error: Generation failed"
+    );
+  });
+
   it("reports every slot as missing when the request produced nothing", async () => {
     stubApi((route) =>
       route.path === "/v1/images/generations"

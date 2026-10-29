@@ -151,7 +151,7 @@ export function GeneratorView() {
         if (response.ok) {
           // A 2xx with nothing usable is still a failure, and there is no
           // error envelope to read a message from.
-          return { ok: false, images, message: "" };
+          return { ok: false, images, message: "Generation failed" };
         }
         const message =
           typeof payload?.error?.message === "string"
