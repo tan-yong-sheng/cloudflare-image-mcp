@@ -15,6 +15,7 @@ import {
   OpenAITransport,
   OpenAITransportError,
   publicImageUrl,
+  parseRetryAfterMs,
 } from "./openai-transport.js";
 import { ProviderPool } from "./provider-pool.js";
 import { MODEL_CONFIGS } from "../config/models.js";
@@ -95,6 +96,28 @@ describe("classifyOpenAIFailure", () => {
     [422, "terminal"],
   ])("HTTP %i is %s", (status, kind) => {
     expect(classifyOpenAIFailure(status)).toBe(kind);
+  });
+});
+
+describe("parseRetryAfterMs", () => {
+  test("delta-seconds become milliseconds", () => {
+    expect(parseRetryAfterMs("7")).toBe(7000);
+    expect(parseRetryAfterMs(" 0 ")).toBe(0);
+  });
+
+  test("an HTTP-date becomes the remaining wait", () => {
+    const now = Date.parse("2026-01-01T00:00:00Z");
+    expect(parseRetryAfterMs("Thu, 01 Jan 2026 00:00:05 GMT", now)).toBe(5000);
+  });
+
+  test("a date in the past clamps to zero rather than going negative", () => {
+    const now = Date.parse("2026-01-01T00:01:00Z");
+    expect(parseRetryAfterMs("Thu, 01 Jan 2026 00:00:00 GMT", now)).toBe(0);
+  });
+
+  test("absent or malformed headers are undefined, not zero", () => {
+    expect(parseRetryAfterMs(null)).toBeUndefined();
+    expect(parseRetryAfterMs("soon")).toBeUndefined();
   });
 });
 
@@ -418,6 +441,130 @@ describe("OpenAITransport.run", () => {
     ).rejects.toThrow(/no servable credential/);
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("pool: one 429 surfaces the rate limit, never 'no servable credential'", async () => {
+    // The bug this pins: a single-key pool parked its only key on the first
+    // 429, so the *same* request's retry loop ran dry and reported a missing
+    // credential. An operator read that as a deleted key.
+    const pool = oneKeyPool("key-a");
+    const fetchMock = vi.fn(
+      async () => new Response("slow down", { status: 429 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool,
+      sleep: async () => {},
+    });
+
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).rejects.toThrow(/429\) \[credential: a\]/);
+  });
+
+  test("pool: after the cooldown a parked key is retried and reports its 429", async () => {
+    // The complementary case: once the cooldown the pool parked has elapsed,
+    // the next request must actually try the key and surface the provider's
+    // answer rather than claiming nothing is servable.
+    const pool = oneKeyPool("key-a");
+    const fetchMock = vi.fn(
+      async () => new Response("slow down", { status: 429 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool,
+      sleep: async () => {},
+    });
+
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).rejects.toThrow(/429/);
+    // Within the cooldown the key is parked, so the pool is honestly empty.
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).rejects.toThrow(/no servable credential/);
+  });
+
+  test("pool: a 429 waits for Retry-After before trying the next key", async () => {
+    const pool = twoKeyPool();
+    const sleeps: number[] = [];
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call++;
+      if (call === 1) {
+        return new Response("slow down", {
+          status: 429,
+          headers: { "Retry-After": "7" },
+        });
+      }
+      return Response.json({ data: [{ b64_json: "aGVsbG8=" }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool,
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+      },
+    });
+
+    await expect(
+      transport.run(MODEL.id, { prompt: "x" }, MODEL)
+    ).resolves.toEqual({ image: "aGVsbG8=" });
+    expect(sleeps).toEqual([7000]);
+  });
+
+  test("pool: a 429 without Retry-After backs off, bounded by a ceiling", async () => {
+    const pool = twoKeyPool();
+    const sleeps: number[] = [];
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call++;
+      if (call === 1) return new Response("slow down", { status: 429 });
+      return Response.json({ data: [{ b64_json: "aGVsbG8=" }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool,
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+      },
+    });
+
+    await transport.run(MODEL.id, { prompt: "x" }, MODEL);
+    expect(sleeps).toHaveLength(1);
+    expect(sleeps[0]).toBeGreaterThan(0);
+    expect(sleeps[0]).toBeLessThanOrEqual(10_000);
+  });
+
+  test("pool: a non-429 retryable failure does not wait", async () => {
+    const pool = twoKeyPool();
+    const sleeps: number[] = [];
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call++;
+      if (call === 1) return new Response("boom", { status: 503 });
+      return Response.json({ data: [{ b64_json: "aGVsbG8=" }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const transport = new OpenAITransport({
+      baseUrl: BASE_URL,
+      pool,
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+      },
+    });
+
+    await transport.run(MODEL.id, { prompt: "x" }, MODEL);
+    expect(sleeps).toEqual([]);
   });
 
   test("credential values are scrubbed from error messages", async () => {

@@ -109,12 +109,48 @@ export function classifyOpenAIFailure(status: number): FailureKind {
  */
 export class OpenAITransportError extends Error {
   readonly kind: FailureKind;
+  /** Provider-requested wait in ms (Retry-After); absent when it sent none. */
+  readonly retryAfterMs?: number;
+  /** The provider answered 429. A flag, not a message match. */
+  readonly isRateLimit: boolean;
 
-  constructor(message: string, kind: FailureKind) {
+  constructor(
+    message: string,
+    kind: FailureKind,
+    extra?: { retryAfterMs?: number; isRateLimit?: boolean }
+  ) {
     super(message);
     this.name = "OpenAITransportError";
     this.kind = kind;
+    this.retryAfterMs = extra?.retryAfterMs;
+    this.isRateLimit = extra?.isRateLimit ?? false;
   }
+}
+
+/**
+ * Backoff bounds for a 429. Agnes recommends exponential backoff for rate
+ * limits, and its image RPM is resolution-specific (1 RPM at 3K/4K), so the
+ * ceiling is capped well under the request timeout: a Worker that slept
+ * longer than a timeout would only move the failure to the caller.
+ */
+const RETRY_FLOOR_MS = 1_000;
+const RETRY_CEILING_MS = 10_000;
+
+/**
+ * Parse a Retry-After header, which RFC 9110 allows as either delta-seconds
+ * or an HTTP-date. Returns undefined for anything else, so a malformed header
+ * falls back to the computed backoff instead of being treated as zero.
+ */
+export function parseRetryAfterMs(
+  value: string | null,
+  now: number = Date.now()
+): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, at - now);
 }
 
 export interface OpenAITransportOptions {
@@ -122,6 +158,8 @@ export interface OpenAITransportOptions {
   pool: ProviderPool;
   /** Endpoint override; defaults to the bound provider's base URL. */
   baseUrl?: string;
+  /** Injectable wait, so tests never sleep for real. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 const DEFAULT_SIZE = "1024x1024";
@@ -229,6 +267,7 @@ export function buildAgnesRequestBody(
 export class OpenAITransport implements AITransport {
   private readonly baseUrl: string;
   private readonly pool: ProviderPool;
+  private readonly sleep: (ms: number) => Promise<void>;
   /** The only host a provider-supplied image URL may name (see fetch below). */
   private readonly imageHost: string;
 
@@ -236,6 +275,8 @@ export class OpenAITransport implements AITransport {
     this.baseUrl = (options.baseUrl ?? AGNES_API_BASE_URL).replace(/\/+$/, "");
     this.imageHost = new URL(this.baseUrl).hostname;
     this.pool = options.pool;
+    this.sleep =
+      options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   }
 
   async run(
@@ -253,6 +294,11 @@ export class OpenAITransport implements AITransport {
    * Pool-driven attempts (#72): each failure parks its key on the shared
    * pool so later requests start elsewhere, but only retryable failures do
    * so — a terminal failure is surfaced without touching the other keys.
+   *
+   * A 429 waits before the next attempt (Retry-After when the provider sent
+   * one, else an exponential backoff bounded by RETRY_CEILING_MS) instead of
+   * retrying at once: the limit is time-based, so re-picking immediately only
+   * burns the remaining keys.
    */
   private async runPooled(
     url: string,
@@ -262,6 +308,7 @@ export class OpenAITransport implements AITransport {
     // null within labels().length attempts in practice.
     let lastError: unknown = null;
     const maxAttempts = this.pool.labels().length + 1;
+    let rateLimitHits = 0;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const pick = this.pool.pick();
@@ -277,10 +324,27 @@ export class OpenAITransport implements AITransport {
         }
         lastError = error;
         this.pool.reportFailure(pick.label, Date.now());
+
+        if (error instanceof OpenAITransportError && error.isRateLimit) {
+          rateLimitHits++;
+          await this.sleep(this.backoffMs(rateLimitHits, error.retryAfterMs));
+        }
       }
     }
 
-    throw lastError ?? new Error("provider pool: no servable credential");
+    // Every key was tried and refused: the provider's own error says why, and
+    // it beats "nothing servable". A key parked by an earlier request leaves
+    // lastError null, so a genuinely spent pool still says so.
+    if (lastError) throw lastError;
+    throw new Error("provider pool: no servable credential");
+  }
+
+  /** Wait before the next 429 retry: the provider's Retry-After, else 2^(n-1)s. */
+  private backoffMs(hits: number, retryAfterMs?: number): number {
+    if (retryAfterMs !== undefined) {
+      return Math.min(Math.max(retryAfterMs, 0), RETRY_CEILING_MS);
+    }
+    return Math.min(RETRY_FLOOR_MS * 2 ** (hits - 1), RETRY_CEILING_MS);
   }
 
   private async attemptOnce(
@@ -311,7 +375,11 @@ export class OpenAITransport implements AITransport {
       const errorText = await response.text();
       throw new OpenAITransportError(
         `Agnes API error (${response.status}) [credential: ${credentialTag}]: ${this.scrub(errorText, apiKey)}`,
-        classifyOpenAIFailure(response.status)
+        classifyOpenAIFailure(response.status),
+        {
+          isRateLimit: response.status === 429,
+          retryAfterMs: parseRetryAfterMs(response.headers.get("Retry-After")),
+        }
       );
     }
 
