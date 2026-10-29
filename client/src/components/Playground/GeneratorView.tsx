@@ -171,6 +171,10 @@ export function GeneratorView() {
   const run = async (body: Record<string, unknown>, requestModelId: string) => {
     if (generate.isPending) return;
     setError(null);
+    // A new request supersedes any generation still waiting for its image
+    // to load. Leaving that state behind would let the old image commit
+    // over this one's result and keep the panel loading forever.
+    setPending(null);
     startedAt.current = Date.now();
     lastRequest.current = { body, modelId: requestModelId };
     const requested = typeof body.n === "number" && body.n > 0 ? body.n : 1;

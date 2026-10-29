@@ -587,6 +587,47 @@ describe("the generator", () => {
     );
   });
 
+  it("does not let a pending generation overwrite a later failed one", async () => {
+    // The first request's image is still waiting for its load event when
+    // the operator asks for another one. If that pending state survives,
+    // the first request's image commits over the second request's result
+    // and the panel keeps loading forever.
+    let attempt = 0;
+    stubApi((route) => {
+      if (route.path !== "/v1/images/generations") return null;
+      attempt += 1;
+      return attempt === 1
+        ? jsonResponse(true, { data: [{ b64_json: "AAA" }] })
+        : jsonResponse(
+            false,
+            { error: { message: "Model unavailable." } },
+            503
+          );
+    });
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    await user.click(document.getElementById("submitButton")!);
+    // The first generation is on screen but has not loaded yet.
+    await waitFor(() =>
+      expect(document.getElementById("aiImage")).not.toBeNull()
+    );
+
+    await user.click(document.getElementById("submitButton")!);
+
+    expect(
+      await screen.findByText("0 of 1 images generated.")
+    ).toBeInTheDocument();
+    expect(document.getElementById("generateError")?.textContent).toBe(
+      "Error: Model unavailable."
+    );
+    // The first request's image is gone, and so is the frame that would
+    // otherwise keep spinning over it.
+    expect(document.getElementById("aiImage")).toBeNull();
+    expect(document.getElementById("loadingOverlay")).toBeNull();
+  });
+
   it("reports every slot as missing when the request produced nothing", async () => {
     stubApi((route) =>
       route.path === "/v1/images/generations"
