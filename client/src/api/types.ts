@@ -80,6 +80,29 @@ export interface AdminHealth {
   hasServableCredentialByProvider: Record<string, boolean>;
 }
 
+/**
+ * A caller key: the bearer token a client sends to reach /v1/* and /mcp*.
+ *
+ * A different kind of secret from the provider keys above — this one
+ * authenticates the caller, not the Worker. The server never sends the
+ * secret, so the only form of it here is the masked hint.
+ */
+export interface AdminCallerKey {
+  id: number;
+  name: string;
+  /** The masked hint, e.g. `sk-mgmt-…a1b2`. Never the secret. */
+  maskedKey: string;
+  enabled: boolean;
+  /** Unix seconds. */
+  createdAt: number;
+  /** Unix seconds. */
+  updatedAt: number;
+}
+
+export interface AdminCallerKeys {
+  keys: AdminCallerKey[];
+}
+
 /** One image from a generation response. */
 export interface GenerationImage {
   url?: string;
