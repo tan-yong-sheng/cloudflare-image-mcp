@@ -19,6 +19,34 @@ import { UnlockGate } from "./UnlockGate";
 type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
 
 /**
+ * The refusal an admin read can carry, if any.
+ *
+ * Both admin reads answer a refusal the same way: a 401 means the
+ * session itself is refused, a 403 means the gate says no. Both return
+ * the error itself so the caller can read its status without narrowing
+ * a second time. Anything that is not a refusal returns null, and what
+ * that means is the caller's business — the health payload is the
+ * panel's core and ends the panel on any error, while the caller-key
+ * list only reports and leaves the workbench standing.
+ */
+function adminRefusal(failure: unknown): AdminApiError | null {
+  if (!(failure instanceof AdminApiError)) return null;
+  return failure.status === 401 || failure.status === 403 ? failure : null;
+}
+
+/**
+ * Why the gate says no.
+ *
+ * A disabled admin gate is not the operator's key being wrong, so the
+ * server's own reason is shown when it says which it was.
+ */
+function gateErrorFor(failure: AdminApiError): string {
+  return failure.code === "admin_disabled"
+    ? failure.message
+    : "Management key rejected.";
+}
+
+/**
  * The provider credentials workbench.
  *
  * The management key lives in memory only, so the panel is a gate until
@@ -94,22 +122,17 @@ export function AdminView() {
     if (handledError.current === health.error) return;
     handledError.current = health.error;
     const failure = health.error;
-    if (failure instanceof AdminApiError && failure.status === 401) {
-      endRefusedSession(failure);
+    const refusal = adminRefusal(failure);
+    if (refusal?.status === 401) {
+      endRefusedSession(refusal);
       return;
     }
     // The credential payload could not be read, so the admin session is
     // over: the management key goes with it, and the gate says why. An
     // error the operator cannot see is not an error they can act on.
     lock();
-    if (failure instanceof AdminApiError && failure.status === 403) {
-      // A disabled admin gate is not the operator's key being wrong, so
-      // the server's own reason is shown when it says which it was.
-      setGateError(
-        failure.code === "admin_disabled"
-          ? failure.message
-          : "Management key rejected."
-      );
+    if (refusal?.status === 403) {
+      setGateError(gateErrorFor(refusal));
       return;
     }
     setGateError(failure instanceof Error ? failure.message : String(failure));
@@ -127,17 +150,14 @@ export function AdminView() {
     if (handledCallerError.current === callerKeys.error) return;
     handledCallerError.current = callerKeys.error;
     const failure = callerKeys.error;
-    if (failure instanceof AdminApiError && failure.status === 401) {
-      endRefusedSession(failure);
+    const refusal = adminRefusal(failure);
+    if (refusal?.status === 401) {
+      endRefusedSession(refusal);
       return;
     }
-    if (failure instanceof AdminApiError && failure.status === 403) {
+    if (refusal?.status === 403) {
       lock();
-      setGateError(
-        failure.code === "admin_disabled"
-          ? failure.message
-          : "Management key rejected."
-      );
+      setGateError(gateErrorFor(refusal));
       return;
     }
     setPanelError(failure instanceof Error ? failure.message : String(failure));
