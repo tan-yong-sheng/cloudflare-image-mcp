@@ -157,6 +157,15 @@ async function ready() {
   );
 }
 
+/** Opens the advanced panel and asks for `n` images. */
+async function requestImages(
+  user: ReturnType<typeof userEvent.setup>,
+  n: string
+) {
+  await user.click(document.getElementById("toggleAdvanced")!);
+  await user.selectOptions(document.getElementById("n")!, n);
+}
+
 describe("the generator", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
@@ -467,5 +476,138 @@ describe("the generator", () => {
     await waitFor(() => {
       expect(document.getElementById("usedModel")?.textContent).toBe("sdxl");
     });
+  });
+
+  it("accounts for every slot a short batch asked for", async () => {
+    // The Worker stops a batch at the first failure, so two images plus an
+    // error means one refused slot and one that was never sent. Reporting
+    // "2 images" without the other two would hide the shortfall.
+    stubApi((route) =>
+      route.path === "/v1/images/generations"
+        ? jsonResponse(
+            false,
+            {
+              error: { message: "Provider rejected image 3." },
+              created: 2,
+              data: [{ b64_json: "AAA" }, { b64_json: "BBB" }],
+            },
+            500
+          )
+        : null
+    );
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    await requestImages(user, "4");
+    await user.click(document.getElementById("submitButton")!);
+
+    expect(
+      await screen.findByText("2 of 4 images generated.")
+    ).toBeInTheDocument();
+    // One image was refused, the next was never sent.
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Not attempted")).toBeInTheDocument();
+    expect(document.getElementById("generateError")?.textContent).toBe(
+      "Error: Provider rejected image 3."
+    );
+    expect(document.getElementById("retryButton")).not.toBeNull();
+  });
+
+  it("shows no shortfall chrome when every slot produced an image", async () => {
+    stubApi((route) =>
+      route.path === "/v1/images/generations"
+        ? jsonResponse(true, {
+            created: 2,
+            data: [{ b64_json: "AAA" }, { b64_json: "BBB" }],
+          })
+        : null
+    );
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    await requestImages(user, "2");
+    await user.click(document.getElementById("submitButton")!);
+
+    const img = document.getElementById("aiImage") as HTMLImageElement;
+    act(() => {
+      img.dispatchEvent(new Event("load"));
+    });
+
+    await waitFor(() =>
+      expect(document.getElementById("usedModel")?.textContent).toBe("sdxl")
+    );
+    expect(document.getElementById("missingSlots")).toBeNull();
+    expect(document.getElementById("retryButton")).toBeNull();
+    // Both images are still reachable, through the gallery.
+    expect(document.getElementById("imageGallery")).not.toBeNull();
+  });
+
+  it("retries a short batch with the same request", async () => {
+    let attempt = 0;
+    const calls = stubApi((route) => {
+      if (route.path !== "/v1/images/generations") return null;
+      attempt += 1;
+      return attempt === 1
+        ? jsonResponse(
+            false,
+            {
+              error: { message: "Provider rejected image 2." },
+              data: [{ b64_json: "AAA" }],
+            },
+            500
+          )
+        : jsonResponse(true, {
+            data: [{ b64_json: "AAA" }, { b64_json: "BBB" }],
+          });
+    });
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    await requestImages(user, "2");
+    await user.click(document.getElementById("submitButton")!);
+
+    await user.click(
+      await screen.findByRole("button", { name: /retry batch/i })
+    );
+
+    await waitFor(() =>
+      expect(
+        calls.filter((call) => call.path === "/v1/images/generations").length
+      ).toBe(2)
+    );
+    const [first, second] = calls.filter(
+      (call) => call.path === "/v1/images/generations"
+    );
+    expect(second.body).toEqual(first.body);
+    await waitFor(() =>
+      expect(document.getElementById("retryButton")).toBeNull()
+    );
+  });
+
+  it("reports every slot as missing when the request produced nothing", async () => {
+    stubApi((route) =>
+      route.path === "/v1/images/generations"
+        ? jsonResponse(false, { error: { message: "Model unavailable." } }, 503)
+        : null
+    );
+    const user = userEvent.setup();
+    renderGenerator();
+    await ready();
+
+    await requestImages(user, "3");
+    await user.click(document.getElementById("submitButton")!);
+
+    expect(
+      await screen.findByText("0 of 3 images generated.")
+    ).toBeInTheDocument();
+    expect(document.getElementById("generateError")?.textContent).toBe(
+      "Error: Model unavailable."
+    );
+    expect(screen.getAllByText("Not attempted")).toHaveLength(2);
+    // There is no image to frame, so the empty square is not rendered.
+    expect(document.getElementById("aiImage")).toBeNull();
   });
 });

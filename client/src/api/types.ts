@@ -88,5 +88,12 @@ export interface GenerationImage {
 
 export interface GenerationResponse {
   created?: number;
-  data: GenerationImage[];
+  /**
+   * The images that were produced. Absent when nothing succeeded, so a
+   * failed batch is not the same shape as a full one: read `error` and
+   * `data` together rather than assuming this array exists.
+   */
+  data?: GenerationImage[];
+  /** Present when the request failed, including a batch that stopped early. */
+  error?: { message?: string; type?: string; code?: string | null };
 }

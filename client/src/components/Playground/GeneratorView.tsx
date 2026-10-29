@@ -12,7 +12,7 @@ import {
 } from "../AppHeader";
 import { AdvancedOptions } from "./AdvancedOptions";
 import { ModelPicker } from "./ModelPicker";
-import { ResultPanel } from "./ResultPanel";
+import { ResultPanel, type MissingSlot } from "./ResultPanel";
 import {
   buildGenerationBody,
   deriveModelControls,
@@ -30,6 +30,24 @@ class SessionExpired extends Error {
   }
 }
 
+/**
+ * What a request came back with.
+ *
+ * A batch that stops early answers with a 4xx or 5xx yet still carries the
+ * images it did produce, so "failed" is not the absence of images. The
+ * status decides `ok`; `images` is whatever arrived either way.
+ */
+type GenerationOutcome =
+  | { ok: true; images: string[] }
+  | { ok: false; images: string[]; message: string };
+
+/** The server's own message, or the ADR-001 missing-credential wording. */
+function describeFailure(message: string): string {
+  return !message || message === "null" || message === "undefined"
+    ? "Image generation failed. Please check your API credentials in the admin panel."
+    : "Error: " + message;
+}
+
 export function GeneratorView() {
   const { token, logout } = useAuth();
   const models = useModels();
@@ -45,11 +63,21 @@ export function GeneratorView() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     images: string[];
+    missing: MissingSlot[];
     model: string;
     elapsed: string;
   } | null>(null);
-  const [pendingImages, setPendingImages] = useState<string[] | null>(null);
-  const pendingModel = useRef("");
+  const [pending, setPending] = useState<{
+    images: string[];
+    missing: MissingSlot[];
+    model: string;
+  } | null>(null);
+  // The request a retry replays, kept whole so the retry sends the same
+  // prompt, model and seed the failed batch was asked for.
+  const lastRequest = useRef<{
+    body: Record<string, unknown>;
+    modelId: string;
+  } | null>(null);
   const [generationId, setGenerationId] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   // When the current generation started, so the elapsed time is measured
@@ -95,7 +123,9 @@ export function GeneratorView() {
   const controls = deriveModelControls(model, overrides);
 
   const generate = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => {
+    mutationFn: async (
+      body: Record<string, unknown>
+    ): Promise<GenerationOutcome> => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
       try {
@@ -108,69 +138,74 @@ export function GeneratorView() {
             signal: controller.signal,
           }
         );
-        if (!response.ok) {
-          if (response.status === 401) throw new SessionExpired();
-          const envelope = (
-            response.data as { error?: { message?: unknown } } | null
-          )?.error;
-          const message =
-            typeof envelope?.message === "string" ? envelope.message : "";
-          throw new Error(message || "Generation failed");
+        if (response.status === 401) throw new SessionExpired();
+        const payload = response.data;
+        const images = (payload?.data ?? [])
+          .map((image) =>
+            image.b64_json
+              ? "data:image/png;base64," + image.b64_json
+              : (image.url ?? "")
+          )
+          .filter((url) => url.length > 0);
+        if (response.ok && images.length > 0) return { ok: true, images };
+        if (response.ok) {
+          // A 2xx with nothing usable is still a failure, and there is no
+          // error envelope to read a message from.
+          return { ok: false, images, message: "" };
         }
-        return response.data as GenerationResponse;
+        const message =
+          typeof payload?.error?.message === "string"
+            ? payload.error.message
+            : "";
+        return { ok: false, images, message };
       } finally {
         clearTimeout(timer);
       }
     },
   });
 
-  const images = pendingImages ?? result?.images ?? [];
-  const loading = generate.isPending || pendingImages !== null;
+  const images = pending?.images ?? result?.images ?? [];
+  const missing = pending?.missing ?? result?.missing ?? [];
+  const loading = generate.isPending || pending !== null;
 
-  const submit = async () => {
+  const run = async (body: Record<string, unknown>, requestModelId: string) => {
     if (generate.isPending) return;
-    if (!prompt.trim()) {
-      setError("Please enter a prompt");
-      return;
-    }
-    if (!modelId) {
-      setError("Models are still loading — please wait");
-      return;
-    }
-
     setError(null);
     startedAt.current = Date.now();
-    pendingModel.current = modelId;
+    lastRequest.current = { body, modelId: requestModelId };
+    const requested = typeof body.n === "number" && body.n > 0 ? body.n : 1;
     try {
-      const data = await generate.mutateAsync(
-        buildGenerationBody(
-          {
-            modelId,
-            prompt,
-            negativePrompt,
-            size: controls.size,
-            steps: controls.steps.value,
-            guidance: controls.guidance.value,
-            seed,
-            count,
-          },
-          model
-        )
-      );
-      const produced = (data?.data ?? [])
-        .map((image) =>
-          image.b64_json
-            ? "data:image/png;base64," + image.b64_json
-            : (image.url ?? "")
-        )
-        .filter((url) => url.length > 0);
-      if (produced.length === 0) {
-        setError("Error: Generation failed");
+      const outcome = await generate.mutateAsync(body);
+      // The Worker stops a batch at the first failure, so a short answer is
+      // exactly one refused slot followed by the slots it never sent.
+      const gaps: MissingSlot[] = outcome.ok
+        ? []
+        : [
+            { kind: "failed" },
+            ...Array.from(
+              { length: Math.max(0, requested - outcome.images.length - 1) },
+              (): MissingSlot => ({ kind: "notAttempted" })
+            ),
+          ];
+      if (!outcome.ok) setError(describeFailure(outcome.message));
+      setActiveIndex(0);
+      if (outcome.images.length === 0) {
+        // No image will fire `load`, so the placeholders are committed here
+        // instead of leaving the panel waiting for an image that never came.
+        setResult({
+          images: [],
+          missing: gaps,
+          model: requestModelId,
+          elapsed: ((Date.now() - startedAt.current) / 1000).toFixed(1) + "s",
+        });
         return;
       }
-      setActiveIndex(0);
       setGenerationId((prev) => prev + 1);
-      setPendingImages(produced);
+      setPending({
+        images: outcome.images,
+        missing: gaps,
+        model: requestModelId,
+      });
     } catch (cause) {
       if (cause instanceof SessionExpired) {
         logout(SESSION_EXPIRED_MESSAGE);
@@ -181,31 +216,60 @@ export function GeneratorView() {
         setError("Error: generation timed out after 120s — please retry");
         return;
       }
-      const message = cause instanceof Error ? cause.message : String(cause);
-      // A provider that answers with nothing useful is the ADR-001
-      // missing-credential case; say that rather than echoing it.
       setError(
-        !message || message === "null" || message === "undefined"
-          ? "Image generation failed. Please check your API credentials in the admin panel."
-          : "Error: " + message
+        describeFailure(cause instanceof Error ? cause.message : String(cause))
       );
     }
   };
 
+  const submit = () => {
+    if (!prompt.trim()) {
+      setError("Please enter a prompt");
+      return;
+    }
+    if (!modelId) {
+      setError("Models are still loading — please wait");
+      return;
+    }
+    void run(
+      buildGenerationBody(
+        {
+          modelId,
+          prompt,
+          negativePrompt,
+          size: controls.size,
+          steps: controls.steps.value,
+          guidance: controls.guidance.value,
+          seed,
+          count,
+        },
+        model
+      ),
+      modelId
+    );
+  };
+
+  const retry = () => {
+    const request = lastRequest.current;
+    if (!request) return;
+    void run(request.body, request.modelId);
+  };
+
   const commitResult = () => {
-    if (!pendingImages) return;
+    if (!pending) return;
     setResult({
-      images: pendingImages,
-      model: pendingModel.current || modelId,
+      images: pending.images,
+      missing: pending.missing,
+      model: pending.model,
       elapsed: ((Date.now() - startedAt.current) / 1000).toFixed(1) + "s",
     });
-    setPendingImages(null);
+    setPending(null);
   };
 
   const failResult = () => {
     // The prior result stays on screen: the failed image never replaces
     // it, so the operator still has the last good one.
-    setPendingImages(null);
+    setPending(null);
     setError("Could not load the generated image (expired or blocked URL)");
   };
 
@@ -371,16 +435,20 @@ export function GeneratorView() {
           <ResultPanel
             generationId={generationId}
             images={images}
+            missing={missing}
             activeIndex={activeIndex}
             onSelect={setActiveIndex}
             loading={loading}
-            showInitial={!result && !pendingImages && !generate.isPending}
+            showInitial={!result && !pending && !generate.isPending}
             error={error}
             usedModel={loading ? "…" : (result?.model ?? "-")}
             generationTime={loading ? "…" : (result?.elapsed ?? "-")}
-            canDownload={!!result}
+            canDownload={!!result && result.images.length > 0}
             onImageLoad={commitResult}
             onImageError={failResult}
+            onRetry={
+              missing.length > 0 && !generate.isPending ? retry : undefined
+            }
           />
         </div>
       </div>
