@@ -49,6 +49,44 @@ describe("provider pool selection (S3)", () => {
     expect(pool.pick(2_000)?.label).toBe("heavy");
   });
 
+  test("timeUntilServable returns 0 when no key is cooling", () => {
+    const pool = new ProviderPool(KEYS);
+    // All keys are servable right now → wait is 0.
+    expect(pool.timeUntilServable(1_000)).toBe(0);
+  });
+
+  test("timeUntilServable returns ms until the earliest cooling key recovers", () => {
+    const pool = new ProviderPool(KEYS, { random: () => 0.0 });
+    pool.reportFailure("heavy", 1_000, 1_000); // cooled until 2_000
+    pool.reportFailure("light", 1_000, 2_000); // cooled until 3_000
+    // At 1_500: both cooled, heavy recovers first at 2_000 (500ms away).
+    expect(pool.timeUntilServable(1_500)).toBe(500);
+    // At 2_000: heavy is back, servable → 0.
+    expect(pool.timeUntilServable(2_000)).toBe(0);
+    // At 2_500: heavy servable, light recovers at 3_000 → 0 (heavy is ready).
+    expect(pool.timeUntilServable(2_500)).toBe(0);
+    // At 3_500: both recovered → 0.
+    expect(pool.timeUntilServable(3_500)).toBe(0);
+  });
+
+  test("timeUntilServable returns 0 when any key is already servable", () => {
+    const pool = new ProviderPool(KEYS, { random: () => 0.0 });
+    // Cool "heavy" but leave "light" servable.
+    pool.reportFailure("heavy", 1_000, 1_000); // cooled until 2_000
+    // At 1_500: heavy still cooled, light is servable → 0.
+    expect(pool.timeUntilServable(1_500)).toBe(0);
+    // At 2_000: both servable → 0.
+    expect(pool.timeUntilServable(2_000)).toBe(0);
+  });
+
+  test("timeUntilServable ignores disabled and zero-weight keys", () => {
+    const pool = new ProviderPool([
+      { ...KEYS[0], enabled: false },
+      { ...KEYS[1], weight: 0 },
+    ]);
+    expect(pool.timeUntilServable(1_000)).toBeNull();
+  });
+
   test("labels() exposes labels only, never secret values", () => {
     const pool = new ProviderPool(KEYS);
     const seen = JSON.stringify(pool.labels());

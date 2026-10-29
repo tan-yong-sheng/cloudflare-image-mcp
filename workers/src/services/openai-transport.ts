@@ -252,14 +252,16 @@ export class OpenAITransport implements AITransport {
   /**
    * Pool-driven attempts (#72): each failure parks its key on the shared
    * pool so later requests start elsewhere, but only retryable failures do
-   * so — a terminal failure is surfaced without touching the other keys.
+   * so — a terminal failure is surfaced without touching the other keys. When
+   * every key is cooled down the transport does not fabricate a missing-key
+   * error; it reports that credentials are cooling down instead.
    */
   private async runPooled(
     url: string,
     body: Record<string, any>
   ): Promise<unknown> {
-    // Safety bound: a pick always parks its key on failure, so pick() goes
-    // null within labels().length attempts in practice.
+    // Safety bound: pick returns null only when nothing is servable, so the
+    // loop stops within labels().length + 1 attempts and surfaces lastError.
     let lastError: unknown = null;
     const maxAttempts = this.pool.labels().length + 1;
 
@@ -280,7 +282,17 @@ export class OpenAITransport implements AITransport {
       }
     }
 
-    throw lastError ?? new Error("provider pool: no servable credential");
+    // No pick was made this call. If keys exist but are all cooled down,
+    // say so honestly instead of pretending the credential is missing.
+    const retryIn = this.pool.timeUntilServable(Date.now());
+    throw (
+      lastError ??
+      (retryIn !== null
+        ? new Error(
+            `provider pool: all credentials cooling down, retry in ${retryIn}ms`
+          )
+        : new Error("provider pool: no servable credential"))
+    );
   }
 
   private async attemptOnce(
