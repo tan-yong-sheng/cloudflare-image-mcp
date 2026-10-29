@@ -404,19 +404,48 @@ describe("OpenAITransport.run", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test("a pool with nothing servable is an explicit error, not a null", async () => {
-    // ADR-001: the pool is the only credential source, so an exhausted pool
-    // (every key cooled down) must read as such and must not call out.
-    const pool = oneKeyPool("key-a");
-    pool.reportFailure("a", Date.now());
+  test("no enabled keys means no attempt and an explicit error", async () => {
+    // All keys disabled: pick() returns null, no attempt is made at all.
+    const pool = new ProviderPool([
+      {
+        label: "key-a",
+        accountId: "a",
+        apiToken: "sk-x",
+        enabled: false,
+        weight: 1,
+      },
+    ]);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-
     const transport = new OpenAITransport({ baseUrl: BASE_URL, pool });
     await expect(
       transport.run(MODEL.id, { prompt: "x" }, MODEL)
     ).rejects.toThrow(/no servable credential/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
+  test("single key cooled down reports 'cooling down', not 'no servable credential'", async () => {
+    // A cooled key is not a missing key: report that credentials are parked
+    // and give a retry-in window instead of fabricating a missing-key error.
+    const pool = new ProviderPool(
+      [
+        {
+          label: "key-a",
+          accountId: "a",
+          apiToken: "sk-x",
+          enabled: true,
+          weight: 1,
+        },
+      ],
+      { random: () => 0 }
+    );
+    pool.reportFailure("key-a", Date.now()); // cool it down for 60s
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new OpenAITransport({ baseUrl: BASE_URL, pool });
+    await expect(
+      transport.run(MODEL.id, { prompt: "x", size: "1024x1024" }, MODEL)
+    ).rejects.toThrow(/all credentials cooling down/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

@@ -98,4 +98,19 @@ export class ProviderPool {
     }
     this.cooledUntil.set(label, now + cooldownMs);
   }
+
+  /**
+   * Milliseconds until at least one enabled, positively-weighted key becomes
+   * servable, or null when none are currently cooling down. Used by the
+   * transport to surface an honest "retry later" message instead of a
+   * misleading "no servable credential" when every key is parked on cooldown.
+   */
+  timeUntilServable(now: number = Date.now()): number | null {
+    const soonest = this.keys
+      .filter((k) => k.enabled && k.weight > 0)
+      .map((k) => this.cooledUntil.get(k.label) ?? 0)
+      .filter((expiry) => expiry > now)
+      .reduce((min, expiry) => Math.min(min, expiry), Infinity);
+    return soonest === Infinity ? null : soonest - now;
+  }
 }
