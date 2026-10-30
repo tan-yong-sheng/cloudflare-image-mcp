@@ -157,6 +157,29 @@ for f in providers keys exposure configVersion; do
   fi
 done
 
+echo
+echo "== caller keys (read path, #125) =="
+# The caller keys are the other admin list: the bearer tokens clients send
+# to /v1/* and /mcp*. Read-only here — this script creates nothing on this
+# route, so it is safe against a deployed Worker as well as a local one.
+check "caller keys without a bearer is a 401"             401 "$(raw GET /api/admin/caller-keys --no-bearer)"
+check "caller keys with a wrong admin key is a 403"       403 "$(raw GET /api/admin/caller-keys --admin not-the-key)"
+check "caller keys with both gates is a 200"              200 "$(raw GET /api/admin/caller-keys)"
+show
+if grep -q '"keys"' "$BODY"; then
+  printf 'PASS  %-56s present\n' "caller keys response carries a keys list"; pass=$((pass + 1))
+else
+  printf 'FAIL  %-56s missing\n' "caller keys response carries a keys list"; fail=$((fail + 1))
+fi
+# The list is identity and masked hints only. A verifier, a salt, or a
+# pepper reaching the client would be a leak the secret tripwire cannot
+# see, because the script does not know the stored values.
+if grep -qE '"secret_hash"|"secretHash"|"secret_salt"|"salt"|"pepper"' "$BODY"; then
+  printf 'FAIL  %-56s present\n' "caller keys response carries no verifier material"; fail=$((fail + 1))
+else
+  printf 'PASS  %-56s absent\n' "caller keys response carries no verifier material"; pass=$((pass + 1))
+fi
+
 NEWID=""
 if [ "$WRITES" = "1" ]; then
   echo

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AdminApiError,
   useAdminMutations,
+  useCallerKeys,
   useHealth,
   usePendingAdminKeyIds,
 } from "../../api/admin";
@@ -9,12 +10,41 @@ import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
+import { CallerKeyTable } from "./CallerKeyTable";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
 import { UnlockGate } from "./UnlockGate";
 
 type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
+
+/**
+ * The refusal an admin read can carry, if any.
+ *
+ * Both admin reads answer a refusal the same way: a 401 means the
+ * session itself is refused, a 403 means the gate says no. Both return
+ * the error itself so the caller can read its status without narrowing
+ * a second time. Anything that is not a refusal returns null, and what
+ * that means is the caller's business — the health payload is the
+ * panel's core and ends the panel on any error, while the caller-key
+ * list only reports and leaves the workbench standing.
+ */
+function adminRefusal(failure: unknown): AdminApiError | null {
+  if (!(failure instanceof AdminApiError)) return null;
+  return failure.status === 401 || failure.status === 403 ? failure : null;
+}
+
+/**
+ * Why the gate says no.
+ *
+ * A disabled admin gate is not the operator's key being wrong, so the
+ * server's own reason is shown when it says which it was.
+ */
+function gateErrorFor(failure: AdminApiError): string {
+  return failure.code === "admin_disabled"
+    ? failure.message
+    : "Management key rejected.";
+}
 
 /**
  * The provider credentials workbench.
@@ -44,6 +74,11 @@ export function AdminView() {
 
   const health = useHealth(session);
   const mutations = useAdminMutations(session, endRefusedSession);
+  // Caller keys are a second list: the bearer tokens clients send to reach
+  // this Worker, as opposed to the provider credentials the Worker sends
+  // to Cloudflare. It is read on its own so one list failing does not take
+  // the other down with it.
+  const callerKeys = useCallerKeys(session);
 
   const [selected, setSelected] = useState("");
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -60,6 +95,7 @@ export function AdminView() {
   const [panelError, setPanelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
+  const handledCallerError = useRef<unknown>(null);
 
   const unlocked = adminKey !== null;
   const providers = health.data?.providers ?? [];
@@ -86,26 +122,46 @@ export function AdminView() {
     if (handledError.current === health.error) return;
     handledError.current = health.error;
     const failure = health.error;
-    if (failure instanceof AdminApiError && failure.status === 401) {
-      endRefusedSession(failure);
+    const refusal = adminRefusal(failure);
+    if (refusal?.status === 401) {
+      endRefusedSession(refusal);
       return;
     }
     // The credential payload could not be read, so the admin session is
     // over: the management key goes with it, and the gate says why. An
     // error the operator cannot see is not an error they can act on.
     lock();
-    if (failure instanceof AdminApiError && failure.status === 403) {
-      // A disabled admin gate is not the operator's key being wrong, so
-      // the server's own reason is shown when it says which it was.
-      setGateError(
-        failure.code === "admin_disabled"
-          ? failure.message
-          : "Management key rejected."
-      );
+    if (refusal?.status === 403) {
+      setGateError(gateErrorFor(refusal));
       return;
     }
     setGateError(failure instanceof Error ? failure.message : String(failure));
   }, [health.isError, health.error, endRefusedSession, lock]);
+
+  // A caller-key failure is not the provider payload's business: the
+  // provider workbench keeps working. Only a refused session or a refused
+  // gate ends the panel; anything else is reported and the rest of the
+  // workbench carries on.
+  useEffect(() => {
+    if (!callerKeys.isError) {
+      handledCallerError.current = null;
+      return;
+    }
+    if (handledCallerError.current === callerKeys.error) return;
+    handledCallerError.current = callerKeys.error;
+    const failure = callerKeys.error;
+    const refusal = adminRefusal(failure);
+    if (refusal?.status === 401) {
+      endRefusedSession(refusal);
+      return;
+    }
+    if (refusal?.status === 403) {
+      lock();
+      setGateError(gateErrorFor(refusal));
+      return;
+    }
+    setPanelError(failure instanceof Error ? failure.message : String(failure));
+  }, [callerKeys.isError, callerKeys.error, endRefusedSession, lock]);
 
   // A notice fades on its own, the way the legacy page's did.
   useEffect(() => {
@@ -279,7 +335,7 @@ export function AdminView() {
               className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
             >
               <i className="fa-solid fa-server mr-2 text-primary" />
-              AI Providers
+              Administration
             </h1>
             <FamilyRail
               providers={providers}
@@ -344,6 +400,11 @@ export function AdminView() {
             </div>
           </div>
         </div>
+        <CallerKeyTable
+          keys={callerKeys.data?.keys ?? []}
+          loading={callerKeys.isPending}
+          failed={callerKeys.isError}
+        />
       </div>
 
       <UnlockGate

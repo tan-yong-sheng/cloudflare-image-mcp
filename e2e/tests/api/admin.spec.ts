@@ -179,3 +179,58 @@ test.describe("Admin key lifecycle", () => {
     expect(response.status()).toBe(400);
   });
 });
+
+test.describe("Admin caller keys", () => {
+  // The caller keys are the other admin list: the bearer tokens clients
+  // send to /v1/* and /mcp*. Same two gates, read-only list.
+  test("caller keys without any bearer is 401", async ({ request }) => {
+    const response = await request.get("/api/admin/caller-keys", {
+      headers: { Authorization: "" },
+    });
+    expect(response.status()).toBe(401);
+  });
+
+  test("caller keys with bearer but wrong management key is 403", async ({
+    request,
+  }) => {
+    const response = await request.get("/api/admin/caller-keys", {
+      headers: adminHeaders("definitely-wrong-admin-key"),
+    });
+    expect(response.status()).toBe(403);
+  });
+
+  test("caller keys with both keys returns masked rows only", async ({
+    request,
+  }) => {
+    const response = await request.get("/api/admin/caller-keys", {
+      headers: adminHeaders(managementKey()),
+    });
+    expect(response.status()).toBe(200);
+    const body = (await response.json()) as {
+      keys: {
+        id: number;
+        name: string;
+        maskedKey: string;
+        enabled: boolean;
+        createdAt: number;
+        updatedAt: number;
+      }[];
+    };
+    expect(Array.isArray(body.keys)).toBe(true);
+    for (const key of body.keys) {
+      expect(typeof key.name).toBe("string");
+      expect(typeof key.enabled).toBe("boolean");
+      // The hint is masked: it carries the ellipsis the mask is built
+      // from, never a whole secret.
+      expect(key.maskedKey).toContain("…");
+    }
+
+    // Non-leakage, checked against the whole body rather than the rows
+    // the assertions above read: a verifier, a salt, a pepper, or a full
+    // generated secret anywhere in the payload is a defect.
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toMatch(/secret_hash|secretHash|salt|pepper/i);
+    expect(serialized).not.toMatch(/sk-mgmt-[A-Za-z0-9]{24,}/);
+    expect(serialized).not.toMatch(/Bearer [A-Za-z0-9._~+/-]{8,}/);
+  });
+});
