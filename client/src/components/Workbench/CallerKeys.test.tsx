@@ -65,14 +65,16 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 type Route = { path: string; method: string };
 
-function stubApi(callerKeys: unknown = CALLER_KEYS) {
+function stubApi(callerKeys: unknown = CALLER_KEYS, callerKeysStatus = 200) {
   const calls: Route[] = [];
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = typeof input === "string" ? input : input.toString();
       calls.push({ path, method: init?.method ?? "GET" });
       if (path === "/api/admin/health") return jsonResponse(HEALTH);
-      if (path === "/api/admin/caller-keys") return jsonResponse(callerKeys);
+      if (path === "/api/admin/caller-keys") {
+        return jsonResponse(callerKeys, callerKeysStatus);
+      }
       if (path === "/api/internal/models") return jsonResponse([]);
       return jsonResponse({});
     }
@@ -149,7 +151,7 @@ describe("the caller-key list", () => {
     expect(body?.textContent).toContain("…c3d4");
   });
 
-  it("marks a disabled caller key and dims its row", async () => {
+  it("marks a disabled caller key and mutes its row", async () => {
     stubApi();
     const user = userEvent.setup();
     renderWorkbench();
@@ -160,9 +162,11 @@ describe("the caller-key list", () => {
     const disabled = screen.getByTestId("admin-caller-key-2");
     expect(enabled.textContent).toContain("Enabled");
     expect(disabled.textContent).toContain("Disabled");
-    // A parked key stays visible, but dimmed so it does not read as active.
-    expect(disabled.style.opacity).toBe("0.55");
-    expect(enabled.style.opacity).toBe("");
+    // A parked key stays visible, but muted so it does not read as
+    // active. The muted colour is applied at full opacity — fading the
+    // whole row would take the text under the contrast bar with it.
+    expect(disabled.className).toContain("row-muted");
+    expect(enabled.className).not.toContain("row-muted");
   });
 
   it("shows an empty state when there are no caller keys", async () => {
@@ -178,6 +182,27 @@ describe("the caller-key list", () => {
         document.getElementById("adminCallerKeysEmpty")?.textContent
       ).toContain("No caller keys yet.")
     );
+  });
+
+  it("does not present a failed read as an empty list", async () => {
+    stubApi({ error: { message: "boom" } }, 500);
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    // "No caller keys yet." is a claim about what the server said. A
+    // request that failed has no answer to claim, so the table says the
+    // list is unknown and the panel's alert carries the reason.
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminCallerKeysEmpty")?.textContent
+      ).toContain("Could not load caller keys.")
+    );
+    expect(
+      document.getElementById("adminCallerKeysEmpty")?.textContent
+    ).not.toContain("No caller keys yet.");
   });
 
   it("leaves nothing of the list behind when the panel is locked", async () => {
