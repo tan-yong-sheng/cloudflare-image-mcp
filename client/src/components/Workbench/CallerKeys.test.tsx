@@ -65,15 +65,23 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 type Route = { path: string; method: string };
 
-function stubApi(callerKeys: unknown = CALLER_KEYS, callerKeysStatus = 200) {
+function stubApi(
+  callerKeys: unknown = CALLER_KEYS,
+  callerKeysStatus: number | ((attempt: number) => number) = 200
+) {
   const calls: Route[] = [];
+  let attempt = 0;
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = typeof input === "string" ? input : input.toString();
       calls.push({ path, method: init?.method ?? "GET" });
       if (path === "/api/admin/health") return jsonResponse(HEALTH);
       if (path === "/api/admin/caller-keys") {
-        return jsonResponse(callerKeys, callerKeysStatus);
+        const status =
+          typeof callerKeysStatus === "function"
+            ? callerKeysStatus(attempt++)
+            : callerKeysStatus;
+        return jsonResponse(callerKeys, status);
       }
       if (path === "/api/internal/models") return jsonResponse([]);
       return jsonResponse({});
@@ -203,6 +211,34 @@ describe("the caller-key list", () => {
     expect(
       document.getElementById("adminCallerKeysEmpty")?.textContent
     ).not.toContain("No caller keys yet.");
+  });
+
+  it("says a failed refresh left the rows stale", async () => {
+    // The first read succeeds, the next one fails.
+    stubApi(CALLER_KEYS, (attempt) => (attempt === 0 ? 200 : 500));
+    const user = userEvent.setup();
+    const { client } = renderWorkbench();
+
+    await unlock(user);
+
+    await client.refetchQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
+
+    // A failed refetch keeps the last good rows (TanStack Query holds the
+    // data) and sets the error state. The rows stay on screen as the last
+    // known state, and the table says they could not be refreshed — the
+    // failure is not hidden behind them.
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminCallerKeysEmpty")?.textContent
+      ).toContain("Could not refresh caller keys.")
+    );
+    // The message has to be visible, not merely present: the paragraph is
+    // hidden while rows are on screen, and a hidden message tells the
+    // operator nothing.
+    expect(
+      document.getElementById("adminCallerKeysEmpty")?.className
+    ).not.toContain("hidden");
+    expect(document.getElementById("adminCallerKeys")?.children.length).toBe(2);
   });
 
   it("leaves nothing of the list behind when the panel is locked", async () => {

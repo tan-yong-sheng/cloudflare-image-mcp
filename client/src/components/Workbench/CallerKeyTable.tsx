@@ -38,6 +38,16 @@ export function CallerKeyTable({
   loading,
   failed = false,
 }: CallerKeyTableProps) {
+  // A failed refresh leaves the last good rows on screen (TanStack Query
+  // keeps the data), so the failure is a statement about those rows, not
+  // about the table being empty: the rows are stale, and the panel's
+  // alert carries the reason.
+  const failureText = failed
+    ? keys.length > 0
+      ? "Could not refresh caller keys."
+      : "Could not load caller keys."
+    : null;
+
   return (
     <section
       id="adminCallerKeysSection"
@@ -91,14 +101,11 @@ export function CallerKeyTable({
       <p
         id="adminCallerKeysEmpty"
         className={`text-sm opacity-60 text-center py-10${
-          keys.length > 0 ? " hidden" : ""
+          keys.length > 0 && !failureText ? " hidden" : ""
         }`}
       >
-        {failed
-          ? "Could not load caller keys."
-          : loading
-            ? "Loading caller keys…"
-            : "No caller keys yet."}
+        {failureText ??
+          (loading ? "Loading caller keys…" : "No caller keys yet.")}
       </p>
     </section>
   );
