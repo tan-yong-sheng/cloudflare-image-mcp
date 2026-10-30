@@ -403,6 +403,7 @@ export function AdminView() {
         <CallerKeyTable
           keys={callerKeys.data?.keys ?? []}
           loading={callerKeys.isPending}
+          failed={callerKeys.isError}
         />
       </div>
 

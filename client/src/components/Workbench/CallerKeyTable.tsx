@@ -4,6 +4,15 @@ interface CallerKeyTableProps {
   keys: AdminCallerKey[];
   /** Whether the list is still in flight. */
   loading: boolean;
+  /**
+   * Whether the list could not be read.
+   *
+   * A failed read is not an empty list. Without this the table would say
+   * "No caller keys yet." about a request that never came back — a claim
+   * the server never made. The panel's alert line carries the reason;
+   * this only says that the list is unknown.
+   */
+  failed?: boolean;
 }
 
 /**
@@ -19,10 +28,16 @@ interface CallerKeyTableProps {
  *
  * The enabled state is shown as a chip rather than a switch: flipping a
  * key is a write, and until the write path lands a switch would be a
- * control that looks live and is not. The row dims when the key is off,
- * so a parked key is visible at a glance.
+ * control that looks live and is not. A parked key's row reads muted, so
+ * it is visible at a glance — muted by colour rather than by fading the
+ * whole row, because a faded row takes the text below the contrast bar
+ * with it.
  */
-export function CallerKeyTable({ keys, loading }: CallerKeyTableProps) {
+export function CallerKeyTable({
+  keys,
+  loading,
+  failed = false,
+}: CallerKeyTableProps) {
   return (
     <section
       id="adminCallerKeysSection"
@@ -58,7 +73,7 @@ export function CallerKeyTable({ keys, loading }: CallerKeyTableProps) {
             <tr
               key={key.id}
               data-testid={`admin-caller-key-${key.id}`}
-              style={key.enabled ? undefined : { opacity: ".55" }}
+              className={key.enabled ? "" : "row-muted"}
             >
               <td className="p-3">{key.name}</td>
               <td className="p-3 font-mono text-sm">{key.maskedKey}</td>
@@ -79,7 +94,11 @@ export function CallerKeyTable({ keys, loading }: CallerKeyTableProps) {
           keys.length > 0 ? " hidden" : ""
         }`}
       >
-        {loading ? "Loading caller keys…" : "No caller keys yet."}
+        {failed
+          ? "Could not load caller keys."
+          : loading
+            ? "Loading caller keys…"
+            : "No caller keys yet."}
       </p>
     </section>
   );

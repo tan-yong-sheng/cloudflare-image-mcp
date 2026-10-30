@@ -300,6 +300,12 @@ textarea:focus {
   border-color: var(--border);
   color: var(--text-light);
 }
+/* A parked row. The muted colour is applied at full opacity rather than
+   fading the row: a faded row takes the text with it, under the contrast
+   bar, in the theme where the muted token is already lightest. */
+.row-muted {
+  color: var(--text-light);
+}
 .tswitch {
   position: relative;
   display: inline-block;
