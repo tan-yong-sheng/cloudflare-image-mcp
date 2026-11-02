@@ -116,6 +116,17 @@ A second report asked the same thing against the Agnes family:
   omitted; the row still renders, so the page that repairs the key keeps
   working.
 
+**Regression, then restored:** the React rewrite (#112) rebuilt the table from
+scratch and dropped all three places the hint was used — the `Key` cell fell
+back to `#<id>`/`accountId`, the delete confirmation lost its best identifier,
+and the edit sheet stopped naming the key it was editing. The server kept
+sending `maskedKey` the whole time, and the client type never declared it, so
+nothing failed loudly. Restored, along with one addition: the account id is now
+masked in the table too (`023e…c353`), because it names the operator's account;
+the full value stays in the cell's tooltip and in the edit sheet, where editing
+needs it. The API payload is unchanged — account id is identity metadata, not a
+secret (`scripts/verify-admin-api.sh` records the same distinction).
+
 **Why the earlier plan below is obsolete:** it proposed storing a
 `token_prefix` column. Opening the active envelope at read time gets the
 same hint without a migration, without a second copy of token material in

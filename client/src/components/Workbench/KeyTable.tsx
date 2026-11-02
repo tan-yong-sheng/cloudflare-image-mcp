@@ -14,11 +14,30 @@ interface KeyTableProps {
 }
 
 /**
+ * An account id is identity, not a secret: it cannot authenticate anything.
+ * It still names the operator's account, so the table shows enough to tell
+ * two accounts apart and nothing more. The full value stays in the edit
+ * sheet and in this cell's tooltip, where it is actually needed.
+ */
+function maskAccountId(accountId: string): string {
+  if (accountId.length <= 8) return "…";
+  return accountId.slice(0, 4) + "…" + accountId.slice(-4);
+}
+
+/**
  * The key table.
  *
- * The account column belongs to the transport, not to the family: an
- * openai-compat provider has no Cloudflare account behind it, so its
- * rows are identified by key id instead.
+ * Two identity columns: `Key` is the server-computed masked hint of the
+ * sealed token, and `Account ID` belongs to the transport, not the family —
+ * an openai-compat provider has no Cloudflare account behind it, so that
+ * column only exists for `cloudflare-rest`.
+ *
+ * The hint is computed server-side because the browser never holds a token
+ * and cannot mask one. A key whose envelope will not open arrives without a
+ * hint and reads as a dash, so the row that repairs it stays reachable.
+ *
+ * `data-key-id` is the row's stable anchor: the account id and the hint are
+ * both masked or absent, so neither can identify a row to a test or a tool.
  */
 export function KeyTable({
   family,
@@ -51,8 +70,11 @@ export function KeyTable({
         <thead>
           <tr className="text-left opacity-60 border-b border-gray-800">
             <th id="adminKeysHead" className="p-3 font-medium">
-              {hasAccount ? "Account ID" : "Key"}
+              Key
             </th>
+            {hasAccount ? (
+              <th className="p-3 font-medium">Account ID</th>
+            ) : null}
             <th className="p-3 font-medium">
               <span className="sr-only">Actions</span>
             </th>
@@ -64,10 +86,11 @@ export function KeyTable({
             return (
               <tr
                 key={key.id}
+                data-key-id={key.id}
                 style={key.enabled ? undefined : { opacity: ".55" }}
               >
                 <td className="p-3 font-mono text-sm">
-                  {hasAccount ? key.accountId || "—" : "#" + key.id}
+                  {key.maskedKey || "—"}
                   {key.activeVersion !== null &&
                   key.activeVersion !== undefined ? (
                     <span className="opacity-60 text-xs ml-2">
@@ -75,6 +98,14 @@ export function KeyTable({
                     </span>
                   ) : null}
                 </td>
+                {hasAccount ? (
+                  <td
+                    className="p-3 font-mono text-sm"
+                    title={key.accountId || undefined}
+                  >
+                    {key.accountId ? maskAccountId(key.accountId) : "—"}
+                  </td>
+                ) : null}
                 <td className="p-3 whitespace-nowrap text-right">
                   <span className="inline-flex gap-2 items-center">
                     <label
@@ -115,7 +146,11 @@ export function KeyTable({
                       title={"Delete key #" + key.id}
                       disabled={pending}
                       onClick={() => {
-                        const who = key.accountId || key.label || "#" + key.id;
+                        const who =
+                          key.maskedKey ||
+                          key.accountId ||
+                          key.label ||
+                          "#" + key.id;
                         if (
                           !window.confirm(
                             "Delete key #" +

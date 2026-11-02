@@ -246,7 +246,10 @@ export function KeySheet({
                 {isEdit &&
                 editingKey.activeVersion !== null &&
                 editingKey.activeVersion !== undefined
-                  ? "(blank = keep v" + editingKey.activeVersion + ")"
+                  ? (editingKey.maskedKey ? editingKey.maskedKey + " · " : "") +
+                    "(blank = keep v" +
+                    editingKey.activeVersion +
+                    ")"
                   : ""}
               </span>
             </label>

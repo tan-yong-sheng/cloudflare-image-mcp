@@ -63,6 +63,12 @@ export interface AdminKey {
   enabled: boolean;
   activeVersion: number | null;
   accountId: string | null;
+  /**
+   * Server-computed hint of the sealed token (`sk-yt****fa12`): enough to
+   * tell two keys apart, never enough to use one. Absent when the envelope
+   * will not open, so a row must still render without it.
+   */
+  maskedKey?: string;
 }
 
 export interface AdminHealth {
