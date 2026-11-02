@@ -21,7 +21,12 @@
 // both are the same engine surface, and the endpoint already holds one.
 
 import type { AdminD1, AdminWrite } from "./admin-store.js";
-import { AdminStoreError, isUniqueViolation } from "./admin-store.js";
+import {
+  ADMIN_ACTOR,
+  AdminStoreError,
+  bumpWrite,
+  isUniqueViolation,
+} from "./admin-store.js";
 import { generateCallerSecret } from "./caller-crypto.js";
 
 /**
@@ -181,7 +186,17 @@ export async function createCallerKey(
   };
   let keyId: number | null;
   try {
-    keyId = (await db.commit([insert])).keyId;
+    // One atomic batch: the key row, the config-version bump (the same
+    // reload signal the provider-key writes ride), and the audit row —
+    // which resolves the fresh key id through the UNIQUE name inside the
+    // SAME commit, so there is no crash window between key and audit.
+    keyId = (
+      await db.commit([
+        insert,
+        bumpWrite(),
+        callerAuditWriteByName("caller_key_create", name),
+      ])
+    ).keyId;
   } catch (error) {
     if (isUniqueViolation(error)) {
       const message = error instanceof Error ? error.message : String(error);
@@ -260,15 +275,23 @@ export async function rotateCallerKey(
   const now = Math.floor(Date.now() / 1000);
   const prefix = GENERATED_CALLER_PREFIX;
   const suffix = secret.slice(-4);
-  const result = (await db
-    .prepare(
+  const update: AdminWrite = {
+    sql:
       "UPDATE caller_keys " +
-        "SET secret_hash = ?, prefix = ?, suffix = ?, updated_at = ? " +
-        "WHERE id = ?"
-    )
-    .bind(hash, prefix, suffix, now, keyId)
-    .run()) as { meta?: { changes?: number } };
-  if ((result.meta?.changes ?? 0) === 0) {
+      "SET secret_hash = ?, prefix = ?, suffix = ?, updated_at = ? " +
+      "WHERE id = ?",
+    params: [hash, prefix, suffix, now, keyId],
+  };
+  // One atomic batch: the verifier swap (revoke-before-insert — the old
+  // secret dies here), the bump, and the audit row, whose caller_key_id
+  // resolves through a subselect so a key deleted mid-flight nulls it
+  // instead of violating the foreign key.
+  const commit = await db.commit([
+    update,
+    bumpWrite(),
+    callerAuditWrite("caller_key_rotate", keyId, row.name),
+  ]);
+  if (commit.changes === 0) {
     throw new AdminStoreError(404, `unknown caller key ${keyId}`);
   }
   return {
@@ -281,6 +304,205 @@ export async function rotateCallerKey(
       created_at: Number(row.created_at),
     },
     secret,
+  };
+}
+
+/** The mutation response shared by toggle/rename/delete. */
+export interface CallerKeyMutationResult {
+  key: {
+    id: number;
+    name: string;
+    prefix: string;
+    suffix: string;
+    enabled: boolean;
+    created_at: number;
+    updated_at: number;
+  };
+  /**
+   * Set when the mutation did NOT do what it appears to do: the key's
+   * secret also lives in env.API_KEYS, so disabling or deleting the row
+   * leaves the credential live through the legacy mirror until the deploy
+   * itself drops it (#128, the resurrection check).
+   */
+  warning?: string;
+}
+
+/**
+ * Toggle a caller key (#128): flip enabled without deleting.
+ *
+ * A disabled key stops authenticating but stays listed. The env-mirror
+ * check runs on DISABLE only: enabling needs no warning, and a warning on
+ * enable would be noise. The mutation is one atomic batch — flip, bump,
+ * audit.
+ */
+export async function toggleCallerKey(
+  db: AdminD1,
+  keyId: number,
+  envMirror?: (secretHash: string) => Promise<boolean>
+): Promise<CallerKeyMutationResult> {
+  const row = await db
+    .prepare(
+      "SELECT name, enabled, secret_hash, prefix, suffix, created_at " +
+        "FROM caller_keys WHERE id = ?"
+    )
+    .bind(keyId)
+    .first<{
+      name: string;
+      enabled: number;
+      secret_hash: string;
+      prefix: string;
+      suffix: string;
+      created_at: number;
+    }>();
+  if (!row) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const enabled = Number(row.enabled) !== 1;
+  const commit = await db.commit([
+    {
+      sql: "UPDATE caller_keys SET enabled = ?, updated_at = ? WHERE id = ?",
+      params: [enabled ? 1 : 0, now, keyId],
+    },
+    bumpWrite(),
+    callerAuditWrite("caller_key_toggle", keyId, row.name),
+  ]);
+  if (commit.changes === 0) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  const warnings: string[] = [];
+  // The env-mirror check runs on DISABLE only: enabling needs no warning,
+  // and a warning on enable would be noise.
+  if (!enabled && (await envMirror?.(row.secret_hash)) === true) {
+    warnings.push(ENV_MIRROR_WARNING);
+  }
+  return {
+    key: {
+      id: keyId,
+      name: row.name,
+      prefix: row.prefix,
+      suffix: row.suffix,
+      enabled,
+      created_at: Number(row.created_at),
+      updated_at: now,
+    },
+    ...(warnings.length > 0 ? { warning: warnings.join(" ") } : {}),
+  };
+}
+
+/**
+ * Rename a caller key (#128): 1–120 characters, unique across keys.
+ *
+ * The name is the only thing that moves — the verifier, the secret's
+ * life, and the enabled flag are untouched, so there is no env-mirror
+ * warning to give: whatever the name says, the credential is unchanged.
+ */
+export async function renameCallerKey(
+  db: AdminD1,
+  keyId: number,
+  rawName: string | undefined
+): Promise<CallerKeyMutationResult> {
+  const row = await db
+    .prepare(
+      "SELECT prefix, suffix, enabled, created_at " +
+        "FROM caller_keys WHERE id = ?"
+    )
+    .bind(keyId)
+    .first<{
+      prefix: string;
+      suffix: string;
+      enabled: number;
+      created_at: number;
+    }>();
+  if (!row) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (name.length === 0 || name.length > MAX_NAME_LENGTH) {
+    throw new AdminStoreError(400, "name must be 1-120 characters");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  let commit: { changes?: number };
+  try {
+    // The name UNIQUE constraint is the duplicate check: a read-then-write
+    // window cannot sneak a duplicate past it, and the violation maps to
+    // the same 409 a create with that name would get.
+    commit = await db.commit([
+      {
+        sql: "UPDATE caller_keys SET name = ?, updated_at = ? WHERE id = ?",
+        params: [name, now, keyId],
+      },
+      bumpWrite(),
+      callerAuditWrite("caller_key_rename", keyId, name),
+    ]);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AdminStoreError(409, `name '${name}' already exists`);
+    }
+    throw error;
+  }
+  if (commit.changes === 0) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  return {
+    key: {
+      id: keyId,
+      name,
+      prefix: row.prefix,
+      suffix: row.suffix,
+      enabled: Number(row.enabled) === 1,
+      created_at: Number(row.created_at),
+      updated_at: now,
+    },
+  };
+}
+
+/**
+ * Delete a caller key (#128): hard delete, no undo, the audit stays.
+ *
+ * The batch order matters: the audit row is written BEFORE the delete (its
+ * caller_key_id resolving through the still-present row), so the delete's
+ * ON DELETE SET NULL leaves the trail in place with the link cut — the
+ * history survives the key it describes.
+ *
+ * Deleting is allowed even for the last enabled key (spec #74 decision),
+ * but the response says what that means: every caller is locked out until
+ * a key is added or the deploy carries API_KEYS again.
+ */
+export async function deleteCallerKey(
+  db: AdminD1,
+  keyId: number,
+  envMirror?: (secretHash: string) => Promise<boolean>
+): Promise<{ deleted: true; id: number; warning?: string }> {
+  const row = await db
+    .prepare("SELECT name, enabled, secret_hash FROM caller_keys WHERE id = ?")
+    .bind(keyId)
+    .first<{ name: string; enabled: number; secret_hash: string }>();
+  if (!row) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  await db.commit([
+    callerAuditWrite("caller_key_delete", keyId, row.name),
+    bumpWrite(),
+    {
+      sql: "DELETE FROM caller_keys WHERE id = ?",
+      params: [keyId],
+    },
+  ]);
+  const warnings: string[] = [];
+  if ((await envMirror?.(row.secret_hash)) === true) {
+    warnings.push(ENV_MIRROR_WARNING);
+  }
+  const enabledLeft = await db
+    .prepare("SELECT COUNT(*) AS n FROM caller_keys WHERE enabled = 1")
+    .first<{ n: number }>();
+  if ((enabledLeft?.n ?? 0) === 0) {
+    warnings.push(LOCKOUT_WARNING);
+  }
+  return {
+    deleted: true,
+    id: keyId,
+    ...(warnings.length > 0 ? { warning: warnings.join(" ") } : {}),
   };
 }
 
@@ -329,4 +551,53 @@ function validateOperatorSecret(secret: string): void {
       `secret must not start with the reserved prefix ${GENERATED_CALLER_PREFIX}`
     );
   }
+}
+
+/** The warning a disable/delete carries when the credential survives in env. */
+export const ENV_MIRROR_WARNING =
+  "still live via API_KEYS — remove it from the deploy to revoke it";
+
+/** The warning a delete carries when no enabled key is left behind. */
+export const LOCKOUT_WARNING =
+  "No enabled keys left — /v1 and /mcp now reject every caller until you add a key or the deploy carries API_KEYS again.";
+
+/**
+ * The caller-key audit row, written in the SAME batch as the mutation it
+ * describes (per the provider-store idiom). The actor is the admin API —
+ * bearer keys carry no identity (ADMIN_ACTOR), and provider_id is NULL
+ * because a caller key belongs to no provider (migration 0007).
+ *
+ * The caller_key_id resolves through a subselect rather than a bound
+ * parameter: a row deleted concurrently yields NULL, which satisfies the
+ * foreign key, instead of violating it.
+ */
+function callerAuditWrite(
+  action:
+    | "caller_key_rotate"
+    | "caller_key_toggle"
+    | "caller_key_rename"
+    | "caller_key_delete",
+  keyId: number,
+  label: string
+): AdminWrite {
+  return {
+    sql:
+      "INSERT INTO admin_audit (actor, action, provider_id, caller_key_id, key_label) " +
+      "VALUES (?, ?, NULL, (SELECT id FROM caller_keys WHERE id = ?), ?)",
+    params: [ADMIN_ACTOR, action, keyId, label],
+  };
+}
+
+/** Create-time variant: the fresh id exists only inside this batch, so the
+ * audit row resolves it through the UNIQUE name (the provider add idiom). */
+function callerAuditWriteByName(
+  action: "caller_key_create",
+  name: string
+): AdminWrite {
+  return {
+    sql:
+      "INSERT INTO admin_audit (actor, action, provider_id, caller_key_id, key_label) " +
+      "VALUES (?, ?, NULL, (SELECT id FROM caller_keys WHERE name = ?), ?)",
+    params: [ADMIN_ACTOR, action, name, name],
+  };
 }

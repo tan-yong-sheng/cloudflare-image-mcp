@@ -18,10 +18,13 @@ import { AdminStoreError } from "./admin-store.js";
 import { callerKeyVerifier, deriveCallerPepper } from "./caller-crypto.js";
 import {
   createCallerKey,
+  deleteCallerKey,
   GENERATED_CALLER_PREFIX,
   listCallerKeys,
   maskCallerKey,
+  renameCallerKey,
   rotateCallerKey,
+  toggleCallerKey,
 } from "./caller-store.js";
 
 /** D1-shaped adapter over node:sqlite (prepare/bind only — reads only). */
@@ -168,6 +171,7 @@ function writableD1(db: DatabaseSync): AdminD1 {
       const writes = rawWrites as readonly AdminWrite[];
       db.exec("BEGIN");
       let keyId: number | null = null;
+      let changes: number | undefined = undefined;
       try {
         for (let i = 0; i < writes.length; i++) {
           const info = db
@@ -176,6 +180,7 @@ function writableD1(db: DatabaseSync): AdminD1 {
           if (i === 0) {
             const lri = info.lastInsertRowid;
             keyId = typeof lri === "bigint" ? Number(lri) : lri;
+            changes = Number(info.changes);
           }
         }
         db.exec("COMMIT");
@@ -183,7 +188,7 @@ function writableD1(db: DatabaseSync): AdminD1 {
         db.exec("ROLLBACK");
         throw error;
       }
-      return { keyId };
+      return { keyId, changes };
     },
   };
 }
@@ -492,5 +497,214 @@ describe("rotateCallerKey against the real migrations (S2)", () => {
       "prefix",
       "suffix",
     ]);
+  });
+});
+
+describe("caller-key mutations (#128) against the real migrations", () => {
+  // Toggle, rename, delete: the three row mutations. What the tests pin:
+  // each is one atomic batch with its audit row and config bump, the
+  // env-mirror warning fires exactly where a disable/delete does NOT
+  // revoke the credential (the legacy mirror), delete keeps its audit
+  // trail after the row is gone, and the last-enabled-key delete says so.
+
+  function version(db: DatabaseSync): number {
+    return Number(
+      (
+        db
+          .prepare("SELECT version FROM config_versions WHERE id = 1")
+          .get() as {
+          version: number;
+        }
+      ).version
+    );
+  }
+
+  function auditRows(db: DatabaseSync, action: string): unknown[] {
+    return db
+      .prepare("SELECT * FROM admin_audit WHERE action = ? ORDER BY id")
+      .all(action);
+  }
+
+  test("create and rotate write audit rows and bump config_versions", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const before = version(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    const afterCreate = version(db);
+    expect(afterCreate).toBe(before + 1);
+    const creates = auditRows(db, "caller_key_create");
+    expect(creates).toHaveLength(1);
+    expect((creates[0] as { key_label: string }).key_label).toBe("CI");
+
+    await rotateCallerKey(store, created.key.id, testVerifier());
+    expect(version(db)).toBe(afterCreate + 1);
+    expect(auditRows(db, "caller_key_rotate")).toHaveLength(1);
+  });
+
+  test("toggle flips enabled and audits, both directions", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+
+    const off = await toggleCallerKey(store, created.key.id);
+    expect(off.key.enabled).toBe(false);
+    expect(off.warning).toBeUndefined();
+    const on = await toggleCallerKey(store, created.key.id);
+    expect(on.key.enabled).toBe(true);
+    expect(auditRows(db, "caller_key_toggle")).toHaveLength(2);
+
+    const row = db
+      .prepare("SELECT enabled FROM caller_keys WHERE id = ?")
+      .get(created.key.id) as { enabled: number };
+    expect(row.enabled).toBe(1);
+  });
+
+  test("disabling a key whose secret also lives in env warns; enabling does not", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "mirrored",
+    });
+    // The predicate stands in for the endpoint's env check: this row's
+    // verifier also matches an API_KEYS value.
+    const mirror = async () => true;
+
+    const off = await toggleCallerKey(store, created.key.id, mirror);
+    expect(off.warning).toContain("API_KEYS");
+    expect(off.warning).toContain("remove it from the deploy");
+
+    const on = await toggleCallerKey(store, created.key.id, mirror);
+    expect(on.warning).toBeUndefined();
+
+    const plain = await toggleCallerKey(store, created.key.id);
+    expect(plain.warning).toBeUndefined();
+  });
+
+  test("rename moves the name, keeps the credential, audits once", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+
+    const renamed = await renameCallerKey(store, created.key.id, "deploy-ci");
+    expect(renamed.key.name).toBe("deploy-ci");
+    expect(renamed.key.prefix).toBe(created.key.prefix);
+    expect(renamed.key.suffix).toBe(created.key.suffix);
+    expect(renamed.key.enabled).toBe(true);
+    expect(renamed.warning).toBeUndefined();
+    expect(auditRows(db, "caller_key_rename")).toHaveLength(1);
+    expect(version(db)).toBeGreaterThan(0);
+
+    // The row really moved.
+    const row = db
+      .prepare("SELECT name FROM caller_keys WHERE id = ?")
+      .get(created.key.id) as { name: string };
+    expect(row.name).toBe("deploy-ci");
+  });
+
+  test("rename to an existing name is a 409 and changes nothing", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const first = await createCallerKey(store, testVerifier(), { name: "one" });
+    await createCallerKey(store, testVerifier(), { name: "two" });
+
+    const failure = await renameCallerKey(store, first.key.id, "two").catch(
+      (error: unknown) => error
+    );
+    expect(failure).toBeInstanceOf(AdminStoreError);
+    expect((failure as AdminStoreError).status).toBe(409);
+    expect(
+      (
+        db
+          .prepare("SELECT name FROM caller_keys WHERE id = ?")
+          .get(first.key.id) as { name: string }
+      ).name
+    ).toBe("one");
+  });
+
+  test.each([
+    ["an empty name", ""],
+    ["a blank name", "   "],
+    ["a 121-character name", "x".repeat(121)],
+  ])("rename rejects %s with 400", async (_label, name) => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    const failure = await renameCallerKey(store, created.key.id, name).catch(
+      (error: unknown) => error
+    );
+    expect(failure).toBeInstanceOf(AdminStoreError);
+    expect((failure as AdminStoreError).status).toBe(400);
+  });
+
+  test("delete removes the row, keeps the audit trail, warns on the mirror", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    const mirror = async () => true;
+
+    const result = await deleteCallerKey(store, created.key.id, mirror);
+    expect(result.deleted).toBe(true);
+    expect(result.id).toBe(created.key.id);
+    expect(result.warning).toContain("API_KEYS");
+    // Another enabled key remains in this store? No — create was the only
+    // one, so the lockout warning rides along too.
+    expect(result.warning).toContain("No enabled keys left");
+
+    // The row is gone; the trail stays, unlinked (SET NULL) but named.
+    expect(db.prepare("SELECT COUNT(*) AS n FROM caller_keys").get()).toEqual({
+      n: 0,
+    });
+    const trail = auditRows(db, "caller_key_delete") as {
+      key_label: string;
+      caller_key_id: number | null;
+    }[];
+    expect(trail).toHaveLength(1);
+    expect(trail[0].key_label).toBe("CI");
+    expect(trail[0].caller_key_id).toBeNull();
+  });
+
+  test("deleting one of several keys warns only when the mirror matches", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const a = await createCallerKey(store, testVerifier(), { name: "one" });
+    await createCallerKey(store, testVerifier(), { name: "two" });
+
+    const result = await deleteCallerKey(store, a.key.id);
+    expect(result.warning).toBeUndefined();
+    // Another enabled key remains, so no lockout warning either.
+    expect(result.warning).toBeUndefined();
+  });
+
+  test("toggle, rename and delete on an unknown id are 404s", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    for (const attempt of [
+      () => toggleCallerKey(store, 999),
+      () => renameCallerKey(store, 999, "x"),
+      () => deleteCallerKey(store, 999),
+    ]) {
+      const failure = await attempt().catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AdminStoreError);
+      expect((failure as AdminStoreError).status).toBe(404);
+    }
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM admin_audit WHERE action LIKE 'caller_key_%'"
+        )
+        .get()
+    ).toEqual({
+      n: 0,
+    });
   });
 });

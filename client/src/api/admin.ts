@@ -267,6 +267,103 @@ export function useRotateCallerKey(
   });
 }
 
+export interface CallerKeyMutationResponse {
+  key: {
+    id: number;
+    name: string;
+    prefix: string;
+    suffix: string;
+    enabled: boolean;
+    created_at: number;
+    updated_at: number;
+  };
+  /** Set when the mutation did not do what it appears to do (#128). */
+  warning?: string;
+}
+
+/**
+ * The row mutations (#128): toggle, rename, delete. None of them carries a
+ * secret, so none needs the one-shot cache treatment — the answers go
+ * through the usual invalidate-and-refetch.
+ */
+async function mutateCallerKey<T>(
+  session: AdminSession,
+  path: string,
+  init: { method: string; body?: unknown }
+): Promise<T> {
+  const result = await apiFetch<T>(path, {
+    method: init.method,
+    body: init.body,
+    adminKey: session.adminKey,
+    authToken: session.bearerToken,
+  });
+  if (!result.ok) throw toError(result);
+  return result.data as T;
+}
+
+export function useToggleCallerKey(
+  session: AdminSession,
+  onRefused?: (failure: AdminApiError) => void
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...ADMIN_MUTATION_KEY, "toggle-caller-key"],
+    mutationFn: (variables: { keyId: number }) =>
+      mutateCallerKey<CallerKeyMutationResponse>(
+        session,
+        `${ADMIN_CALLER_KEYS_PATH}/${variables.keyId}/toggle`,
+        { method: "POST" }
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY }),
+    onError: (error: AdminApiError) => {
+      if (error.status === 401) onRefused?.(error);
+    },
+  });
+}
+
+export function useRenameCallerKey(
+  session: AdminSession,
+  onRefused?: (failure: AdminApiError) => void
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...ADMIN_MUTATION_KEY, "rename-caller-key"],
+    mutationFn: (variables: { keyId: number; name: string }) =>
+      mutateCallerKey<CallerKeyMutationResponse>(
+        session,
+        `${ADMIN_CALLER_KEYS_PATH}/${variables.keyId}/rename`,
+        { method: "POST", body: { name: variables.name } }
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY }),
+    onError: (error: AdminApiError) => {
+      if (error.status === 401) onRefused?.(error);
+    },
+  });
+}
+
+export function useDeleteCallerKey(
+  session: AdminSession,
+  onRefused?: (failure: AdminApiError) => void
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...ADMIN_MUTATION_KEY, "delete-caller-key"],
+    mutationFn: (variables: { keyId: number }) =>
+      mutateCallerKey<{ deleted: boolean; id: number; warning?: string }>(
+        session,
+        `${ADMIN_CALLER_KEYS_PATH}/${variables.keyId}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY }),
+    onError: (error: AdminApiError) => {
+      if (error.status === 401) onRefused?.(error);
+    },
+  });
+}
+
 export interface AddKeyVariables {
   providerId: string;
   label: string;

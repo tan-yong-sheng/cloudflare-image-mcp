@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { AdminCallerKey } from "../../api/types";
 
 interface CallerKeyTableProps {
@@ -18,8 +19,20 @@ interface CallerKeyTableProps {
    * page's to send — the table only names the row the button is on.
    */
   onRotate?: (key: AdminCallerKey) => void;
-  /** Ids of rows whose rotate request is in flight; those rows wait. */
-  pendingRotateIds?: number[];
+  /** Flips the key's enabled state (#128); the switch shows the ask. */
+  onToggle?: (key: AdminCallerKey, enabled: boolean) => void;
+  /**
+   * Saves an inline rename (#128). Resolves only on success — a rejected
+   * rename keeps the input open with the server's reason on the panel.
+   */
+  onRenameSubmit?: (key: AdminCallerKey, name: string) => Promise<void>;
+  /** Opens the delete confirmation for the key (#128). */
+  onDelete?: (key: AdminCallerKey) => void;
+  /**
+   * Ids of rows with a request in flight. A busy row's controls wait for
+   * the server's answer, so no key can be acted on twice at once.
+   */
+  pendingIds?: number[];
 }
 
 /**
@@ -47,8 +60,17 @@ export function CallerKeyTable({
   loading,
   failed = false,
   onRotate,
-  pendingRotateIds = [],
+  onToggle,
+  onRenameSubmit,
+  onDelete,
+  pendingIds = [],
 }: CallerKeyTableProps) {
+  // Inline rename state: which row is being renamed, and what the field
+  // holds. Local to the table — the page only receives the submit.
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const hasMutations = Boolean(onToggle || onRenameSubmit || onDelete);
   // A failed refresh leaves the last good rows on screen (TanStack Query
   // keeps the data), so the failure is a statement about those rows, not
   // about the table being empty: the rows are stale, and the panel's
@@ -73,7 +95,9 @@ export function CallerKeyTable({
             </th>
             <th className="p-3 font-medium">Masked key</th>
             <th className="p-3 font-medium">Status</th>
-            {onRotate ? <th className="p-3 font-medium">Actions</th> : null}
+            {hasMutations || onRotate ? (
+              <th className="p-3 font-medium">Actions</th>
+            ) : null}
           </tr>
         </thead>
         <tbody id="adminCallerKeys">
@@ -86,23 +110,112 @@ export function CallerKeyTable({
               <td className="p-3">{key.name}</td>
               <td className="p-3 font-mono text-sm">{key.maskedKey}</td>
               <td className="p-3">
+                {onToggle ? (
+                  <button
+                    id={`adminCallerKeySwitch-${key.id}`}
+                    type="button"
+                    role="switch"
+                    aria-checked={key.enabled}
+                    aria-label={
+                      (key.enabled ? "Disable " : "Enable ") + key.name
+                    }
+                    disabled={pendingIds.includes(key.id)}
+                    onClick={() => onToggle(key, !key.enabled)}
+                  />
+                ) : null}{" "}
                 <span
                   className={`chip ${key.enabled ? "chip-ok" : "chip-off"}`}
                 >
                   {key.enabled ? "Enabled" : "Disabled"}
                 </span>
               </td>
-              {onRotate ? (
+              {hasMutations || onRotate ? (
                 <td className="p-3">
-                  <button
-                    id={`adminCallerKeyRotate-${key.id}`}
-                    type="button"
-                    className="btn btn-secondary text-xs py-1 px-3"
-                    disabled={pendingRotateIds.includes(key.id)}
-                    onClick={() => onRotate(key)}
-                  >
-                    {pendingRotateIds.includes(key.id) ? "Rotating…" : "Rotate"}
-                  </button>
+                  {onRenameSubmit && renamingId === key.id ? (
+                    <>
+                      <input
+                        id={`adminCallerKeyRenameInput-${key.id}`}
+                        type="text"
+                        className="text-sm p-1 rounded bg-gray-800 border border-gray-700 focus:border-primary focus:outline-none"
+                        value={renameValue}
+                        maxLength={120}
+                        aria-label={`New name for ${key.name}`}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setRenamingId(null);
+                        }}
+                      />
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          id={`adminCallerKeyRenameSave-${key.id}`}
+                          type="button"
+                          className="btn btn-primary text-xs py-1 px-3"
+                          disabled={renaming || pendingIds.includes(key.id)}
+                          onClick={async () => {
+                            setRenaming(true);
+                            try {
+                              await onRenameSubmit(key, renameValue);
+                              setRenamingId(null);
+                            } finally {
+                              setRenaming(false);
+                            }
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary text-xs py-1 px-3"
+                          disabled={renaming}
+                          onClick={() => setRenamingId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="inline-flex gap-1 items-center">
+                      {onRotate ? (
+                        <button
+                          id={`adminCallerKeyRotate-${key.id}`}
+                          type="button"
+                          className="btn btn-secondary text-xs py-1 px-3"
+                          disabled={pendingIds.includes(key.id)}
+                          onClick={() => onRotate(key)}
+                        >
+                          Rotate
+                        </button>
+                      ) : null}
+                      {onRenameSubmit ? (
+                        <button
+                          id={`adminCallerKeyRename-${key.id}`}
+                          type="button"
+                          className="btn btn-secondary text-xs py-1 px-3"
+                          disabled={pendingIds.includes(key.id)}
+                          onClick={() => {
+                            setRenamingId(key.id);
+                            setRenameValue(key.name);
+                          }}
+                        >
+                          Rename
+                        </button>
+                      ) : null}
+                      {onDelete ? (
+                        <button
+                          id={`adminCallerKeyDelete-${key.id}`}
+                          type="button"
+                          className="btn btn-danger text-xs py-1 px-3"
+                          disabled={pendingIds.includes(key.id)}
+                          onClick={() => onDelete(key)}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                      {pendingIds.includes(key.id) ? (
+                        <span className="text-xs opacity-60">Working…</span>
+                      ) : null}
+                    </span>
+                  )}
                 </td>
               ) : null}
             </tr>

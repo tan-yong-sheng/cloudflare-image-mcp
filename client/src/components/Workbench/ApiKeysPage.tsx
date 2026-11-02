@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useCallerKeys,
   useCreateCallerKey,
+  useDeleteCallerKey,
+  useRenameCallerKey,
   useRotateCallerKey,
+  useToggleCallerKey,
 } from "../../api/admin";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
@@ -50,6 +53,9 @@ export function ApiKeysPage() {
   const callerKeys = useCallerKeys(session);
   const createKey = useCreateCallerKey(session, endRefusedSession);
   const rotateKey = useRotateCallerKey(session, endRefusedSession);
+  const toggleKey = useToggleCallerKey(session, endRefusedSession);
+  const renameKey = useRenameCallerKey(session, endRefusedSession);
+  const deleteKey = useDeleteCallerKey(session, endRefusedSession);
 
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -64,7 +70,19 @@ export function ApiKeysPage() {
   // The row the rotate confirmation is open for. The request is only sent
   // from the dialog's confirm button.
   const [rotating, setRotating] = useState<AdminCallerKey | null>(null);
+  // The row the delete confirmation is open for — same rule.
+  const [deleting, setDeleting] = useState<AdminCallerKey | null>(null);
+  // The line that carries a mutation's warning: the answer that says the
+  // mutation did NOT do what it appears to do (#128).
+  const [notice, setNotice] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
+
+  // A notice fades on its own, the way the workbench's notice does.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     if (!callerKeys.isError) {
@@ -99,6 +117,8 @@ export function ApiKeysPage() {
     setPanelError(null);
     setCreated(null);
     setRotating(null);
+    setDeleting(null);
+    setNotice(null);
   };
 
   return (
@@ -180,14 +200,84 @@ export function ApiKeysPage() {
             });
           }}
         />
+        {notice ? (
+          <p
+            id="apiKeysNotice"
+            role="status"
+            className="text-sm p-3 rounded bg-amber-900/30 text-amber-300 border border-amber-700"
+          >
+            {notice}
+          </p>
+        ) : null}
         <CallerKeyTable
           keys={callerKeys.data?.keys ?? []}
           loading={callerKeys.isPending}
           failed={callerKeys.isError}
           onRotate={(key) => setRotating(key)}
-          pendingRotateIds={rotating ? [rotating.id] : []}
+          onToggle={(key, _enabled) => {
+            setPanelError(null);
+            toggleKey.mutate(
+              { keyId: key.id },
+              {
+                onSuccess: (result) => {
+                  if (result.warning) setNotice(result.warning);
+                },
+                onError: (cause) =>
+                  setPanelError(
+                    cause instanceof Error ? cause.message : String(cause)
+                  ),
+              }
+            );
+          }}
+          onRenameSubmit={async (key, name) => {
+            setPanelError(null);
+            try {
+              await renameKey.mutateAsync({ keyId: key.id, name });
+            } catch (cause) {
+              setPanelError(
+                cause instanceof Error ? cause.message : String(cause)
+              );
+              throw cause;
+            }
+          }}
+          onDelete={(key) => setDeleting(key)}
+          pendingIds={[
+            rotating?.id,
+            deleting?.id,
+            ...(toggleKey.isPending ? [toggleKey.variables?.keyId] : []),
+            ...(renameKey.isPending ? [renameKey.variables?.keyId] : []),
+            ...(deleteKey.isPending ? [deleteKey.variables?.keyId] : []),
+          ].filter((id): id is number => typeof id === "number")}
         />
       </div>
+
+      <ConfirmDialog
+        open={
+          deleting
+            ? {
+                title: `Delete “${deleting.name}”?`,
+                message:
+                  "This cannot be undone. Clients using this key will lose access. The audit trail stays; the key does not come back.",
+              }
+            : null
+        }
+        confirmLabel="Delete"
+        busy={deleteKey.isPending}
+        onCancel={() => setDeleting(null)}
+        onConfirm={async () => {
+          if (!deleting) return;
+          try {
+            const result = await deleteKey.mutateAsync({ keyId: deleting.id });
+            if (result.warning) setNotice(result.warning);
+            setDeleting(null);
+          } catch (cause) {
+            setPanelError(
+              cause instanceof Error ? cause.message : String(cause)
+            );
+            setDeleting(null);
+          }
+        }}
+      />
 
       <ConfirmDialog
         open={

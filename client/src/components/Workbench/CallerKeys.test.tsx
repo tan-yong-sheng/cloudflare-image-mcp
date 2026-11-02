@@ -641,3 +641,167 @@ describe("rotating a caller key (#127)", () => {
     expect(document.getElementById("callerKeyCreated")).toBeNull();
   });
 });
+
+describe("caller-key row mutations (#128)", () => {
+  // The switch, the inline rename, and the delete dialog are the page's
+  // three writers on an existing row. The tests pin the routes, the
+  // confirm-before-delete rule, and the warning line that says a
+  // disable/delete did not actually revoke the credential.
+
+  function stubMutationApi(
+    respond: (method: string, path: string) => { status: number; body: unknown }
+  ) {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        const method = init?.method ?? "GET";
+        if (path === "/api/admin/caller-keys" && method === "GET") {
+          return jsonResponse(CALLER_KEYS);
+        }
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        if (method !== "GET") {
+          calls.push({
+            method,
+            path,
+            body: init?.body ? JSON.parse(String(init.body)) : undefined,
+          });
+          const answer = respond(method, path);
+          return jsonResponse(answer.body, answer.status);
+        }
+        return jsonResponse({});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return calls;
+  }
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("the switch toggles a key and surfaces the mirror warning", async () => {
+    const calls = stubMutationApi(() => ({
+      status: 200,
+      body: {
+        key: {
+          id: 1,
+          name: "Laptop",
+          prefix: "sk-mgmt-",
+          suffix: "a1b2",
+          enabled: false,
+          created_at: 1_700_000_000,
+          updated_at: 1_700_000_100,
+        },
+        warning:
+          "still live via API_KEYS — remove it from the deploy to revoke it",
+      },
+    }));
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeySwitch-1") as HTMLElement
+    );
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.method === "POST" && c.path === "/api/admin/caller-keys/1/toggle"
+        )
+      ).toBe(true)
+    );
+    // The answer's warning is the operator's information: disabling the
+    // row did not revoke the credential while it lives in env.
+    await waitFor(() =>
+      expect(document.getElementById("apiKeysNotice")?.textContent).toContain(
+        "still live via API_KEYS"
+      )
+    );
+  });
+
+  it("rename saves inline and refetches", async () => {
+    const calls = stubMutationApi(() => ({
+      status: 200,
+      body: {
+        key: {
+          id: 1,
+          name: "deploy-ci",
+          prefix: "sk-mgmt-",
+          suffix: "a1b2",
+          enabled: true,
+          created_at: 1_700_000_000,
+          updated_at: 1_700_000_100,
+        },
+      },
+    }));
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeyRename-1") as HTMLElement
+    );
+    const input = document.getElementById(
+      "adminCallerKeyRenameInput-1"
+    ) as HTMLInputElement;
+    expect(input.value).toBe("Laptop");
+    await user.type(input, "2");
+    await user.click(
+      document.getElementById("adminCallerKeyRenameSave-1") as HTMLElement
+    );
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.method === "POST" &&
+            c.path === "/api/admin/caller-keys/1/rename" &&
+            (c.body as { name?: string })?.name === "Laptop2"
+        )
+      ).toBe(true)
+    );
+  });
+
+  it("delete goes through the confirmation and sends DELETE", async () => {
+    const calls = stubMutationApi(() => ({
+      status: 200,
+      body: { deleted: true, id: 1 },
+    }));
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeyDelete-1") as HTMLElement
+    );
+
+    // Nothing is sent until the dialog says so, and the dialog names the
+    // consequence.
+    expect(calls).toHaveLength(0);
+    expect(
+      document.getElementById("callerKeyConfirmMessage")?.textContent
+    ).toContain("Clients using this key will lose access");
+
+    await user.click(
+      document.getElementById("callerKeyConfirmOk") as HTMLElement
+    );
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) => c.method === "DELETE" && c.path === "/api/admin/caller-keys/1"
+        )
+      ).toBe(true)
+    );
+    expect(screen.queryByText(/Delete “Laptop”\?/)).toBeNull();
+  });
+});
