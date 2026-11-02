@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AdminApiError,
   useAdminMutations,
   useHealth,
   usePendingAdminKeyIds,
@@ -9,6 +8,8 @@ import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
+import type { AdminApiError } from "../../api/admin";
+import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
@@ -44,7 +45,6 @@ export function AdminView() {
 
   const health = useHealth(session);
   const mutations = useAdminMutations(session, endRefusedSession);
-
   const [selected, setSelected] = useState("");
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
@@ -86,22 +86,17 @@ export function AdminView() {
     if (handledError.current === health.error) return;
     handledError.current = health.error;
     const failure = health.error;
-    if (failure instanceof AdminApiError && failure.status === 401) {
-      endRefusedSession(failure);
+    const refusal = adminRefusal(failure);
+    if (refusal?.status === 401) {
+      endRefusedSession(refusal);
       return;
     }
     // The credential payload could not be read, so the admin session is
     // over: the management key goes with it, and the gate says why. An
     // error the operator cannot see is not an error they can act on.
     lock();
-    if (failure instanceof AdminApiError && failure.status === 403) {
-      // A disabled admin gate is not the operator's key being wrong, so
-      // the server's own reason is shown when it says which it was.
-      setGateError(
-        failure.code === "admin_disabled"
-          ? failure.message
-          : "Management key rejected."
-      );
+    if (refusal?.status === 403) {
+      setGateError(gateErrorFor(refusal));
       return;
     }
     setGateError(failure instanceof Error ? failure.message : String(failure));
@@ -232,6 +227,18 @@ export function AdminView() {
             {providers.length === 1 ? "provider family" : "provider families"}
           </span>
           <button
+            id="adminApiKeysBtn"
+            type="button"
+            className="btn btn-secondary p-2 h-10 flex items-center justify-center"
+            aria-label="Open API keys"
+            onClick={() => {
+              window.location.hash = "#admin/api-keys";
+            }}
+          >
+            <i className="fa-solid fa-key mr-2" />
+            API keys
+          </button>
+          <button
             id="adminLock"
             type="button"
             className={`btn btn-secondary p-2 h-12 flex items-center justify-center${
@@ -279,7 +286,7 @@ export function AdminView() {
               className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
             >
               <i className="fa-solid fa-server mr-2 text-primary" />
-              AI Providers
+              Administration
             </h1>
             <FamilyRail
               providers={providers}

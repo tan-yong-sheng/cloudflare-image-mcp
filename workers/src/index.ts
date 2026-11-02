@@ -114,9 +114,15 @@ export default {
 
       // Route: the React client. The document is the client's own build
       // output, served through the asset binding; the client routes
-      // between the generator and the workbench on the hash (and on the
-      // /admin path, which the legacy shell also served).
-      if (path === "/" || path === "/index.html" || path === "/admin") {
+      // between the generator, the workbench and the API-keys page on the
+      // hash. Each screen also has a path, so it can be bookmarked: the
+      // /admin path the legacy shell served, and /admin/api-keys beside it.
+      if (
+        path === "/" ||
+        path === "/index.html" ||
+        path === "/admin" ||
+        path === "/admin/api-keys"
+      ) {
         const clientDocument = await serveClientAsset(
           new Request(url.origin + "/", {
             method: "GET",

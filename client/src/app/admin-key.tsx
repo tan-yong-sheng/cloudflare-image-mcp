@@ -8,9 +8,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { HEALTH_QUERY_FAMILY } from "../api/admin";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { CALLER_KEYS_QUERY_FAMILY, HEALTH_QUERY_FAMILY } from "../api/admin";
 import { useAuth } from "./auth";
+
+/**
+ * Drop every payload the admin panel fetched.
+ *
+ * The list of families lives here so a new one cannot be added to the
+ * lock path and forgotten in the teardown path (or the other way round):
+ * both call this.
+ */
+function clearAdminPayloads(queryClient: QueryClient) {
+  queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
+  queryClient.removeQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
+}
 
 /**
  * The management key that gates /api/admin/*.
@@ -51,15 +63,16 @@ export function AdminKeyProvider({ children }: { children: ReactNode }) {
     keyRef.current = null;
     setAdminKey(null);
     // The credential metadata the panel fetched goes with the key: a
-    // locked panel must leave nothing behind to read.
-    queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
+    // locked panel must leave nothing behind to read. The caller-key list
+    // goes too — it is part of the same panel.
+    clearAdminPayloads(queryClient);
   }, [queryClient]);
 
   // Teardown: neither the key nor the payload outlives the provider.
   useEffect(() => {
     return () => {
       keyRef.current = null;
-      queryClient.removeQueries({ queryKey: HEALTH_QUERY_FAMILY });
+      clearAdminPayloads(queryClient);
     };
   }, [queryClient]);
 

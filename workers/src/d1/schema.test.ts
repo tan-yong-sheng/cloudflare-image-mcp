@@ -185,3 +185,79 @@ describe("provider schema migrations (R1a)", () => {
     expect(row).toEqual({ id: 1, version: 1 });
   });
 });
+
+describe("caller-key schema migration (0006, #125)", () => {
+  test("0006 adds the caller_keys table", () => {
+    expect(userTables(freshDb())).toContain("caller_keys");
+    expect(columnsOf(freshDb(), "caller_keys")).toEqual([
+      "id",
+      "name",
+      "secret_hash",
+      "prefix",
+      "suffix",
+      "enabled",
+      "created_at",
+      "updated_at",
+    ]);
+  });
+
+  test("0006 indexes the verifier so the authentication path can look a key up", () => {
+    // The authentication path finds a key by its verifier, so the column
+    // is indexed — and UNIQUE, because one secret is one key.
+    expect(indexesOf(freshDb(), "caller_keys")).toContain(
+      "uq_caller_keys_hash"
+    );
+  });
+
+  test("0006 rejects a key with no name", () => {
+    const db = freshDb();
+    expect(() =>
+      db.exec("INSERT INTO caller_keys (name, secret_hash) VALUES ('', 'v1')")
+    ).toThrow();
+  });
+
+  test("0006 rejects a key with no verifier", () => {
+    const db = freshDb();
+    expect(() =>
+      db.exec(
+        "INSERT INTO caller_keys (name, secret_hash) VALUES ('Laptop', '')"
+      )
+    ).toThrow();
+  });
+
+  test("0006 rejects two keys with the same name", () => {
+    const db = freshDb();
+    db.exec(
+      "INSERT INTO caller_keys (name, secret_hash) VALUES ('Laptop', 'v1')"
+    );
+    expect(() =>
+      db.exec(
+        "INSERT INTO caller_keys (name, secret_hash) VALUES ('Laptop', 'v2')"
+      )
+    ).toThrow();
+  });
+
+  test("0006 rejects two keys with the same verifier", () => {
+    // One secret is one key. Two rows sharing a verifier would be
+    // indistinguishable to the operator and to the gateway.
+    const db = freshDb();
+    db.exec(
+      "INSERT INTO caller_keys (name, secret_hash) VALUES ('Laptop', 'same')"
+    );
+    expect(() =>
+      db.exec(
+        "INSERT INTO caller_keys (name, secret_hash) VALUES ('CI', 'same')"
+      )
+    ).toThrow();
+  });
+
+  test("0006 rejects an enabled flag that is neither 0 nor 1", () => {
+    const db = freshDb();
+    expect(() =>
+      db.exec(
+        "INSERT INTO caller_keys (name, secret_hash, enabled)" +
+          " VALUES ('Laptop', 'v1', 2)"
+      )
+    ).toThrow();
+  });
+});

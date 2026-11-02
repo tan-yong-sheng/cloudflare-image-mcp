@@ -73,8 +73,8 @@ ESC_TOKEN="$(json_escape "$TOKEN")"
 ESC_ACCOUNT_ID="$(json_escape "$ACCOUNT_ID")"
 
 pass=0; fail=0
-BODY="$(mktemp)"; LEAKS="$(mktemp)"
-trap 'rm -f "$BODY" "$LEAKS"' EXIT
+BODY="$(mktemp)"; LEAKS="$(mktemp)"; HEADERS="$(mktemp)"
+trap 'rm -f "$BODY" "$LEAKS" "$HEADERS"' EXIT
 
 # Prints the first configured secret present in $BODY, else nothing.
 leaked_secret() {
@@ -88,7 +88,8 @@ leaked_secret() {
 }
 
 # raw METHOD PATH [--bearer V|--no-bearer] [--admin V|--no-admin] [--body JSON]
-# Prints the HTTP status on stdout; the body lands in $BODY.
+# Prints the HTTP status on stdout; the body lands in $BODY and the response
+# headers in $HEADERS.
 raw() {
   local method="$1" path="$2"; shift 2
   local bearer="$API_KEY" admin="$ADMIN_KEY" body=""
@@ -102,7 +103,7 @@ raw() {
       *) echo "raw: unknown argument $1" >&2; exit 2 ;;
     esac
   done
-  local args=(-sS -o "$BODY" -w '%{http_code}' -X "$method" "$BASE_URL$path")
+  local args=(-sS -o "$BODY" -D "$HEADERS" -w '%{http_code}' -X "$method" "$BASE_URL$path")
   [ -n "$body" ]   && args+=(-H 'Content-Type: application/json' --data-binary "$body")
   [ -n "$bearer" ] && args+=(-H "Authorization: Bearer $bearer")
   [ -n "$admin" ]  && args+=(-H "X-Admin-Key: $admin")
@@ -156,6 +157,48 @@ for f in providers keys exposure configVersion; do
     printf 'FAIL  %-56s missing\n' "health exposes $f"; fail=$((fail + 1))
   fi
 done
+
+echo
+echo "== caller keys (read path, #125) =="
+# The caller keys are the other admin list: the bearer tokens clients send
+# to /v1/* and /mcp*. Read-only here — this script creates nothing on this
+# route, so it is safe against a deployed Worker as well as a local one.
+check "caller keys without a bearer is a 401"             401 "$(raw GET /api/admin/caller-keys --no-bearer)"
+check "caller keys with a wrong admin key is a 403"       403 "$(raw GET /api/admin/caller-keys --admin not-the-key)"
+check "caller keys with both gates is a 200"              200 "$(raw GET /api/admin/caller-keys)"
+# Masked key hints must not outlive the unlock that fetched them: a cached
+# copy would survive the lock and the session end (#125).
+if grep -qi '^cache-control: *no-store' "$HEADERS"; then
+  printf 'PASS  %-56s present\n' "caller keys response is not cacheable"; pass=$((pass + 1))
+else
+  printf 'FAIL  %-56s missing\n' "caller keys response is not cacheable"; fail=$((fail + 1))
+fi
+show
+# The contract is an array, not merely a property that happens to be named
+# "keys": `{"keys":null}` or `{"keys":"unexpected"}` would satisfy a bare
+# grep while giving the client something it cannot map over.
+if [ -n "$HAVE_JQ" ]; then
+  if [ "$(jq -r 'if (.keys | type) == "array" then "yes" else "no" end' < "$BODY" 2>/dev/null)" = "yes" ]; then
+    printf 'PASS  %-56s an array\n' "caller keys response carries a keys list"; pass=$((pass + 1))
+  else
+    printf 'FAIL  %-56s not an array\n' "caller keys response carries a keys list"; fail=$((fail + 1))
+  fi
+elif grep -qE '"keys"[[:space:]]*:[[:space:]]*\[' "$BODY"; then
+  # No jq: a compact/pretty JSON array open after the key is the best the
+  # shell can assert without a parser. `null`, a string and an object all
+  # fail this, which is the point.
+  printf 'PASS  %-56s an array\n' "caller keys response carries a keys list"; pass=$((pass + 1))
+else
+  printf 'FAIL  %-56s not an array\n' "caller keys response carries a keys list"; fail=$((fail + 1))
+fi
+# The list is identity and masked hints only. A verifier, a salt, or a
+# pepper reaching the client would be a leak the secret tripwire cannot
+# see, because the script does not know the stored values.
+if grep -qE '"secret_hash"|"secretHash"|"secret_salt"|"salt"|"pepper"' "$BODY"; then
+  printf 'FAIL  %-56s present\n' "caller keys response carries no verifier material"; fail=$((fail + 1))
+else
+  printf 'PASS  %-56s absent\n' "caller keys response carries no verifier material"; pass=$((pass + 1))
+fi
 
 NEWID=""
 if [ "$WRITES" = "1" ]; then
