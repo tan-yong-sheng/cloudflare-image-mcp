@@ -58,10 +58,19 @@ function parseKeyId(value: string): number | null {
   return Number.isSafeInteger(id) ? id : null;
 }
 
+/**
+ * Every admin response is per-operator state — pool health, masked key hints,
+ * caller keys — and none of it may outlive the session that fetched it, so no
+ * admin response is cacheable. The default lives here rather than on each
+ * handler so a new route cannot forget it (#125).
+ */
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
