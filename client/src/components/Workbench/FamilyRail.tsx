@@ -26,7 +26,7 @@ export function FamilyRail({
   if (loading && providers.length === 0) {
     return (
       <div id="adminRail" className="space-y-1">
-        <p className="text-xs opacity-60">Loading providers…</p>
+        <p className="text-xs text-muted">Loading providers…</p>
       </div>
     );
   }
@@ -52,7 +52,7 @@ export function FamilyRail({
               <FamilyMark providerId={provider.id} />
               {provider.displayName || provider.id}
             </div>
-            <div className="text-xs opacity-60 mt-1">
+            <div className="text-xs text-muted mt-1">
               {enabled}/{familyKeys.length} active
             </div>
           </button>

@@ -123,9 +123,7 @@ export function ResultPanel({
           </div>
           <div
             id="initialPrompt"
-            className={`text-center text-gray-400 dark:text-gray-600${
-              showInitial ? "" : " hidden"
-            }`}
+            className={`text-center text-muted${showInitial ? "" : " hidden"}`}
           >
             <i className="fa-solid fa-image-portrait text-4xl mb-2" />
             <p>Click generate to create an image</p>

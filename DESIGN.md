@@ -7,7 +7,7 @@ omitted:
     reason: "No global spacing token variables defined in client/src/index.css; layout relies on standard Tailwind utility spacing."
 colors:
   primary: "#5046e5"
-  primary-light: "#6e67eb"
+  primary-light: "#675fe8"
   primary-dark: "#4338ca"
   secondary: "#f0f4f8"
   text: "#1a202c"
@@ -70,8 +70,8 @@ An explicit choice is stored under `theme` and wins over the system preference; 
 
 | Semantic Token  | Light Mode (Default) | Dark Mode (`.dark`) | Application Role                                           |
 | :-------------- | :------------------- | :------------------ | :--------------------------------------------------------- |
-| `primary`       | `#5046e5`            | `#6e67eb`           | Primary action buttons, active slider thumbs, icon accents |
-| `primary-light` | `#6e67eb`            | `#8a84ee`           | Hover state for primary buttons                            |
+| `primary`       | `#5046e5`            | `#675fe8`           | Primary action buttons, active slider thumbs, icon accents |
+| `primary-light` | `#675fe8`            | `#8a84ee`           | Hover state for primary buttons                            |
 | `primary-dark`  | `#4338ca`            | `#5046e5`           | Active/pressed state for primary buttons                   |
 | `secondary`     | `#f0f4f8`            | `#2d3748`           | Secondary button backgrounds (no other current consumer)   |
 | `text`          | `#1a202c`            | `#f7fafc`           | Primary copy, titles, field labels                         |

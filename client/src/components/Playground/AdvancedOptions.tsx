@@ -131,7 +131,7 @@ export function AdvancedOptions({
           <label htmlFor="seed" className="block text-sm font-medium mb-1">
             Seed (leave empty for random)
           </label>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <input
               type="number"
               id="seed"
@@ -143,7 +143,7 @@ export function AdvancedOptions({
             <button
               id="randomSeed"
               type="button"
-              className="btn btn-secondary text-sm py-1 px-3"
+              className="btn btn-secondary btn-icon rounded"
               aria-label="Randomize seed"
               onClick={() =>
                 onSeedChange(String(Math.floor(Math.random() * 4294967295)))
