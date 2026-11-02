@@ -1074,24 +1074,260 @@ describe("caller-key create (#126)", () => {
     };
   }
 
-  function post(body: unknown, extraHeaders?: HeadersInit): Request {
+  function post(body: unknown): Request {
     return new Request("https://worker.test/api/admin/caller-keys", {
       method: "POST",
       headers: bearer("user-key", {
         "X-Admin-Key": "admin-key",
         "Content-Type": "application/json",
-        ...extraHeaders,
       }),
-      body: typeof body === "string" ? body : JSON.stringify(body),
+      body: JSON.stringify(body),
     });
   }
 
-  test("no bearer at all is a 401 through the existing gate", async () => {
-    const response = await worker.fetch(
+  test("creation needs both gates", async () => {
+    const noBearer = await worker.fetch(
       new Request("https://worker.test/api/admin/caller-keys", {
         method: "POST",
         headers: { "X-Admin-Key": "admin-key" },
-        body: "{}",
+        body: JSON.stringify({ name: "CI" }),
+      }),
+      env()
+    );
+    expect(noBearer.status).toBe(401);
+    const { store } = capturingStore();
+    const wrongAdmin = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(wrongAdmin?.status).toBe(403);
+  });
+
+  test("creation returns the plaintext once under no-store", async () => {
+    const { store, writes } = capturingStore();
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(201);
+    const body = (await response!.json()) as {
+      key: Record<string, unknown>;
+      secret: string;
+    };
+    // The plaintext is the one-shot surface: reserved prefix + 24 hex.
+    expect(body.secret).toMatch(/^sk-mgmt-[0-9a-f]{24}$/);
+    expect(body.key).toEqual({
+      id: 7,
+      name: "CI",
+      prefix: "sk-mgmt-",
+      suffix: body.secret.slice(-4),
+      enabled: true,
+      created_at: expect.any(Number),
+    });
+    // The row got the keyed verifier, not the plaintext. The batch is
+    // the key row, the config bump, and the audit row (#128).
+    expect(writes).toHaveLength(3);
+    expect(writes[0].sql).toContain("INSERT INTO caller_keys");
+    expect(writes[1].sql).toContain("UPDATE config_versions");
+    expect(writes[2].sql).toContain("INSERT INTO admin_audit");
+    const hash = writes[0].params[1];
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).not.toBe(body.secret);
+    // And the one-shot surface rides no-store: a cached 201 would hand
+    // the plaintext to whoever reads the cache later.
+    expect(response!.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  test("the response never names the verifier", async () => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    const text = await response!.text();
+    expect(text).not.toContain("secret_hash");
+    expect(text).not.toContain("secretHash");
+    expect(text).not.toContain("pepper");
+    const key = (JSON.parse(text) as { key: Record<string, unknown> }).key;
+    expect(Object.keys(key).sort()).toEqual([
+      "created_at",
+      "enabled",
+      "id",
+      "name",
+      "prefix",
+      "suffix",
+    ]);
+  });
+
+  test("an operator secret claims no prefix", async () => {
+    const { store, writes } = capturingStore();
+    const response = await handleAdmin(
+      post({ name: "brought", secret: "op-secret-1" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(201);
+    const body = (await response!.json()) as {
+      key: { prefix: string; suffix: string };
+      secret: string;
+    };
+    expect(body.key.prefix).toBe("");
+    // Below the hint threshold (11 characters), so no suffix is published.
+    expect(body.key.suffix).toBe("");
+    // What arrived is what was verified: the callback input is the
+    // operator's secret, byte for byte.
+    expect(writes[0].params[0]).toBe("brought");
+  });
+
+  test.each([
+    ["a name over 120 characters", { name: "x".repeat(121) }],
+    ["a too-short secret", { name: "k", secret: "short1!" }],
+    ["a secret with a space", { name: "k", secret: "has space" }],
+    [
+      "a secret claiming the reserved prefix",
+      { name: "k", secret: "sk-mgmt-abc" },
+    ],
+    ["a non-string name", { name: 42 }],
+    ["a non-string secret", { secret: 42 }],
+  ])("validation rejects %s with 400", async (_label, body) => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post(body),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(400);
+    const envelope = (await response!.json()) as {
+      error: { message: string; type: string; code: string | null };
+    };
+    expect(envelope.error.type).toBe("invalid_request_error");
+    expect(envelope.error.message.length).toBeGreaterThan(0);
+  });
+
+  test("a duplicate name is a 409", async () => {
+    const { store } = capturingStore({
+      commitError: new Error("UNIQUE constraint failed: caller_keys.name"),
+    });
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(409);
+  });
+
+  test("a duplicate secret is a 409 naming the secret, not the name", async () => {
+    const { store } = capturingStore({
+      commitError: new Error(
+        "UNIQUE constraint failed: caller_keys.secret_hash"
+      ),
+    });
+    const response = await handleAdmin(
+      post({ name: "two", secret: "shared-secret-1" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(409);
+    const envelope = (await response!.json()) as {
+      error: { message: string };
+    };
+    expect(envelope.error.message).toContain("secret");
+  });
+
+  test("a malformed body is a 400", async () => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post("{not json"),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(400);
+  });
+});
+
+describe("admin keys live test (#149)", () => {
+  // The live-test route runs one minimal real inference per (key, model)
+  // pairing. This block pins the contract the workbench card (#153) consumes:
+  // the two-gate order every admin route shares, the request body shape, and
+  // the quota-waste guards (double wildcard, pairing cap). Execution tests
+  // stub global fetch explicitly — no-network.ts throws on unstubbed calls,
+  // so a forgotten stub fails loudly instead of reading as a probe failure.
+
+  /** D1-shaped fake serving the probe's key rows from provider_keys. */
+  function dbWithProbeRows(rows: Record<string, unknown>[]): unknown {
+    return {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => null,
+          all: async () =>
+            sql.includes("FROM provider_keys")
+              ? { results: rows }
+              : { results: [] },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return { ...stmt, bind: () => ({ ...stmt }) };
+      },
+      batch: async () => [],
+    };
+  }
+
+  function envWithDb(db: unknown): Env {
+    return { ...env(), PROVIDER_DB: db } as unknown as Env;
+  }
+
+  function post(path: string, body: unknown, adminKey = "admin-key"): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "POST",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": adminKey }),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function statusOf(request: Request, db?: unknown): Promise<Response> {
+    const response = await worker.fetch(
+      request,
+      db === undefined ? env() : envWithDb(db)
+    );
+    return response;
+  }
+
+  test("the shared routes module exports the test path the client imports", async () => {
+    const routes = await import("../routes.js");
+    expect(routes.ADMIN_KEYS_TEST_PATH).toBe("/api/admin/keys/test");
+  });
+
+  test("no bearer at all is a 401 through the existing gate", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: { "X-Admin-Key": "admin-key" },
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("wrong bearer is a 401 even with the right admin key", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: bearer("wrong-key", { "X-Admin-Key": "admin-key" }),
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
       }),
       env()
     );
@@ -1100,13 +1336,15 @@ describe("caller-key create (#126)", () => {
 
   test("right bearer but wrong admin key is a 403", async () => {
     const response = await worker.fetch(
-      post({}, { "X-Admin-Key": "wrong-admin-key" }),
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: bearer("user-key", { "X-Admin-Key": "wrong-admin-key" }),
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
+      }),
       env()
     );
     expect(response.status).toBe(403);
   });
-
-  test("a blank secret is generated and returned exactly once", async () => {
     const { store, writes } = capturingStore();
     const response = await handleAdmin(
       post({ name: "CI" }),
@@ -1647,5 +1885,70 @@ describe("review round 2 fixes", () => {
     expect(hasConfiguredEnvKeys({ API_KEYS: "   " } as Env)).toBe(false);
     expect(hasConfiguredEnvKeys({ API_KEYS: "" } as Env)).toBe(false);
     expect(hasConfiguredEnvKeys({} as Env)).toBe(false);
+  });
+
+  test("an unconfigured bearer gate refuses the live test even with the right management key", async () => {
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).API_KEYS;
+    const response = await worker.fetch(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: ["m"] }),
+      unconfigured
+    );
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as {
+      error: { code: string | null };
+    };
+    expect(body.error.code).toBe("admin_disabled");
+  });
+
+  test("the live test needs a store like every other keyed route (no db is a 500)", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: ["m"] })
+    );
+    expect(response.status).toBe(500);
+  });
+
+  test("a body that is not shaped like the contract is a 400", async () => {
+    const db = dbWithProbeRows([]);
+    for (const body of [
+      { modelIds: ["@cf/x"] }, // keyIds missing
+      { keyIds: [1] }, // modelIds missing
+      { keyIds: 1, modelIds: ["@cf/x"] }, // keyIds not an array
+      { keyIds: [1], modelIds: "@cf/x" }, // modelIds not an array
+      { keyIds: [], modelIds: ["@cf/x"] }, // empty key list
+      { keyIds: [1], modelIds: [] }, // empty model list
+      { keyIds: ["1"], modelIds: ["@cf/x"] }, // string key id
+      { keyIds: [1.5], modelIds: ["@cf/x"] }, // non-integer key id
+      { keyIds: [1], modelIds: [42] }, // numeric model id
+      { keyIds: [1], modelIds: [""] }, // empty model id
+      { keyIds: ["*", 1], modelIds: ["@cf/x"] }, // wildcard mixed with ids
+      { keyIds: [1], modelIds: ["*", "@cf/x"] }, // wildcard mixed with ids
+    ]) {
+      const response = await statusOf(post("/api/admin/keys/test", body), db);
+      expect(response.status, `body ${JSON.stringify(body)}`).toBe(400);
+    }
+  });
+
+  test("both wildcards together are refused with the quota guard as a 400", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: ["*"], modelIds: ["*"] }),
+      dbWithProbeRows([])
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/subrequest|quota/i);
+  });
+
+  test("a pairing count over the cap is refused before any inference runs", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", {
+        keyIds: Array.from({ length: 51 }, (_, i) => i + 1),
+        modelIds: ["@cf/black-forest-labs/flux-1-schnell"],
+      }),
+      dbWithProbeRows([])
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/50/);
   });
 });

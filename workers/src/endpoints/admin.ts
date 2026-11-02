@@ -25,6 +25,7 @@ import {
   ADMIN_CALLER_KEYS_PATH,
   ADMIN_HEALTH_PATH,
   ADMIN_KEYS_PATH,
+  ADMIN_KEYS_TEST_PATH,
 } from "../routes.js";
 import {
   maskToken,
@@ -60,7 +61,12 @@ import {
 } from "../services/admin-store.js";
 
 /** Routes the client also calls; workers/src/routes.ts is the shared source. */
-export { ADMIN_CALLER_KEYS_PATH, ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH };
+export {
+  ADMIN_CALLER_KEYS_PATH,
+  ADMIN_HEALTH_PATH,
+  ADMIN_KEYS_PATH,
+  ADMIN_KEYS_TEST_PATH,
+};
 
 /**
  * Ids arrive as path text. Anything past a safe integer cannot address a row
@@ -385,6 +391,9 @@ export async function handleAdmin(
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
+    if (request.method === "POST" && path === ADMIN_KEYS_TEST_PATH) {
+      return await handleKeysTest(request, env, active);
+    }
     const rotate = path.match(/^\/api\/admin\/keys\/(\d+)\/rotate$/);
     if (request.method === "POST" && rotate) {
       const id = parseKeyId(rotate[1]);
@@ -646,6 +655,110 @@ async function handleDeleteKey(
   } catch (error) {
     return storeError(error);
   }
+}
+
+// ============================================================================
+// Live key test (#149) - POST /api/admin/keys/test
+// ============================================================================
+// One minimal real inference per (key, model) pairing, reported per pairing.
+// The quota-waste guards run before anything else: wildcards on both lists
+// and pairing counts over the cap are refused up front, because every
+// pairing is a provider call and Workers cap subrequests per request — an
+// over-wide request would fail partway with quota already spent.
+
+/** Most pairings one live-test request may run (#149). */
+const MAX_TEST_PAIRINGS = 50;
+
+function isKeyIdEntry(entry: unknown): entry is number {
+  return typeof entry === "number" && Number.isInteger(entry);
+}
+
+function isModelIdEntry(entry: unknown): entry is string {
+  return typeof entry === "string" && entry.length > 0;
+}
+
+/**
+ * One target list from the live-test body: either the wildcard, alone, or a
+ * list of typed ids. `["*", 42]` is a caller bug, not "everything plus one
+ * more" — the body contract is `number[] | ["*"]` for keys and
+ * `string[] | ["*"]` for models, so anything else is a 400 before any
+ * pairing is resolved.
+ */
+function parseTestIds<T>(
+  value: unknown,
+  field: string,
+  isEntry: (entry: unknown) => entry is T,
+  entryName: string
+): { wildcard: boolean; ids: T[] } {
+  if (!Array.isArray(value)) {
+    throw new AdminStoreError(400, `${field} must be an array`);
+  }
+  if (value.length === 0) {
+    throw new AdminStoreError(400, `${field} must not be empty`);
+  }
+  if (value.includes("*")) {
+    if (value.length > 1) {
+      throw new AdminStoreError(
+        400,
+        `${field} must be either ["*"] or a list of ${entryName}s`
+      );
+    }
+    return { wildcard: true, ids: [] };
+  }
+  const ids: T[] = [];
+  for (const entry of value) {
+    if (!isEntry(entry)) {
+      throw new AdminStoreError(400, `${field} entries must be ${entryName}s`);
+    }
+    ids.push(entry);
+  }
+  return { wildcard: false, ids };
+}
+
+/**
+ * POST /api/admin/keys/test — probe provider keys with minimal inferences
+ * (#149). Both gates already ran. The quota guards (double wildcard,
+ * pairing cap) refuse over-wide requests before any inference is scheduled;
+ * unknown ids and refused pairings are reported as failed entries in the
+ * same response shape instead of failing the request.
+ */
+async function handleKeysTest(
+  request: Request,
+  env: Env,
+  store: AdminD1
+): Promise<Response> {
+  const body = await requestJson(request);
+  const keys = parseTestIds(body["keyIds"], "keyIds", isKeyIdEntry, "key id");
+  const models = parseTestIds(
+    body["modelIds"],
+    "modelIds",
+    isModelIdEntry,
+    "model id"
+  );
+  if (keys.wildcard && models.wildcard) {
+    throw new AdminStoreError(
+      400,
+      'keyIds and modelIds cannot both be ["*"]: every key against every ' +
+        "model can exceed the Worker's per-request subrequest limit and burn " +
+        "provider quota. Pick specific keys or models."
+    );
+  }
+  if (
+    !keys.wildcard &&
+    !models.wildcard &&
+    keys.ids.length * models.ids.length > MAX_TEST_PAIRINGS
+  ) {
+    throw new AdminStoreError(
+      400,
+      `refusing to run ${keys.ids.length * models.ids.length} pairings: a ` +
+        `live-test request is capped at ${MAX_TEST_PAIRINGS} because every ` +
+        "pairing is one provider inference and Workers cap subrequests per " +
+        "request. Narrow the key or model list."
+    );
+  }
+  // The per-pairing probe executor lands with its own slice; until then an
+  // allowed request is an honest server error, never a fabricated result.
+  return internalError("live-test probe is not wired up yet");
 }
 
 /**
