@@ -7,18 +7,39 @@
 // authenticates to Cloudflare with it), while a caller key is only ever
 // COMPARED. So it is stored as a verifier, not as an envelope.
 //
-// The store owns the read side here: the workbench lists caller keys by
-// name and masked value, and the secret never leaves the server. The mask
-// is composed here rather than in the browser, for the same reason the
-// provider-key health route composes its hint server-side: the client
-// never holds the material, so it cannot be the thing that decides what
-// may be shown.
+// The store owns the read side and the create path: the workbench lists
+// caller keys by name and masked value, and the create path (#126) turns a
+// name plus an optional operator secret into a row. The secret never leaves
+// the server — except once, in the 201 the create returns, because a
+// one-way verifier cannot reproduce it later. The mask is composed here
+// rather than in the browser, for the same reason the provider-key health
+// route composes its hint server-side: the client never holds the
+// material, so it cannot be the thing that decides what may be shown.
 //
 // Reads live in the store so the endpoint contains zero SQL. The D1 seam
 // (AdminD1) is reused from the provider-key store rather than duplicated:
 // both are the same engine surface, and the endpoint already holds one.
 
-import type { AdminD1 } from "./admin-store.js";
+import type { AdminD1, AdminWrite } from "./admin-store.js";
+import { AdminStoreError, isUniqueViolation } from "./admin-store.js";
+import { generateCallerSecret } from "./caller-crypto.js";
+
+/**
+ * The prefix of every secret this Worker generates, and the prefix an
+ * operator-supplied secret must not claim ("sk-mgmt-" is reserved — a
+ * brought key must never be mistakable for one of ours).
+ */
+export const GENERATED_CALLER_PREFIX = "sk-mgmt-";
+
+/** Operator secrets are 8–256 printable ASCII characters with no spaces. */
+const MIN_OPERATOR_SECRET_LENGTH = 8;
+const MAX_OPERATOR_SECRET_LENGTH = 256;
+
+/** Key names are 1–120 characters. */
+const MAX_NAME_LENGTH = 120;
+
+/** Printable ASCII without space: the operator-secret character set. */
+const OPERATOR_SECRET_PATTERN = /^[\x21-\x7e]+$/;
 
 /**
  * A caller key as the workbench lists it.
@@ -85,4 +106,171 @@ export async function listCallerKeys(db: AdminD1): Promise<CallerKeySummary[]> {
     createdAt: Number(row["created_at"] ?? 0),
     updatedAt: Number(row["updated_at"] ?? 0),
   }));
+}
+
+/** The key half of the create response — never the verifier, never the salt. */
+export interface CreatedCallerKey {
+  key: {
+    id: number;
+    name: string;
+    prefix: string;
+    suffix: string;
+    enabled: boolean;
+    /** Unix seconds. */
+    created_at: number;
+  };
+  /**
+   * The plaintext, returned exactly once, in the 201 that created the key.
+   * It is not stored — the row holds the verifier — so it can never be
+   * served again; a lost secret is rotated, not revealed.
+   */
+  secret: string;
+}
+
+export interface CreateCallerKeyInput {
+  /** 1–120 characters; absent or blank defaults to "Key N". */
+  name?: string;
+  /**
+   * The operator's own secret (8–256 printable ASCII, no spaces, not
+   * starting the reserved prefix). Absent or blank — the server generates.
+   */
+  secret?: string;
+}
+
+/**
+ * Create a caller key (#126).
+ *
+ * The verifier callback is injected the way the provider store's seal is:
+ * secret material is turned into its verifier here, inside the request
+ * that carries it, and the plaintext is never persisted. The INSERT is a
+ * single atomic statement — the audit and config-version writes join this
+ * batch when the mutation paths land (#128).
+ *
+ * Uniqueness is enforced by the schema (the name UNIQUE constraint and the
+ * uq_caller_keys_hash index) and mapped to 409 here, so a duplicate can
+ * never slip through a read-then-write race.
+ */
+export async function createCallerKey(
+  db: AdminD1,
+  verifier: (secret: string) => Promise<string>,
+  input: CreateCallerKeyInput
+): Promise<CreatedCallerKey> {
+  if (input.name !== undefined && typeof input.name !== "string") {
+    throw new AdminStoreError(400, "name must be a string");
+  }
+  if (input.secret !== undefined && typeof input.secret !== "string") {
+    throw new AdminStoreError(400, "secret must be a string");
+  }
+  const name = await resolveCallerKeyName(db, input.name);
+  const brought = input.secret !== undefined && input.secret.length > 0;
+  if (brought) validateOperatorSecret(input.secret as string);
+  const secret = brought ? (input.secret as string) : generateCallerSecret();
+  const hash = await verifier(secret);
+  const now = Math.floor(Date.now() / 1000);
+  // Masking decision (#126): last-4 for both key kinds, the spec default.
+  // The columns are length-agnostic, so a move to last-6 for generated
+  // keys is a one-line change here.
+  const prefix = brought ? "" : GENERATED_CALLER_PREFIX;
+  const suffix = secret.slice(-4);
+  const insert: AdminWrite = {
+    sql:
+      "INSERT INTO caller_keys " +
+      "(name, secret_hash, prefix, suffix, enabled, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, 1, ?, ?)",
+    params: [name, hash, prefix, suffix, now, now],
+  };
+  let keyId: number | null;
+  try {
+    keyId = (await db.commit([insert])).keyId;
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("secret_hash")) {
+        // One secret is one key: the same verifier is already stored.
+        throw new AdminStoreError(
+          409,
+          "that secret is already used by another key"
+        );
+      }
+      throw new AdminStoreError(409, `name '${name}' already exists`);
+    }
+    throw error;
+  }
+  // The id comes back from the atomic commit; the read is the same
+  // belt-and-braces fallback addProviderKey uses for an engine that
+  // reports no row id. A failure here happens only AFTER the insert
+  // landed, so it is retried, never reported as a failed create the
+  // caller would repeat into a duplicate 409.
+  let id: number | undefined = typeof keyId === "number" ? keyId : undefined;
+  for (let attempt = 0; attempt < 3 && id === undefined; attempt++) {
+    try {
+      const row = await db
+        .prepare("SELECT id FROM caller_keys WHERE name = ?")
+        .bind(name)
+        .first<{ id: number }>();
+      if (row?.id !== undefined) {
+        id = row.id;
+        break;
+      }
+    } catch {
+      // Transient read failure after successful commit; retry.
+    }
+  }
+  if (id === undefined) {
+    throw new AdminStoreError(
+      500,
+      `key committed successfully but id resolution for '${name}' failed; query health to verify`
+    );
+  }
+  return {
+    key: { id, name, prefix, suffix, enabled: true, created_at: now },
+    secret,
+  };
+}
+
+/**
+ * Resolve the create name: blank or absent defaults to "Key N" (N is one
+ * past the current row count — a race that lands two defaults together
+ * fails the UNIQUE constraint and surfaces as a 409, never a silent dup).
+ */
+async function resolveCallerKeyName(
+  db: AdminD1,
+  raw: string | undefined
+): Promise<string> {
+  const name = (raw ?? "").trim();
+  if (name.length === 0) {
+    const row = await db
+      .prepare("SELECT COUNT(*) AS n FROM caller_keys")
+      .first<{ n: number }>();
+    return `Key ${(row?.n ?? 0) + 1}`;
+  }
+  if (name.length > MAX_NAME_LENGTH) {
+    throw new AdminStoreError(400, "name must be 1-120 characters");
+  }
+  return name;
+}
+
+/** The operator-supplied-secret rules, in the order an operator can act on. */
+function validateOperatorSecret(secret: string): void {
+  if (
+    secret.length < MIN_OPERATOR_SECRET_LENGTH ||
+    secret.length > MAX_OPERATOR_SECRET_LENGTH
+  ) {
+    throw new AdminStoreError(
+      400,
+      `secret must be ${MIN_OPERATOR_SECRET_LENGTH}-${MAX_OPERATOR_SECRET_LENGTH} characters`
+    );
+  }
+  if (!OPERATOR_SECRET_PATTERN.test(secret)) {
+    throw new AdminStoreError(
+      400,
+      "secret must be printable ASCII with no spaces"
+    );
+  }
+  if (secret.startsWith(GENERATED_CALLER_PREFIX)) {
+    throw new AdminStoreError(
+      400,
+      `secret must not start with the reserved prefix ${GENERATED_CALLER_PREFIX}`
+    );
+  }
 }

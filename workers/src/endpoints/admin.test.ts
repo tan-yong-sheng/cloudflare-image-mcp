@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import worker from "../index.js";
 import { handleAdmin } from "./admin.js";
-import type { AdminD1 } from "../services/admin-store.js";
+import type { AdminD1, AdminWrite } from "../services/admin-store.js";
 import { resetPoolCache } from "../services/pool-cache.js";
 import { sealToken } from "../services/provider-crypto.js";
 import type { Env } from "../types.js";
@@ -1036,5 +1036,243 @@ describe("caller-key list (#125)", () => {
         (JSON.parse(text) as { keys: Record<string, unknown>[] }).keys[0] ?? {}
       ).sort()
     ).toEqual(["createdAt", "enabled", "id", "maskedKey", "name", "updatedAt"]);
+  });
+});
+
+describe("caller-key create (#126)", () => {
+  // The create path is where a caller key is born: name plus an optional
+  // operator secret in, one 201 carrying the plaintext out, a keyed
+  // verifier in D1. What the tests pin: the two gates hold, the plaintext
+  // appears exactly once and never in a form that could be served again,
+  // validation is the spec's, and the 201 cannot linger in a cache.
+
+  /** A store stub that records the writes and reports a fixed row id. */
+  function capturingStore(
+    options: {
+      commitError?: Error;
+    } = {}
+  ): { store: AdminD1; writes: AdminWrite[] } {
+    const writes: AdminWrite[] = [];
+    return {
+      writes,
+      store: {
+        prepare: (sql: string) => {
+          const stmt = {
+            first: async <T>() =>
+              (sql.includes("COUNT(*)") ? { n: 0 } : null) as T | null,
+            all: async () => ({ results: [] }),
+            run: async () => ({ meta: { changes: 0 } }),
+          };
+          return { ...stmt, bind: () => ({ ...stmt }) };
+        },
+        commit: async (incoming) => {
+          if (options.commitError) throw options.commitError;
+          writes.push(...incoming);
+          return { keyId: 7 };
+        },
+      },
+    };
+  }
+
+  function post(body: unknown, extraHeaders?: HeadersInit): Request {
+    return new Request("https://worker.test/api/admin/caller-keys", {
+      method: "POST",
+      headers: bearer("user-key", {
+        "X-Admin-Key": "admin-key",
+        "Content-Type": "application/json",
+        ...extraHeaders,
+      }),
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  }
+
+  test("no bearer at all is a 401 through the existing gate", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/caller-keys", {
+        method: "POST",
+        headers: { "X-Admin-Key": "admin-key" },
+        body: "{}",
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("right bearer but wrong admin key is a 403", async () => {
+    const response = await worker.fetch(
+      post({}, { "X-Admin-Key": "wrong-admin-key" }),
+      env()
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("a blank secret is generated and returned exactly once", async () => {
+    const { store, writes } = capturingStore();
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(201);
+    const body = (await response!.json()) as {
+      key: Record<string, unknown>;
+      secret: string;
+    };
+    // The plaintext is the one-shot surface: reserved prefix + 24 hex.
+    expect(body.secret).toMatch(/^sk-mgmt-[0-9a-f]{24}$/);
+    expect(body.key).toEqual({
+      id: 7,
+      name: "CI",
+      prefix: "sk-mgmt-",
+      suffix: body.secret.slice(-4),
+      enabled: true,
+      created_at: expect.any(Number),
+    });
+    // The row got the keyed verifier, not the plaintext.
+    expect(writes).toHaveLength(1);
+    expect(writes[0].sql).toContain("INSERT INTO caller_keys");
+    const hash = writes[0].params[1];
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).not.toBe(body.secret);
+    // And the one-shot surface rides no-store: a cached 201 would hand
+    // the plaintext to whoever reads the cache later.
+    expect(response!.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  test("the response never names the verifier", async () => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    const text = await response!.text();
+    expect(text).not.toContain("secret_hash");
+    expect(text).not.toContain("secretHash");
+    expect(text).not.toContain("pepper");
+    const key = (JSON.parse(text) as { key: Record<string, unknown> }).key;
+    expect(Object.keys(key).sort()).toEqual([
+      "created_at",
+      "enabled",
+      "id",
+      "name",
+      "prefix",
+      "suffix",
+    ]);
+  });
+
+  test("an operator secret claims no prefix", async () => {
+    const { store, writes } = capturingStore();
+    const response = await handleAdmin(
+      post({ name: "brought", secret: "op-secret-1" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(201);
+    const body = (await response!.json()) as {
+      key: { prefix: string; suffix: string };
+      secret: string;
+    };
+    expect(body.key.prefix).toBe("");
+    expect(body.key.suffix).toBe("et-1");
+    // What arrived is what was verified: the callback input is the
+    // operator's secret, byte for byte.
+    expect(writes[0].params[0]).toBe("brought");
+  });
+
+  test.each([
+    ["a name over 120 characters", { name: "x".repeat(121) }],
+    ["a too-short secret", { name: "k", secret: "short1!" }],
+    ["a secret with a space", { name: "k", secret: "has space" }],
+    [
+      "a secret claiming the reserved prefix",
+      { name: "k", secret: "sk-mgmt-abc" },
+    ],
+    ["a non-string name", { name: 42 }],
+    ["a non-string secret", { secret: 42 }],
+  ])("validation rejects %s with 400", async (_label, body) => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post(body),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(400);
+    const envelope = (await response!.json()) as {
+      error: { message: string; type: string; code: string | null };
+    };
+    expect(envelope.error.type).toBe("invalid_request_error");
+    expect(envelope.error.message.length).toBeGreaterThan(0);
+  });
+
+  test("a duplicate name is a 409", async () => {
+    const { store } = capturingStore({
+      commitError: new Error("UNIQUE constraint failed: caller_keys.name"),
+    });
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(409);
+  });
+
+  test("a duplicate secret is a 409 naming the secret, not the name", async () => {
+    const { store } = capturingStore({
+      commitError: new Error(
+        "UNIQUE constraint failed: caller_keys.secret_hash"
+      ),
+    });
+    const response = await handleAdmin(
+      post({ name: "two", secret: "shared-secret-1" }),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(409);
+    const envelope = (await response!.json()) as {
+      error: { message: string };
+    };
+    expect(envelope.error.message).toContain("secret");
+  });
+
+  test("a malformed body is a 400", async () => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post("{not json"),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(400);
+  });
+
+  test("a non-object body is a 400", async () => {
+    const { store } = capturingStore();
+    const response = await handleAdmin(
+      post("[1,2]"),
+      "/api/admin/caller-keys",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(400);
+  });
+
+  test("a missing data key is a 500: no verifier can be derived", async () => {
+    const { store } = capturingStore();
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).PROVIDER_DATA_KEY;
+    const response = await handleAdmin(
+      post({ name: "CI" }),
+      "/api/admin/caller-keys",
+      unconfigured,
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(500);
   });
 });

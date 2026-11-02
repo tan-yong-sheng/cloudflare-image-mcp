@@ -13,9 +13,12 @@
 // constant-time so a wrong admin key isn't a timing oracle.
 //
 // Caller keys are the other kind of secret this API touches: the bearer
-// tokens a client sends to reach /v1/* and /mcp*. They are read-only here
-// for now (#125): the list carries names, masked hints, and the enabled
-// flag, and never a verifier or a secret.
+// tokens a client sends to reach /v1/* and /mcp*. The list (#125) carries
+// names, masked hints, and the enabled flag; the create path (#126) turns
+// a name plus an optional operator secret into a row and returns the
+// plaintext exactly once — a one-way verifier cannot reproduce it, so this
+// 201 is the only time the secret is ever served. It rides no-store like
+// every admin response, so the one-shot secret cannot linger in a cache.
 
 import type { Env } from "../types.js";
 import {
@@ -28,7 +31,11 @@ import {
   openEnvelope,
   sealToken,
 } from "../services/provider-crypto.js";
-import { listCallerKeys } from "../services/caller-store.js";
+import {
+  callerKeyVerifier,
+  deriveCallerPepper,
+} from "../services/caller-crypto.js";
+import { createCallerKey, listCallerKeys } from "../services/caller-store.js";
 import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
@@ -335,6 +342,9 @@ export async function handleAdmin(
       // never a verifier, never a secret.
       return json({ keys: await listCallerKeys(active) });
     }
+    if (request.method === "POST" && path === ADMIN_CALLER_KEYS_PATH) {
+      return await handleCreateCallerKey(request, env, active);
+    }
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
@@ -590,6 +600,56 @@ async function handleDeleteKey(
 ): Promise<Response> {
   try {
     return json(await deleteProviderKey(store, keyId));
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+/**
+ * POST /api/admin/caller-keys — create a caller key (#126).
+ *
+ * Body: `{ name?, secret? }`. A blank name defaults to "Key N"; a blank
+ * secret is generated server-side (`sk-mgmt-` + 24 hex). The plaintext is
+ * returned exactly once, in this 201 — the row stores only the keyed
+ * verifier, so no later request can reveal it, and a lost secret is
+ * rotated. The 201 rides `Cache-Control: no-store` like every admin
+ * response, which matters more here than anywhere else: it carries the
+ * one-shot plaintext and must not linger in any cache.
+ */
+async function handleCreateCallerKey(
+  request: Request,
+  env: Env,
+  store: AdminD1
+): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await requestJson(request);
+  } catch (error) {
+    return storeError(error);
+  }
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (!dataKey) {
+    return internalError("no sealing key configured");
+  }
+  // The pepper is derived per request and held in closure only: it is
+  // never stored, logged, or returned. The store receives the verifier as
+  // a callback, the same seam the provider store's seal rides.
+  const pepper = await deriveCallerPepper(dataKey);
+  for (const field of ["name", "secret"] as const) {
+    if (body[field] !== undefined && typeof body[field] !== "string") {
+      return badRequest(`${field} must be a string`);
+    }
+  }
+  try {
+    const created = await createCallerKey(
+      store,
+      (secret) => callerKeyVerifier(pepper, secret),
+      {
+        name: body["name"] as string | undefined,
+        secret: body["secret"] as string | undefined,
+      }
+    );
+    return json(created, 201);
   } catch (error) {
     return storeError(error);
   }

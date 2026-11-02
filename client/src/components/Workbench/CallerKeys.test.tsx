@@ -288,3 +288,228 @@ describe("the API-keys page", () => {
     }
   });
 });
+
+describe("creating a caller key (#126)", () => {
+  // The form is the only writer this page has: name plus an optional
+  // secret in, one 201 out whose plaintext is shown once and never
+  // again. What these tests pin: the request carries what was typed
+  // (nothing more), the banner holds the plaintext until dismissed or
+  // locked, the fields clear after success but keep their values through
+  // a failure, and nothing lands in a storage backend.
+
+  const CREATED = {
+    key: {
+      id: 3,
+      name: "CI",
+      prefix: "sk-mgmt-",
+      suffix: "a1b2",
+      enabled: true,
+      created_at: 1_700_000_200,
+    },
+    secret: "sk-mgmt-0123456789abcdef012345",
+  };
+
+  function stubCreateApi(response: { status: number; body: unknown }) {
+    const posts: { body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (init?.method === "POST" && path === "/api/admin/caller-keys") {
+          posts.push({ body: JSON.parse(String(init.body)) });
+          return jsonResponse(response.body, response.status);
+        }
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return posts;
+  }
+
+  async function fillAndSubmit(
+    user: ReturnType<typeof userEvent.setup>,
+    values: { name: string; secret: string }
+  ) {
+    if (values.name) {
+      await user.type(screen.getByLabelText(/Name/), values.name);
+    }
+    if (values.secret) {
+      await user.type(screen.getByLabelText(/Your own secret/), values.secret);
+    }
+    await user.click(screen.getByRole("button", { name: /Add key/i }));
+  }
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the typed values and shows the plaintext once", async () => {
+    const posts = stubCreateApi({ status: 201, body: CREATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await fillAndSubmit(user, { name: "CI", secret: "" });
+
+    // A blank secret field sends no secret key at all: absence is how the
+    // client says "generate one", and an empty string would read as a
+    // zero-length operator secret.
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].body).toEqual({ name: "CI" });
+
+    const banner = await waitFor(() =>
+      document.getElementById("callerKeySecret")
+    );
+    expect(banner?.textContent).toContain(CREATED.secret);
+    // Success clears the fields — the secret must not linger in an input.
+    expect(
+      (screen.getByLabelText(/Your own secret/) as HTMLInputElement).value
+    ).toBe("");
+    expect((screen.getByLabelText(/Name/) as HTMLInputElement).value).toBe("");
+    // The list was refetched, so the new row appears without a reload.
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminCallerKeys")?.children.length
+      ).toBeGreaterThan(0)
+    );
+  });
+
+  it("sends an operator secret when one is typed", async () => {
+    const posts = stubCreateApi({ status: 201, body: CREATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await fillAndSubmit(user, { name: "brought", secret: "op-secret-1" });
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].body).toEqual({ name: "brought", secret: "op-secret-1" });
+  });
+
+  it("keeps the fields and shows the reason on a validation error", async () => {
+    stubCreateApi({
+      status: 400,
+      body: {
+        error: {
+          message: "secret must be printable ASCII with no spaces",
+          type: "invalid_request_error",
+          code: null,
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await fillAndSubmit(user, { name: "CI", secret: "has space" });
+
+    const message = await waitFor(() =>
+      document.getElementById("callerKeyAddError")
+    );
+    expect(message?.textContent).toContain("printable ASCII");
+    // A failed create leaves the form as the operator filled it, so the
+    // fix is an edit, not a retyping.
+    expect((screen.getByLabelText(/Name/) as HTMLInputElement).value).toBe(
+      "CI"
+    );
+    expect(
+      (screen.getByLabelText(/Your own secret/) as HTMLInputElement).value
+    ).toBe("has space");
+    // Nothing was created, so no banner exists to reveal.
+    expect(document.getElementById("callerKeyCreated")).toBeNull();
+  });
+
+  it("hides the one-shot secret on dismiss and never persists it", async () => {
+    stubCreateApi({ status: 201, body: CREATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await fillAndSubmit(user, { name: "CI", secret: "" });
+    await waitFor(() =>
+      expect(document.getElementById("callerKeySecret")).not.toBeNull()
+    );
+
+    await user.click(screen.getByRole("button", { name: /Hide the secret/i }));
+    // "Shown once" is a claim the DOM keeps: after the dismiss there is
+    // no copy of the plaintext left to read.
+    expect(document.getElementById("callerKeyCreated")).toBeNull();
+    expect(document.body.textContent).not.toContain(CREATED.secret);
+
+    for (const storage of [window.sessionStorage, window.localStorage]) {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index) ?? "";
+        expect(`${key}=${storage.getItem(key) ?? ""}`).not.toContain(
+          CREATED.secret
+        );
+      }
+    }
+    expect(document.cookie).not.toContain(CREATED.secret);
+  });
+
+  it("tears the one-shot secret down when the panel locks", async () => {
+    stubCreateApi({ status: 201, body: CREATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await fillAndSubmit(user, { name: "CI", secret: "" });
+    await waitFor(() =>
+      expect(document.getElementById("callerKeySecret")).not.toBeNull()
+    );
+
+    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+
+    // Locking ends the session: the banner goes with it, the same way the
+    // cached list does. Re-unlocking starts from a page with no secret.
+    expect(document.getElementById("callerKeyCreated")).toBeNull();
+    expect(document.body.textContent).not.toContain(CREATED.secret);
+  });
+
+  it("toggles the secret field between hidden and plain", async () => {
+    stubCreateApi({ status: 201, body: CREATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+
+    const secretInput = screen.getByLabelText(
+      /Your own secret/
+    ) as HTMLInputElement;
+    const eye = screen.getByRole("button", { name: /Show secret/i });
+    expect(secretInput.type).toBe("password");
+    expect(eye.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(eye);
+    expect(secretInput.type).toBe("text");
+    expect(eye.getAttribute("aria-pressed")).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: /Hide secret/i }));
+    expect(secretInput.type).toBe("password");
+  });
+
+  it("opts the secret field out of password managers", async () => {
+    stubCreateApi({ status: 201, body: CREATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+
+    const secretInput = screen.getByLabelText(
+      /Your own secret/
+    ) as HTMLInputElement;
+    // autocomplete="new-password" plus the 1Password opt-out: an
+    // operator-supplied secret is a credential, and no manager should
+    // offer to save the one the operator just made up.
+    expect(secretInput.getAttribute("autocomplete")).toBe("new-password");
+    expect(secretInput.hasAttribute("data-1p-ignore")).toBe(true);
+  });
+});
