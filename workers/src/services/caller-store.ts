@@ -481,14 +481,31 @@ export async function deleteCallerKey(
   if (!row) {
     throw new AdminStoreError(404, `unknown caller key ${keyId}`);
   }
-  await db.commit([
-    callerAuditWrite("caller_key_delete", keyId, row.name),
-    bumpWrite(),
+  // The DELETE leads the batch so the commit's changed-row count IS the
+  // delete's count: a key deleted between the read and the commit changes
+  // zero rows and answers 404 — the same ghost guarantee rotate/toggle/
+  // rename make. The audit row is guarded by changes() (the SQL function
+  // reads the preceding statement's count on the same connection), so a
+  // ghost commits a bump but no audit row; a real delete lands the trail
+  // — its caller_key_id resolving to NULL because the row is already gone,
+  // which the ON DELETE SET NULL produced anyway.
+  const commit = await db.commit([
     {
       sql: "DELETE FROM caller_keys WHERE id = ?",
       params: [keyId],
     },
+    {
+      sql:
+        "INSERT INTO admin_audit (actor, action, provider_id, caller_key_id, key_label) " +
+        "SELECT ?, 'caller_key_delete', NULL, " +
+        "(SELECT id FROM caller_keys WHERE id = ?), ? WHERE changes() > 0",
+      params: [ADMIN_ACTOR, keyId, row.name],
+    },
+    bumpWrite(),
   ]);
+  if (commit.changes === 0) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
   const warnings: string[] = [];
   if ((await envMirror?.(row.secret_hash)) === true) {
     warnings.push(ENV_MIRROR_WARNING);
