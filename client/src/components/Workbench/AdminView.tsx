@@ -13,6 +13,7 @@ import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
+import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
 
 type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
@@ -46,6 +47,11 @@ export function AdminView() {
   const health = useHealth(session);
   const mutations = useAdminMutations(session, endRefusedSession);
   const [selected, setSelected] = useState("");
+  // The operations rail collapses below the md breakpoint; this toggle
+  // opens it there. At md and above the rail is visible regardless, so
+  // the state only feeds the CSS classes and the toggle's expanded
+  // state — never a matchMedia branch.
+  const [operationsOpen, setOperationsOpen] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
   // The drawer whose own save is in flight. Another drawer opened while
@@ -227,6 +233,20 @@ export function AdminView() {
             {providers.length === 1 ? "provider family" : "provider families"}
           </span>
           <button
+            id="adminOpsToggle"
+            type="button"
+            className={`btn btn-primary p-2 h-10 flex items-center justify-center${
+              unlocked ? "" : " hidden"
+            }`}
+            aria-label="Toggle operations rail"
+            title="Toggle operations rail"
+            aria-expanded={operationsOpen}
+            onClick={() => setOperationsOpen((open) => !open)}
+          >
+            <i className="fa-solid fa-gear mr-2" />
+            Operations
+          </button>
+          <button
             id="adminApiKeysBtn"
             type="button"
             className="btn btn-secondary p-2 h-10 flex items-center justify-center"
@@ -350,6 +370,7 @@ export function AdminView() {
               </button>
             </div>
           </div>
+          <OperationsRail open={operationsOpen} />
         </div>
       </div>
 

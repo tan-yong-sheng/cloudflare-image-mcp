@@ -91,6 +91,35 @@ describe("model registry validity", () => {
     expect(sizes[0]).toBe("1024x1024");
   });
 
+  test("every model declares a cost class (#150)", () => {
+    // costClass is optional on the ModelConfig interface so hand-written
+    // fixtures elsewhere stay valid; this test is the enforcement point
+    // for the registry itself (AC #150).
+    for (const [id, config] of Object.entries(MODEL_CONFIGS)) {
+      expect(["free", "paid"], id).toContain(config.costClass);
+    }
+  });
+
+  test("the free cost class covers exactly the models priced $0 (#150)", () => {
+    // Conservative classification: "paid" unless a source proves the
+    // provider bills $0 for the model itself — docs/models/generation/*
+    // Unit Pricing lines, checked against the Cloudflare model and
+    // pricing pages on 2026-11-03. The account-level Neuron free tier
+    // does not make a priced model free, and Agnes' current $0
+    // promotion does not either (list price is non-zero). Reclassify
+    // here and in models.json together: the Free chip (#152) offers
+    // exactly this set.
+    const free = Object.entries(MODEL_CONFIGS)
+      .filter(([, config]) => config.costClass === "free")
+      .map(([id]) => id)
+      .sort();
+    expect(free).toEqual([
+      "@cf/bytedance/stable-diffusion-xl-lightning",
+      "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+      "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    ]);
+  });
+
   test("every model declares prompt, tasks, and width/height limits", () => {
     for (const config of Object.values(MODEL_CONFIGS)) {
       expect(config.parameters.prompt.required).toBe(true);
@@ -209,6 +238,15 @@ describe("model registry validity", () => {
       expect(entry.parameters.prompt.required).toBe(true);
       expect(entry.limits.maxSteps).toBeGreaterThanOrEqual(1);
       expect(entry.limits.minWidth).toBeLessThanOrEqual(entry.limits.maxWidth);
+    }
+  });
+
+  test("listModels carries the cost class the Free chip reads (#150)", () => {
+    // /api/internal/models spreads listModels() output verbatim, so a
+    // field absent from this projection is absent from the endpoint —
+    // the client's Free filter (#152) would have nothing to read.
+    for (const entry of listModels()) {
+      expect(["free", "paid"], entry.id).toContain(entry.costClass);
     }
   });
 

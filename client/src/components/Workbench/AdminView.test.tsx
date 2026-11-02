@@ -1015,3 +1015,109 @@ describe("the provider credentials workbench", () => {
     );
   });
 });
+
+describe("the operations rail", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders the third column with its three cards once unlocked", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The workbench row is three columns: the family rail, the key
+    // table, and the operations rail. jsdom has no layout, so the
+    // columns are asserted by DOM structure, not by computed width.
+    const row = document.querySelector("#adminPanel > div");
+    expect(row?.children).toHaveLength(3);
+    const rail = document.getElementById("adminOpsRail");
+    expect(rail).not.toBeNull();
+    expect(rail?.textContent).toContain("Model filters");
+    expect(rail?.textContent).toContain("Live test");
+    expect(rail?.textContent).toContain("Liveness history");
+    expect(document.getElementById("adminOpsCardFilters")).not.toBeNull();
+    expect(document.getElementById("adminOpsCardTest")).not.toBeNull();
+    expect(document.getElementById("adminOpsCardHistory")).not.toBeNull();
+  });
+
+  it("collapses the operations rail behind the top-bar toggle", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // Below the md breakpoint the rail is hidden until the top-bar
+    // toggle opens it; visibility itself is CSS-driven, so the rail
+    // stays in the DOM and the toggle only flips the class and the
+    // expanded state.
+    const toggle = screen.getByRole("button", {
+      name: /Toggle operations rail/i,
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "hidden"
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById("adminOpsRail")?.className).not.toContain(
+      "hidden"
+    );
+    // At md and above the rail is visible regardless of the toggle.
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "md:flex"
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("keeps the operations toggle behind the gate", async () => {
+    stubApi();
+    renderWorkbench();
+
+    // The rail lives inside the gated panel, so its toggle is gated
+    // with it: nothing operations-related is offered before unlock.
+    expect(document.getElementById("adminOpsToggle")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("keeps the key drawer on top of the open operations rail", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // With the rail expanded, the add drawer still overlays everything:
+    // it keeps its z-50 stacking and the rail stays mounted under it
+    // rather than being displaced by the overlay.
+    await user.click(
+      screen.getByRole("button", { name: /Toggle operations rail/i })
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+
+    expect(document.getElementById("adminSheet")?.className).toContain("z-50");
+    expect(document.getElementById("adminOpsRail")?.className).not.toContain(
+      "hidden"
+    );
+  });
+});
