@@ -9,6 +9,7 @@ import {
   ADMIN_CALLER_KEYS_PATH,
   ADMIN_HEALTH_PATH,
   ADMIN_KEYS_PATH,
+  ADMIN_KEYS_TEST_PATH,
 } from "../../../workers/src/routes";
 import { apiFetch, type ApiOptions, type ApiResult } from "./client";
 import { modelsQueryKey } from "./models";
@@ -16,6 +17,8 @@ import type {
   AdminCallerKeyCreated,
   AdminCallerKeys,
   AdminHealth,
+  KeyTestResponse,
+  RunKeyTestRequest,
 } from "./types";
 
 /**
@@ -91,6 +94,19 @@ export interface AdminSession {
    * locked panel's cached data is never reused by the next one.
    */
   sessionId: number;
+}
+
+/** The two scopes a live test can run in. */
+export type KeyTestScope = "key" | "model";
+
+/**
+ * Which scope a run request is. Scope 1 sends one concrete key id and
+ * the model wildcard; scope 2 sends the key wildcard and one concrete
+ * model id. The concrete side rides in the request's shape, so the
+ * scope is read off the request rather than remembered beside it.
+ */
+export function keyTestScope(request: RunKeyTestRequest): KeyTestScope {
+  return typeof request.keyIds[0] === "number" ? "key" : "model";
 }
 
 export async function fetchHealth(
@@ -553,5 +569,29 @@ export function useAdminMutations(
     onSettled: invalidate,
   });
 
-  return { addKey, updateKey, deleteKey, toggleKey };
+  // The live test is not a key mutation, but it rides the same gates and
+  // the same send pattern: the management key and bearer go out together,
+  // the error envelope becomes an AdminApiError, and a 401 is reported
+  // through onRefused so a refused session ends like every other one.
+  const testKeys = useMutation({
+    mutationKey: [...ADMIN_MUTATION_KEY, "test"],
+    mutationFn: async (
+      request: RunKeyTestRequest
+    ): Promise<KeyTestResponse> => {
+      const result = await apiFetch<KeyTestResponse>(ADMIN_KEYS_TEST_PATH, {
+        method: "POST",
+        body: request,
+        adminKey: session.adminKey,
+        authToken: session.bearerToken,
+      });
+      if (!result.ok) {
+        const failure = toError(result);
+        if (failure.status === 401) onRefused?.(failure);
+        throw failure;
+      }
+      return result.data as KeyTestResponse;
+    },
+  });
+
+  return { addKey, updateKey, deleteKey, toggleKey, testKeys };
 }
