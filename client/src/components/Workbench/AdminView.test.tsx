@@ -1788,4 +1788,131 @@ describe("the live test card in the operations rail", () => {
     expect(rows[1].textContent).toContain("key-1 (sk-yt****fa12)");
     expect(rows[1].textContent).toContain("30 ms");
   });
+
+  it("lights the Working chip from the run's passing models", async () => {
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(true, {
+            results: [
+              {
+                keyId: 1,
+                modelId: MODELS[0].id,
+                ok: false,
+                ms: 0,
+                error: "boom",
+              },
+              { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 },
+              { keyId: 1, modelId: MODELS[2].id, ok: true, ms: 30 },
+            ],
+          })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // Pre-run the chip is greyed and inert — the filter suite pins that;
+    // here it has a run behind it.
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestResults")?.textContent
+      ).toContain("12 ms")
+    );
+
+    // The run lit the chip with the passing models' ids. It stays an
+    // operator toggle: a completed run enables it, it does not press it.
+    const working = screen.getByRole("button", { name: "Working" });
+    expect(working).toBeEnabled();
+    expect(working.getAttribute("aria-pressed")).toBe("false");
+    await user.click(working);
+    expect(working.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+    const list = document.getElementById("adminOpsModelList")?.textContent;
+    expect(list).toContain("Flux Schnell");
+    expect(list).toContain("Agnes Flash");
+    expect(list).not.toContain("Stable Diffusion XL");
+  });
+
+  it("replaces the working set with the most recent run", async () => {
+    // Two runs back to back: the first passes two models, the second one.
+    // The chip must filter to the latest run's passes, never the union.
+    const runs = [
+      jsonResponse(true, {
+        results: [
+          { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 },
+          { keyId: 1, modelId: MODELS[2].id, ok: true, ms: 30 },
+        ],
+      }),
+      jsonResponse(true, {
+        results: [{ keyId: 1, modelId: MODELS[0].id, ok: true, ms: 5 }],
+      }),
+    ];
+    let run = 0;
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test" ? runs[run++] : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestResults")?.textContent
+      ).toContain("12 ms")
+    );
+
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestResults")?.textContent
+      ).toContain("5 ms")
+    );
+
+    await user.click(screen.getByRole("button", { name: "Working" }));
+    // Only the newest run's pass is in the set: 1 of 4, not 3 of 4.
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+    const list = document.getElementById("adminOpsModelList")?.textContent;
+    expect(list).toContain("Stable Diffusion XL");
+    expect(list).not.toContain("Flux Schnell");
+    expect(list).not.toContain("Agnes Flash");
+  });
+
+  it("drops the run when the panel is locked", async () => {
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(true, {
+            results: [{ keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 }],
+          })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestResults")).not.toBeNull()
+    );
+    expect(screen.getByRole("button", { name: "Working" })).toBeEnabled();
+
+    // Locking ends the session: the probe results go with the rest of
+    // the payload, and a re-unlocked panel starts pre-run.
+    await user.click(
+      screen.getByRole("button", { name: /Lock provider credentials/i })
+    );
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Working" })).toBeDisabled()
+    );
+    expect(document.getElementById("adminOpsTestResults")).toBeNull();
+  });
 });
