@@ -17,7 +17,12 @@ import { ModelFilterCard } from "./ModelFilterCard";
 import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
 
-type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
+type SheetState = {
+  mode: "add" | "edit";
+  key: AdminKey | null;
+  /** Set when the drawer was entered from a row's rotate action. */
+  entry?: "rotate";
+} | null;
 
 /**
  * The provider credentials workbench.
@@ -334,6 +339,10 @@ export function AdminView() {
                 setSheetError(null);
                 setSheet({ mode: "edit", key });
               }}
+              onRotate={(key) => {
+                setSheetError(null);
+                setSheet({ mode: "edit", key, entry: "rotate" });
+              }}
               onDelete={(key) => {
                 setPanelError(null);
                 mutations.deleteKey.mutate(
@@ -400,6 +409,7 @@ export function AdminView() {
           mode={sheet.mode}
           provider={family}
           editingKey={sheet.key}
+          entry={sheet.entry}
           saving={savingSheet === sheet}
           error={sheetError}
           onClose={() => {
