@@ -706,6 +706,15 @@ function failedPairing(
   return { keyId, modelId, ok: false, ms: 0, error };
 }
 
+/** One key refused for the same reason against every model, in order. */
+function refuseAll(
+  keyId: number,
+  models: { requested: string }[],
+  message: string
+): KeyTestResult[] {
+  return models.map((model) => failedPairing(keyId, model.requested, message));
+}
+
 /**
  * Minimal inference payload for one model, derived from its registry entry:
  * the declared default step count and the smallest dimensions the model
@@ -896,39 +905,33 @@ async function handleKeysTest(
   for (const key of selectedKeys) {
     const row = key.row;
     if (!row) {
-      for (const model of selectedModels) {
-        results.push(
-          failedPairing(
-            key.requested,
-            model.requested,
-            `unknown provider key ${key.requested}`
-          )
-        );
-      }
+      results.push(
+        ...refuseAll(
+          key.requested,
+          selectedModels,
+          `unknown provider key ${key.requested}`
+        )
+      );
       continue;
     }
     if (row.transport === null) {
-      for (const model of selectedModels) {
-        results.push(
-          failedPairing(
-            key.requested,
-            model.requested,
-            `provider '${row.providerId}' of key '${row.label}' has no transport row`
-          )
-        );
-      }
+      results.push(
+        ...refuseAll(
+          key.requested,
+          selectedModels,
+          `provider '${row.providerId}' of key '${row.label}' has no transport row`
+        )
+      );
       continue;
     }
     if (row.envelope === null) {
-      for (const model of selectedModels) {
-        results.push(
-          failedPairing(
-            key.requested,
-            model.requested,
-            `key '${row.label}' has no active credential version to test`
-          )
-        );
-      }
+      results.push(
+        ...refuseAll(
+          key.requested,
+          selectedModels,
+          `key '${row.label}' has no active credential version to test`
+        )
+      );
       continue;
     }
     let token: string;
@@ -938,15 +941,13 @@ async function handleKeysTest(
       // AES-GCM cannot say why it failed; report what it means, at the
       // label level only — never any byte of the credential.
       console.warn(`live test: envelope for key '${row.label}' will not open`);
-      for (const model of selectedModels) {
-        results.push(
-          failedPairing(
-            key.requested,
-            model.requested,
-            `credential for key '${row.label}' will not open`
-          )
-        );
-      }
+      results.push(
+        ...refuseAll(
+          key.requested,
+          selectedModels,
+          `credential for key '${row.label}' will not open`
+        )
+      );
       continue;
     }
     for (const model of selectedModels) {
