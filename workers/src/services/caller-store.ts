@@ -229,6 +229,62 @@ export async function createCallerKey(
 }
 
 /**
+ * Rotate a caller key (#127): a new generated secret, the old one dead the
+ * moment this lands.
+ *
+ * Revoke-before-insert in a single UPDATE: the row holds ONE verifier, and
+ * the statement replaces it — there is no window in which both secrets
+ * authenticate, and there is no versions table to prune. The key's id,
+ * name, enabled flag and created_at are preserved; prefix/suffix follow
+ * the new secret (a rotated operator key becomes a generated one — the
+ * operator's old phrasing is gone with the secret it described).
+ *
+ * The existence check is the read (404 before writing), and the UPDATE's
+ * own changes count re-checks it: a key deleted between read and write
+ * changes zero rows and still answers 404 rather than a 200 for a ghost.
+ */
+export async function rotateCallerKey(
+  db: AdminD1,
+  keyId: number,
+  verifier: (secret: string) => Promise<string>
+): Promise<CreatedCallerKey> {
+  const row = await db
+    .prepare("SELECT name, enabled, created_at FROM caller_keys WHERE id = ?")
+    .bind(keyId)
+    .first<{ name: string; enabled: number; created_at: number }>();
+  if (!row) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  const secret = generateCallerSecret();
+  const hash = await verifier(secret);
+  const now = Math.floor(Date.now() / 1000);
+  const prefix = GENERATED_CALLER_PREFIX;
+  const suffix = secret.slice(-4);
+  const result = (await db
+    .prepare(
+      "UPDATE caller_keys " +
+        "SET secret_hash = ?, prefix = ?, suffix = ?, updated_at = ? " +
+        "WHERE id = ?"
+    )
+    .bind(hash, prefix, suffix, now, keyId)
+    .run()) as { meta?: { changes?: number } };
+  if ((result.meta?.changes ?? 0) === 0) {
+    throw new AdminStoreError(404, `unknown caller key ${keyId}`);
+  }
+  return {
+    key: {
+      id: keyId,
+      name: row.name,
+      prefix,
+      suffix,
+      enabled: Number(row.enabled) === 1,
+      created_at: Number(row.created_at),
+    },
+    secret,
+  };
+}
+
+/**
  * Resolve the create name: blank or absent defaults to "Key N" (N is one
  * past the current row count — a race that lands two defaults together
  * fails the UNIQUE constraint and surfaces as a 409, never a silent dup).

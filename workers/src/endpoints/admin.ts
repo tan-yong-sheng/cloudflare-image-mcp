@@ -35,7 +35,11 @@ import {
   callerKeyVerifier,
   deriveCallerPepper,
 } from "../services/caller-crypto.js";
-import { createCallerKey, listCallerKeys } from "../services/caller-store.js";
+import {
+  createCallerKey,
+  listCallerKeys,
+  rotateCallerKey,
+} from "../services/caller-store.js";
 import { getProviderPools } from "../services/pool-cache.js";
 import {
   addProviderKey,
@@ -345,6 +349,14 @@ export async function handleAdmin(
     if (request.method === "POST" && path === ADMIN_CALLER_KEYS_PATH) {
       return await handleCreateCallerKey(request, env, active);
     }
+    const callerRotate = path.match(
+      /^\/api\/admin\/caller-keys\/(\d+)\/rotate$/
+    );
+    if (request.method === "POST" && callerRotate) {
+      const id = parseKeyId(callerRotate[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleRotateCallerKey(env, active, id);
+    }
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
@@ -650,6 +662,34 @@ async function handleCreateCallerKey(
       }
     );
     return json(created, 201);
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+/**
+ * POST /api/admin/caller-keys/:id/rotate — supersede the secret (#127).
+ *
+ * No body: rotation always generates. The new plaintext is returned once
+ * in this 200, riding no-store; the old secret stopped authenticating the
+ * moment the row's single verifier was replaced. 404 when the id is
+ * unknown — and when the key vanished between the read and the write.
+ */
+async function handleRotateCallerKey(
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (!dataKey) {
+    return internalError("no sealing key configured");
+  }
+  const pepper = await deriveCallerPepper(dataKey);
+  try {
+    const rotated = await rotateCallerKey(store, keyId, (secret) =>
+      callerKeyVerifier(pepper, secret)
+    );
+    return json(rotated);
   } catch (error) {
     return storeError(error);
   }

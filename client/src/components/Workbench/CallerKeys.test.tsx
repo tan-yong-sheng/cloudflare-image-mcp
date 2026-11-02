@@ -513,3 +513,131 @@ describe("creating a caller key (#126)", () => {
     expect(secretInput.hasAttribute("data-1p-ignore")).toBe(true);
   });
 });
+
+describe("rotating a caller key (#127)", () => {
+  // Rotation hands out a fresh plaintext and kills the old secret. The
+  // tests pin the guard rails: the request only ever leaves through the
+  // confirmation dialog, the dialog names the row it is about, the new
+  // plaintext appears once, and the list refetches to the new mask.
+
+  const ROTATED = {
+    key: {
+      id: 1,
+      name: "Laptop",
+      prefix: "sk-mgmt-",
+      suffix: "9f8e",
+      enabled: true,
+      created_at: 1_700_000_000,
+    },
+    secret: "{{API_KEY_1il4ms0v}}",
+  };
+
+  function stubRotateApi(response: { status: number; body: unknown }) {
+    const rotates: { path: string }[] = [];
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (init?.method === "POST" && path.includes("/rotate")) {
+          rotates.push({ path });
+          return jsonResponse(response.body, response.status);
+        }
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return rotates;
+  }
+
+  it("opens a confirmation that names the key and its consequence", async () => {
+    const rotates = stubRotateApi({ status: 200, body: ROTATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+
+    expect(screen.getByText(/Rotate “Laptop”\?/)).toBeTruthy();
+    expect(
+      document.getElementById("callerKeyConfirmMessage")?.textContent
+    ).toContain("Clients using this key will need the new key");
+    // Opening the dialog sends nothing: the request leaves only from the
+    // confirm button.
+    expect(rotates).toHaveLength(0);
+  });
+
+  it("sends nothing when the operator cancels", async () => {
+    const rotates = stubRotateApi({ status: 200, body: ROTATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    await user.click(
+      document.getElementById("callerKeyConfirmCancel") as HTMLElement
+    );
+
+    expect(screen.queryByText(/Rotate “Laptop”\?/)).toBeNull();
+    expect(rotates).toHaveLength(0);
+  });
+
+  it("rotates from the dialog and shows the new plaintext once", async () => {
+    const rotates = stubRotateApi({ status: 200, body: ROTATED });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    await user.click(
+      document.getElementById("callerKeyConfirmOk") as HTMLElement
+    );
+
+    await waitFor(() => expect(rotates).toHaveLength(1));
+    expect(rotates[0].path).toBe("/api/admin/caller-keys/1/rotate");
+
+    const banner = await waitFor(() =>
+      document.getElementById("callerKeySecret")
+    );
+    expect(banner?.textContent).toContain(ROTATED.secret);
+    // The banner tells the rotated story, not the created one.
+    expect(document.getElementById("callerKeyCreated")?.textContent).toContain(
+      "the old one stopped working"
+    );
+    // The dialog is done; the mask refetches to the new hint.
+    await waitFor(() =>
+      expect(screen.queryByText(/Rotate “Laptop”\?/)).toBeNull()
+    );
+  });
+
+  it("reports a failed rotate on the panel's alert line", async () => {
+    stubRotateApi({
+      status: 404,
+      body: { error: { message: "unknown caller key 1" } },
+    });
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    await user.click(
+      document.getElementById("callerKeyConfirmOk") as HTMLElement
+    );
+
+    await waitFor(() =>
+      expect(document.getElementById("apiKeysError")?.textContent).toContain(
+        "unknown caller key 1"
+      )
+    );
+    // A failed rotate produced no plaintext, so there is no banner.
+    expect(document.getElementById("callerKeyCreated")).toBeNull();
+  });
+});

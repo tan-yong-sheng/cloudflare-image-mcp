@@ -3,6 +3,7 @@ import {
   useMutationState,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import {
   ADMIN_CALLER_KEYS_PATH,
@@ -204,10 +205,61 @@ export function useCreateCallerKey(
       queryClient.invalidateQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
       // Drop the one-shot plaintext from the mutation cache. The caller
       // already holds the value from the awaited result.
-      const cache = queryClient.getMutationCache();
-      cache
-        .findAll({ mutationKey: [...ADMIN_MUTATION_KEY, "create-caller-key"] })
-        .forEach((mutation) => cache.remove(mutation));
+      dropCallerKeySecretMutations(queryClient);
+    },
+    onError: (error: AdminApiError) => {
+      if (error.status === 401) onRefused?.(error);
+    },
+  });
+}
+
+/** Every caller-key mutation whose answer carries a one-shot plaintext. */
+const SECRET_BEARING_MUTATIONS = ["create-caller-key", "rotate-caller-key"];
+
+function dropCallerKeySecretMutations(queryClient: QueryClient): void {
+  const cache = queryClient.getMutationCache();
+  for (const name of SECRET_BEARING_MUTATIONS) {
+    cache
+      .findAll({ mutationKey: [...ADMIN_MUTATION_KEY, name] })
+      .forEach((mutation) => cache.remove(mutation));
+  }
+}
+
+/**
+ * Rotate a caller key. Like create, the answer carries the new plaintext
+ * exactly once — the old secret died on the server the moment the row's
+ * verifier was replaced — so the mutation cache drops the entry right
+ * after the caller has the value in hand.
+ */
+export async function rotateCallerKeyRequest(
+  session: AdminSession,
+  keyId: number
+): Promise<AdminCallerKeyCreated> {
+  const result = await apiFetch<AdminCallerKeyCreated>(
+    `${ADMIN_CALLER_KEYS_PATH}/${keyId}/rotate`,
+    {
+      method: "POST",
+      adminKey: session.adminKey,
+      authToken: session.bearerToken,
+    }
+  );
+  if (!result.ok) throw toError(result);
+  return result.data as AdminCallerKeyCreated;
+}
+
+export function useRotateCallerKey(
+  session: AdminSession,
+  onRefused?: (failure: AdminApiError) => void
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...ADMIN_MUTATION_KEY, "rotate-caller-key"],
+    mutationFn: (variables: { keyId: number }) =>
+      rotateCallerKeyRequest(session, variables.keyId),
+    onSuccess: () => {
+      // The mask changed with the secret; the refetch is what shows it.
+      queryClient.invalidateQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
+      dropCallerKeySecretMutations(queryClient);
     },
     onError: (error: AdminApiError) => {
       if (error.status === 401) onRefused?.(error);

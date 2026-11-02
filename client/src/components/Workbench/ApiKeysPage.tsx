@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useCallerKeys, useCreateCallerKey } from "../../api/admin";
+import {
+  useCallerKeys,
+  useCreateCallerKey,
+  useRotateCallerKey,
+} from "../../api/admin";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
+import type { AdminCallerKey } from "../../api/types";
 import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { CallerKeyCreate } from "./CallerKeyCreate";
 import { CallerKeyTable } from "./CallerKeyTable";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { UnlockGate } from "./UnlockGate";
 
 /**
@@ -43,16 +49,21 @@ export function ApiKeysPage() {
 
   const callerKeys = useCallerKeys(session);
   const createKey = useCreateCallerKey(session, endRefusedSession);
+  const rotateKey = useRotateCallerKey(session, endRefusedSession);
 
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
-  // The one-shot secret from the last create, held in component state so
-  // the operator can actually copy it. Locking tears it down with the
-  // session; nothing ever writes it to storage.
+  // The one-shot secret from the last create or rotate, held in component
+  // state so the operator can actually copy it. Locking tears it down
+  // with the session; nothing ever writes it to storage.
   const [created, setCreated] = useState<{
+    kind: "created" | "rotated";
     name: string;
     secret: string;
   } | null>(null);
+  // The row the rotate confirmation is open for. The request is only sent
+  // from the dialog's confirm button.
+  const [rotating, setRotating] = useState<AdminCallerKey | null>(null);
   const handledError = useRef<unknown>(null);
 
   useEffect(() => {
@@ -81,12 +92,13 @@ export function ApiKeysPage() {
 
   const handleLock = () => {
     // The provider owns the teardown: it drops the key and the cached
-    // list together — and the one-shot secret with them. A locked panel
-    // leaves nothing behind to read.
+    // list together — and the one-shot secret and the open confirmation
+    // with them. A locked panel leaves nothing behind to read.
     lock();
     setGateError(null);
     setPanelError(null);
     setCreated(null);
+    setRotating(null);
   };
 
   return (
@@ -161,15 +173,53 @@ export function ApiKeysPage() {
           onDismiss={() => setCreated(null)}
           onSubmit={async (values) => {
             const result = await createKey.mutateAsync(values);
-            setCreated({ name: result.key.name, secret: result.secret });
+            setCreated({
+              kind: "created",
+              name: result.key.name,
+              secret: result.secret,
+            });
           }}
         />
         <CallerKeyTable
           keys={callerKeys.data?.keys ?? []}
           loading={callerKeys.isPending}
           failed={callerKeys.isError}
+          onRotate={(key) => setRotating(key)}
+          pendingRotateIds={rotating ? [rotating.id] : []}
         />
       </div>
+
+      <ConfirmDialog
+        open={
+          rotating
+            ? {
+                title: `Rotate “${rotating.name}”?`,
+                message:
+                  "Clients using this key will need the new key. The old secret stops working the moment the rotation lands.",
+              }
+            : null
+        }
+        confirmLabel="Rotate"
+        busy={rotateKey.isPending}
+        onCancel={() => setRotating(null)}
+        onConfirm={async () => {
+          if (!rotating) return;
+          try {
+            const result = await rotateKey.mutateAsync({ keyId: rotating.id });
+            setCreated({
+              kind: "rotated",
+              name: result.key.name,
+              secret: result.secret,
+            });
+            setRotating(null);
+          } catch (cause) {
+            setPanelError(
+              cause instanceof Error ? cause.message : String(cause)
+            );
+            setRotating(null);
+          }
+        }}
+      />
 
       <UnlockGate
         key={unlocked ? "unlocked" : "locked"}

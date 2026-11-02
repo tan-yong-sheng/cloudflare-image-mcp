@@ -21,6 +21,7 @@ import {
   GENERATED_CALLER_PREFIX,
   listCallerKeys,
   maskCallerKey,
+  rotateCallerKey,
 } from "./caller-store.js";
 
 /** D1-shaped adapter over node:sqlite (prepare/bind only — reads only). */
@@ -339,6 +340,151 @@ describe("createCallerKey against the real migrations (S2)", () => {
     expect(text).not.toContain("secret_hash");
     expect(text).not.toContain("secretHash");
     expect(Object.keys(created.key).sort()).toEqual([
+      "created_at",
+      "enabled",
+      "id",
+      "name",
+      "prefix",
+      "suffix",
+    ]);
+  });
+});
+
+describe("rotateCallerKey against the real migrations (S2)", () => {
+  test("rotation replaces the verifier; the old secret stops verifying", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+      secret: "op-secret-1",
+    });
+    const oldHash = await testVerifier()(created.secret);
+
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier()
+    );
+
+    // The new plaintext is a fresh generated secret, returned once.
+    expect(rotated.secret).toMatch(
+      new RegExp(`^${GENERATED_CALLER_PREFIX}[0-9a-f]{24}$`)
+    );
+    expect(rotated.secret).not.toBe(created.secret);
+
+    // The row now holds exactly one verifier — the new one. The old
+    // secret's verifier is gone, not stored beside the new one.
+    const row = db
+      .prepare(
+        "SELECT secret_hash, prefix, suffix, updated_at FROM caller_keys WHERE id = ?"
+      )
+      .get(created.key.id) as Record<string, unknown>;
+    expect(row["secret_hash"]).toBe(await testVerifier()(rotated.secret));
+    expect(row["secret_hash"]).not.toBe(oldHash);
+    // Identity survives; only the secret material moved.
+    expect(rotated.key).toEqual({
+      id: created.key.id,
+      name: "CI",
+      prefix: GENERATED_CALLER_PREFIX,
+      suffix: rotated.secret.slice(-4),
+      enabled: true,
+      created_at: created.key.created_at,
+    });
+    expect(Number(row["updated_at"])).toBeGreaterThanOrEqual(
+      created.key.created_at
+    );
+  });
+
+  test("a rotated operator key becomes a generated key", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "brought",
+      secret: "op-secret-1",
+    });
+    expect(created.key.prefix).toBe("");
+
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier()
+    );
+
+    // The old phrasing is gone with the secret it described: the hint
+    // now belongs to the family the server generated.
+    expect(rotated.key.prefix).toBe(GENERATED_CALLER_PREFIX);
+    expect(rotated.key.suffix).toBe(rotated.secret.slice(-4));
+  });
+
+  test("a disabled key rotates in place and stays disabled", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    db.prepare("UPDATE caller_keys SET enabled = 0 WHERE id = ?").run(
+      created.key.id
+    );
+
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier()
+    );
+
+    expect(rotated.key.enabled).toBe(false);
+    expect(rotated.key.name).toBe("CI");
+  });
+
+  test("an unknown id is a 404 and writes nothing", async () => {
+    const db = freshDb();
+    const failure = await rotateCallerKey(
+      writableD1(db),
+      999,
+      testVerifier()
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AdminStoreError);
+    expect((failure as AdminStoreError).status).toBe(404);
+    // No row appeared, no row changed: 404 is a read answer, not a write.
+    expect(db.prepare("SELECT COUNT(*) AS n FROM caller_keys").get()).toEqual({
+      n: 0,
+    });
+  });
+
+  test("the rotated key still shows in the list under its new mask", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+      secret: "op-secret-1",
+    });
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier()
+    );
+
+    const [key] = await listCallerKeys(asD1(db));
+    expect(key?.maskedKey).toBe(
+      maskCallerKey(rotated.key.prefix, rotated.key.suffix)
+    );
+  });
+
+  test("the response shape never carries the verifier", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier()
+    );
+    const text = JSON.stringify(rotated);
+    expect(text).not.toContain("secret_hash");
+    expect(text).not.toContain("secretHash");
+    expect(Object.keys(rotated.key).sort()).toEqual([
       "created_at",
       "enabled",
       "id",

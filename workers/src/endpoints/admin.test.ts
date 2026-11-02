@@ -1276,3 +1276,141 @@ describe("caller-key create (#126)", () => {
     expect(response?.status).toBe(500);
   });
 });
+
+describe("caller-key rotate (#127)", () => {
+  // Rotation is the destructive one-shot: the old secret dies when the
+  // row's single verifier is replaced, and the new plaintext rides this
+  // one response. What the tests pin: the gates hold, the answer carries
+  // the new plaintext once under no-store, an unknown id is a 404 that
+  // wrote nothing, and a key that vanished mid-flight does not come back
+  // as a 200 ghost.
+
+  function rotatableStore(
+    options: {
+      row?: { name: string; enabled: number; created_at: number };
+      changes?: number;
+    } = {}
+  ) {
+    return {
+      store: {
+        prepare: (sql: string) => {
+          const stmt = {
+            first: async <T>() =>
+              (options.row ? options.row : null) as T | null,
+            all: async () => ({ results: [] }),
+            run: async () => ({
+              meta: { changes: options.changes ?? (options.row ? 1 : 0) },
+            }),
+          };
+          return { ...stmt, bind: () => ({ ...stmt }) };
+        },
+        commit: async () => ({ keyId: null }),
+      },
+    };
+  }
+
+  function post(id: number, extra?: HeadersInit): Request {
+    return new Request(
+      `https://worker.test/api/admin/caller-keys/${id}/rotate`,
+      {
+        method: "POST",
+        headers: bearer("user-key", {
+          "X-Admin-Key": "admin-key",
+          ...extra,
+        }),
+      }
+    );
+  }
+
+  test("no bearer at all is a 401 through the existing gate", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/caller-keys/1/rotate", {
+        method: "POST",
+        headers: { "X-Admin-Key": "admin-key" },
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("right bearer but wrong admin key is a 403", async () => {
+    const response = await worker.fetch(
+      post(1, { "X-Admin-Key": "wrong-admin-key" }),
+      env()
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("rotation returns the new plaintext once, under no-store", async () => {
+    const { store } = rotatableStore({
+      row: { name: "CI", enabled: 1, created_at: 1_700_000_000 },
+    });
+    const response = await handleAdmin(
+      post(1),
+      "/api/admin/caller-keys/1/rotate",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(200);
+    const text = await response!.text();
+    const body = JSON.parse(text) as {
+      key: Record<string, unknown>;
+      secret: string;
+    };
+    expect(body.secret).toMatch(/^sk-mgmt-[0-9a-f]{24}$/);
+    expect(body.key).toEqual({
+      id: 1,
+      name: "CI",
+      prefix: "sk-mgmt-",
+      suffix: body.secret.slice(-4),
+      enabled: true,
+      created_at: 1_700_000_000,
+    });
+    expect(response!.headers.get("Cache-Control")).toBe("no-store");
+    expect(text).not.toContain("secret_hash");
+    expect(text).not.toContain("secretHash");
+  });
+
+  test("an unknown id is a 404", async () => {
+    const { store } = rotatableStore();
+    const response = await handleAdmin(
+      post(999),
+      "/api/admin/caller-keys/999/rotate",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(404);
+  });
+
+  test("a key deleted between the read and the write is a 404, not a 200", async () => {
+    // The read found the row, the UPDATE changed zero rows: the key is
+    // gone, and a 200 carrying a fresh secret for it would hand out a
+    // credential for a key nobody can see or rotate again.
+    const { store } = rotatableStore({
+      row: { name: "CI", enabled: 1, created_at: 1_700_000_000 },
+      changes: 0,
+    });
+    const response = await handleAdmin(
+      post(1),
+      "/api/admin/caller-keys/1/rotate",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(404);
+  });
+
+  test("a missing data key is a 500: no verifier can be derived", async () => {
+    const { store } = rotatableStore({
+      row: { name: "CI", enabled: 1, created_at: 1_700_000_000 },
+    });
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).PROVIDER_DATA_KEY;
+    const response = await handleAdmin(
+      post(1),
+      "/api/admin/caller-keys/1/rotate",
+      unconfigured,
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(500);
+  });
+});

@@ -9,11 +9,16 @@ export interface CallerKeyCreateProps {
   /** A create request is in flight; the form waits for its own answer. */
   busy: boolean;
   /**
-   * The key the server just created, with its one-shot plaintext. Null
-   * hides the banner. The parent owns this state so locking the panel
-   * tears the secret down with it — the component only displays it.
+   * The key the server just created or rotated, with its one-shot
+   * plaintext. Null hides the banner. The parent owns this state so
+   * locking the panel tears the secret down with it — the component only
+   * displays it.
    */
-  created: { name: string; secret: string } | null;
+  created: {
+    kind: "created" | "rotated";
+    name: string;
+    secret: string;
+  } | null;
   /** Hides the one-shot banner. The secret is gone from the client. */
   onDismiss: () => void;
   /**
@@ -97,8 +102,17 @@ export function CallerKeyCreate({
           className="p-4 mb-4 rounded border border-green-700 bg-green-900/20"
         >
           <p className="text-sm font-medium text-green-300">
-            “{created.name}” created. Copy the secret now — it is shown once and
-            never again.
+            {created.kind === "rotated" ? (
+              <>
+                “{created.name}” rotated. Copy the new secret now — the old one
+                stopped working.
+              </>
+            ) : (
+              <>
+                “{created.name}” created. Copy the secret now — it is shown once
+                and never again.
+              </>
+            )}
           </p>
           <div className="flex flex-wrap items-center gap-3 mt-2">
             <code id="callerKeySecret" className="font-mono text-sm break-all">
