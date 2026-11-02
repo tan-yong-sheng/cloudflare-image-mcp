@@ -1265,4 +1265,65 @@ describe("the model filter chips in the operations rail", () => {
     expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
     expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
   });
+
+  it("marks a model that several provider families serve in duplicate", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // "Flux Schnell" (cloudflare-rest) and "flux schnell" (openai-compat)
+    // normalize to one name across two transports; the indicator names
+    // the families behind it, resolved through the health payload.
+    const duplicates = document.getElementById("adminOpsDuplicates");
+    expect(duplicates).not.toBeNull();
+    expect(duplicates?.textContent).toContain("Flux Schnell");
+    expect(duplicates?.textContent).toContain("Cloudflare Workers AI");
+    expect(duplicates?.textContent).toContain("Agnes");
+  });
+
+  it("stays quiet when no model name is duplicated", async () => {
+    stubModels([MODELS[0], MODELS[2]]);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // With today's registry the empty case is the common one: no
+    // duplicate may render nothing at all, not an empty shell.
+    expect(screen.getByText("2 of 2 models")).toBeInTheDocument();
+    expect(document.getElementById("adminOpsDuplicates")).toBeNull();
+  });
+
+  it("reads a missing costClass as not free instead of crashing", async () => {
+    const unclassified = {
+      id: "agnes-image-2.1-flash",
+      name: "Agnes Flash 2.1",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "openai-compat",
+      available: true,
+    };
+    stubModels([MODELS[0], unclassified]);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    await user.click(screen.getByRole("button", { name: "Free" }));
+
+    expect(screen.getByText("1 of 2 models")).toBeInTheDocument();
+    expect(screen.getByText("Stable Diffusion XL")).toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash 2.1")).not.toBeInTheDocument();
+  });
+
+  it("keeps models without a servable transport in the catalog list", async () => {
+    const unservable = { ...MODELS[2], available: false };
+    stubModels([MODELS[0], unservable]);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // The card is about the catalog: an unavailable entry is still
+    // listed, the request path refuses it elsewhere.
+    expect(screen.getByText("2 of 2 models")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
 });
