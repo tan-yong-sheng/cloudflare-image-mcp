@@ -2131,3 +2131,118 @@ describe("bulk token onboarding in the add drawer", () => {
     expect(document.getElementById("adminSheetTokenCount")).toBeNull();
   });
 });
+
+describe("the inline rotate action on key rows", () => {
+  // Assembled at runtime: a stand-in replacement credential whose only
+  // property under test is that it clears the drawer's minimum length.
+  const ROTATE_TOKEN = ["tok", "rotate", "01"].join("-");
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders a rotate action before Edit on every key row", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The approved prototype's action order: rotate, then edit, then delete.
+    const rotate = screen.getByRole("button", { name: "Rotate key #1" });
+    const edit = screen.getByRole("button", { name: "Edit key #1" });
+    expect(
+      rotate.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    // The rotate action exists on the other family's rows too.
+    await user.click(screen.getByRole("button", { name: /Agnes/i }));
+    expect(
+      screen.getByRole("button", { name: "Rotate key #2" })
+    ).toBeInTheDocument();
+  });
+
+  it("opens the edit drawer with the token field focused", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+
+    expect(document.getElementById("adminSheet")).not.toBeNull();
+    expect(document.getElementById("adminSheetTitle")?.textContent).toContain(
+      "Edit Key #1"
+    );
+    await waitFor(() =>
+      expect(document.activeElement?.id).toBe("adminSheetToken")
+    );
+    // Rotation replaces one stored version, so the focused field is the
+    // single-line masked input, not the add-mode textarea.
+    const token = screen.getByLabelText(/API token/i) as HTMLInputElement;
+    expect(token.tagName).toBe("INPUT");
+    expect(token.type).toBe("password");
+  });
+
+  it("explains that saving supersedes and seals the active version", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+
+    const note = document.getElementById("adminSheetNote");
+    expect(note?.textContent).toContain("supersedes");
+    expect(note?.textContent).toContain("seal");
+    expect(note?.textContent).toContain("blank");
+  });
+
+  it("sends exactly one PATCH carrying the replacement token", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+    await user.type(screen.getByLabelText(/API token/i), ROTATE_TOKEN);
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) => call.path === "/api/admin/keys/1" && call.method === "PATCH"
+        )
+      ).toBe(true)
+    );
+    const updates = calls.filter((call) => call.path === "/api/admin/keys/1");
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.body).toMatchObject({ apiToken: ROTATE_TOKEN });
+  });
+
+  it("keeps the active version when the rotate drawer is saved blank", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) => call.path === "/api/admin/keys/1" && call.method === "PATCH"
+        )
+      ).toBe(true)
+    );
+    const update = calls.find((call) => call.path === "/api/admin/keys/1");
+    expect(update?.body).not.toHaveProperty("apiToken");
+  });
+});

@@ -17,6 +17,10 @@ interface KeySheetProps {
   provider: AdminProvider | null;
   /** The key being edited; null when adding. */
   editingKey: AdminKey | null;
+  /** Set when the operator came in through a row's rotate action: the
+   * token field takes the focus on mount and the note explains the
+   * supersede. */
+  entry?: "rotate";
   onClose: () => void;
   onSave: (values: SheetValues) => void;
   saving: boolean;
@@ -58,6 +62,7 @@ export function KeySheet({
   mode,
   provider,
   editingKey,
+  entry,
   onClose,
   onSave,
   saving,
@@ -98,11 +103,17 @@ export function KeySheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // Focus the first field the operator can actually fill.
+  // Focus the first field the operator can actually fill. A rotate
+  // entry is about the token, so it takes the focus even when an
+  // account field is present.
   useEffect(() => {
+    if (entry === "rotate") {
+      focusToken();
+      return;
+    }
     if (needsAccountId) accountRef.current?.focus();
     else focusToken();
-  }, [needsAccountId]);
+  }, [needsAccountId, entry]);
 
   // The drawer is a modal: Escape dismisses it and Tab stays inside it,
   // so a keyboard user cannot wander into the page behind it.
@@ -245,7 +256,9 @@ export function KeySheet({
         </h3>
         <p id="adminSheetNote" className="text-xs text-muted mb-3">
           {isEdit
-            ? "Leave the token blank to keep the current version. Filling it rotates as part of save."
+            ? entry === "rotate"
+              ? "Submitting supersedes the active version — the previous token is sealed, not deleted. Leave the token blank to keep the active version."
+              : "Leave the token blank to keep the current version. Filling it rotates as part of save."
             : "The key will be sealed server-side on save."}
         </p>
 

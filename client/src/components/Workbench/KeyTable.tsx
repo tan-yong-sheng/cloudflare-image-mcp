@@ -11,6 +11,8 @@ interface KeyTableProps {
   onEdit: (key: AdminKey) => void;
   onDelete: (key: AdminKey) => void;
   onToggle: (key: AdminKey, enabled: boolean) => void;
+  /** Opens the edit drawer primed for rotating this key's token. */
+  onRotate?: (key: AdminKey) => void;
 }
 
 /**
@@ -47,6 +49,7 @@ export function KeyTable({
   onEdit,
   onDelete,
   onToggle,
+  onRotate,
 }: KeyTableProps) {
   const hasAccount = family?.transport === "cloudflare-rest";
   const rows = family ? keys.filter((key) => key.providerId === family.id) : [];
@@ -135,6 +138,16 @@ export function KeyTable({
                     />
 
                     <span className="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm-icon text-xs"
+                        aria-label={"Rotate key #" + key.id}
+                        title={"Rotate key #" + key.id}
+                        disabled={pending}
+                        onClick={() => onRotate?.(key)}
+                      >
+                        <i className="fa-solid fa-rotate-right" />
+                      </button>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm-icon text-xs"
