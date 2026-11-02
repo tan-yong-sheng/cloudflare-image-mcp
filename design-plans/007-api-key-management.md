@@ -91,7 +91,17 @@ Related: `design-plans/004-provider-credentials-workbench.md` (provider keys, se
 
 ### 5. `client/src` — key-management UI
 
-- Admin view (reuse 005 pattern: hash route or dedicated route), unlock gate (memory-only management key).
+- **It is its own screen, not a section of the workbench.** The operator-facing
+  name is **API keys** and the address is `/admin/api-keys` (`#admin/api-keys`
+  once adopted), beside the workbench at `/admin`. Rotating what your clients
+  use is a different job from which provider credentials are servable, and a
+  section inside the provider page made the two look like one list. The
+  domain term in code, the `caller_keys` table and the `/api/admin/caller-keys`
+  route keep their names; only the display name changed, and `GLOSSARY.md`
+  records the mapping.
+- Unlock gate (memory-only management key), shared with the workbench: moving
+  between the two screens is one session, and leaving the admin area for the
+  generator ends it.
 - Key list component: rows with switch, name, masked value (`prefix + "…" + suffix`), actions menu (Rotate / Remove with confirmation modals). The plaintext is shown once, at create/rotate, in the response the operator just received — it is not fetched later and never persisted. Until the write path exists the state renders as a chip, not a switch.
 - Add-key form: name + optional secret (eye toggle), server-generated when empty.
 - Confirmation modals: rotate ("Clients using this key will need the new key"), remove ("Clients using this key will lose access").

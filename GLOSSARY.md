@@ -7,7 +7,13 @@ issues, refactors, hypotheses, and test names.
 
 A bearer token a client sends in `Authorization: Bearer` to reach `/v1/*` and
 `/mcp*`. Stored in the `caller_keys` table as a keyed verifier, never as
-plaintext, and listed in the admin workbench under `/api/admin/caller-keys`.
+plaintext, and listed on the API-keys page (`/admin/api-keys`) through
+`/api/admin/caller-keys`.
+
+The UI calls them **API keys**, which is what an operator knows them as. The
+code, the table and the HTTP route keep the domain term, because "API key"
+alone would not say _whose_ — the provider credentials on the workbench are
+API tokens too, and the management key is a third kind of secret again.
 Also called a _caller key_ in magpie, whose gateway UI this feature was
 researched from. Not the management key — see below.
 

@@ -8,7 +8,7 @@ interface CallerKeyTableProps {
    * Whether the list could not be read.
    *
    * A failed read is not an empty list. Without this the table would say
-   * "No caller keys yet." about a request that never came back — a claim
+   * "No API keys yet." about a request that never came back — a claim
    * the server never made. The panel's alert line carries the reason;
    * this only says that the list is unknown.
    */
@@ -18,9 +18,11 @@ interface CallerKeyTableProps {
 /**
  * The caller-key list.
  *
- * A caller key is the bearer token a client sends to reach this Worker's
- * API — a different kind of secret from the provider credentials in the
- * rail above, so it gets its own table rather than a row in that one.
+ * These are the keys a client presents to reach this Worker — the
+ * bearer tokens for /v1 and /mcp. The UI calls them API keys, which is
+ * what the operator knows them as; the code, the table and the HTTP
+ * route keep the domain term *caller key*, so they are not confused with
+ * the management key or with provider credentials.
  *
  * The server sends the masked hint and never the secret, so there is
  * nothing here that could be used as a key. That is why the column shows
@@ -44,30 +46,16 @@ export function CallerKeyTable({
   // alert carries the reason.
   const failureText = failed
     ? keys.length > 0
-      ? "Could not refresh caller keys."
-      : "Could not load caller keys."
+      ? "Could not refresh API keys."
+      : "Could not load API keys."
     : null;
 
   return (
     <section
       id="adminCallerKeysSection"
       className="card p-6"
-      aria-labelledby="adminCallerKeysTitle"
+      aria-label="API keys"
     >
-      <div className="mb-4 pb-3 border-b border-gray-700">
-        <h2
-          id="adminCallerKeysTitle"
-          className="font-semibold text-lg flex items-center"
-        >
-          <i className="fa-solid fa-key mr-2 text-primary" />
-          Caller keys
-        </h2>
-        <p className="text-sm opacity-70 mt-1">
-          The bearer tokens clients send to reach this Worker&apos;s API. They
-          are not provider credentials: a provider key authenticates the Worker
-          to Cloudflare, a caller key authenticates the caller to the Worker.
-        </p>
-      </div>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left opacity-60 border-b border-gray-800">
@@ -104,8 +92,7 @@ export function CallerKeyTable({
           keys.length > 0 && !failureText ? " hidden" : ""
         }`}
       >
-        {failureText ??
-          (loading ? "Loading caller keys…" : "No caller keys yet.")}
+        {failureText ?? (loading ? "Loading API keys…" : "No API keys yet.")}
       </p>
     </section>
   );

@@ -126,6 +126,15 @@ describe("the React client's routes", () => {
     expect(await response.text()).toContain("<div id=root></div>");
   });
 
+  test("serves the client document on the api-keys path", async () => {
+    // The page has its own addressable path, beside the workbench, so the
+    // operator can bookmark it; the client routes on the hash from there.
+    const response = await worker.fetch(get("/admin/api-keys"), clientEnv());
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<div id=root></div>");
+  });
+
   test("a missing client build says so instead of serving an error page", async () => {
     // No asset binding: the Worker has no frontend of its own any more,
     // so a deployment without the client build cannot serve a page.
