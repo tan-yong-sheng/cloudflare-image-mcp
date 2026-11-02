@@ -174,10 +174,22 @@ else
   printf 'FAIL  %-56s missing\n' "caller keys response is not cacheable"; fail=$((fail + 1))
 fi
 show
-if grep -q '"keys"' "$BODY"; then
-  printf 'PASS  %-56s present\n' "caller keys response carries a keys list"; pass=$((pass + 1))
+# The contract is an array, not merely a property that happens to be named
+# "keys": `{"keys":null}` or `{"keys":"unexpected"}` would satisfy a bare
+# grep while giving the client something it cannot map over.
+if [ -n "$HAVE_JQ" ]; then
+  if [ "$(jq -r 'if (.keys | type) == "array" then "yes" else "no" end' < "$BODY" 2>/dev/null)" = "yes" ]; then
+    printf 'PASS  %-56s an array\n' "caller keys response carries a keys list"; pass=$((pass + 1))
+  else
+    printf 'FAIL  %-56s not an array\n' "caller keys response carries a keys list"; fail=$((fail + 1))
+  fi
+elif grep -qE '"keys"[[:space:]]*:[[:space:]]*\[' "$BODY"; then
+  # No jq: a compact/pretty JSON array open after the key is the best the
+  # shell can assert without a parser. `null`, a string and an object all
+  # fail this, which is the point.
+  printf 'PASS  %-56s an array\n' "caller keys response carries a keys list"; pass=$((pass + 1))
 else
-  printf 'FAIL  %-56s missing\n' "caller keys response carries a keys list"; fail=$((fail + 1))
+  printf 'FAIL  %-56s not an array\n' "caller keys response carries a keys list"; fail=$((fail + 1))
 fi
 # The list is identity and masked hints only. A verifier, a salt, or a
 # pepper reaching the client would be a leak the secret tripwire cannot

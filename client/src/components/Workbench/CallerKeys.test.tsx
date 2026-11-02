@@ -272,8 +272,19 @@ describe("the API-keys page", () => {
       for (let index = 0; index < storage.length; index += 1) {
         const key = storage.key(index) ?? "";
         expect(key).not.toMatch(/caller/i);
+        // The names and hints are what the panel fetched, so a regression
+        // that persisted the payload under a generic key would pass a
+        // key-name check while still leaving the list behind to read.
+        const entry = `${key}=${storage.getItem(key) ?? ""}`;
+        for (const { name, maskedKey } of CALLER_KEYS.keys) {
+          expect(entry).not.toContain(name);
+          expect(entry).not.toContain(maskedKey);
+        }
       }
     }
-    expect(document.cookie).not.toMatch(/caller/i);
+    for (const { name, maskedKey } of CALLER_KEYS.keys) {
+      expect(document.cookie).not.toContain(name);
+      expect(document.cookie).not.toContain(maskedKey);
+    }
   });
 });
