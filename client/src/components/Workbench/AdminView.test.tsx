@@ -1449,12 +1449,13 @@ describe("the live test card in the operations rail", () => {
   ];
 
   function stubTestApi(
+    models: unknown = MODELS,
     overrides: (route: Route) => Response | Promise<Response> | null = () =>
       null
   ) {
     return stubApi((route) => {
       if (route.path === "/api/internal/models") {
-        return jsonResponse(true, MODELS);
+        return jsonResponse(true, models);
       }
       return overrides(route);
     });
@@ -1579,7 +1580,7 @@ describe("the live test card in the operations rail", () => {
 
   it("shows a loading state while the run is in flight", async () => {
     let resolveRun: (response: Response) => void = () => {};
-    const calls = stubTestApi((route) => {
+    const calls = stubTestApi(MODELS, (route) => {
       if (route.path !== "/api/admin/keys/test") return null;
       return new Promise<Response>((resolve) => {
         resolveRun = resolve;
@@ -1609,7 +1610,7 @@ describe("the live test card in the operations rail", () => {
   });
 
   it("surfaces a failed run's error message and records no results", async () => {
-    const calls = stubTestApi((route) =>
+    const calls = stubTestApi(MODELS, (route) =>
       route.path === "/api/admin/keys/test"
         ? jsonResponse(
             false,
@@ -1641,7 +1642,7 @@ describe("the live test card in the operations rail", () => {
   });
 
   it("ends the session when the live test is refused with 401", async () => {
-    stubTestApi((route) =>
+    stubTestApi(MODELS, (route) =>
       route.path === "/api/admin/keys/test"
         ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
         : null
@@ -1661,5 +1662,130 @@ describe("the live test card in the operations rail", () => {
     expect(document.getElementById("adminPanel")?.className).toContain(
       "hidden"
     );
+  });
+
+  it("caps the strip at the four most relevant rows, failures first", async () => {
+    // Six pairings for one key: four passes with different latencies and
+    // two failures. Only four rows may show — both failures, then the
+    // fastest passes — and the showing line must account for the rest.
+    const five = {
+      id: "@cf/extra/model-five",
+      name: "Model Five",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "cloudflare-rest",
+      costClass: "paid",
+      available: true,
+    };
+    const six = { ...five, id: "@cf/extra/model-six", name: "Model Six" };
+    const results = [
+      { keyId: 1, modelId: MODELS[0].id, ok: true, ms: 40 },
+      { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 },
+      {
+        keyId: 1,
+        modelId: MODELS[2].id,
+        ok: false,
+        ms: 0,
+        error:
+          "transport 'cloudflare-rest' does not serve 'agnes-image-2.5-flash'",
+      },
+      { keyId: 1, modelId: MODELS[3].id, ok: true, ms: 200 },
+      { keyId: 1, modelId: five.id, ok: true, ms: 95 },
+      {
+        keyId: 1,
+        modelId: six.id,
+        ok: false,
+        ms: 0,
+        error: "key 'key-1' has no active version",
+      },
+    ];
+    stubTestApi(
+      [MODELS[0], MODELS[1], MODELS[2], MODELS[3], five, six],
+      (route) =>
+        route.path === "/api/admin/keys/test"
+          ? jsonResponse(true, { results })
+          : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestShowing")?.textContent
+      ).toContain("showing 4 of 6 results")
+    );
+    const rows = document.querySelectorAll("#adminOpsTestResults li");
+    expect(rows).toHaveLength(4);
+    // The scope the run ran under is stated on the strip.
+    expect(
+      document.getElementById("adminOpsTestShowing")?.textContent
+    ).toContain("1 key → all models");
+    // Failures first, in the order the endpoint returned them, with the
+    // error text visible and the varying side (the model) named.
+    expect(rows[0].textContent).toContain("Agnes Flash");
+    expect(rows[0].textContent).toContain("does not serve");
+    expect(rows[1].textContent).toContain("Model Six");
+    expect(rows[1].textContent).toContain("no active version");
+    // Then the fastest passes, latency in milliseconds.
+    expect(rows[2].textContent).toContain("Flux Schnell");
+    expect(rows[2].textContent).toContain("12 ms");
+    expect(rows[3].textContent).toContain("Stable Diffusion XL");
+    expect(rows[3].textContent).toContain("40 ms");
+    // Nothing is silently missing: the slower passes are named as shown-out.
+    const strip = document.getElementById("adminOpsTestResults")?.textContent;
+    expect(strip).not.toContain("95 ms");
+    expect(strip).not.toContain("200 ms");
+    expect(strip).not.toContain("Model Five");
+  });
+
+  it("labels each row with the key it probed in scope 2", async () => {
+    // One model against every key: the varying side is the key, so each
+    // row names the key it probed, and the run's scope is stated.
+    const results = [
+      { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 30 },
+      {
+        keyId: 2,
+        modelId: MODELS[1].id,
+        ok: false,
+        ms: 0,
+        error: "key 'key-2' is parked",
+      },
+    ];
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(true, { results })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "all keys → 1 model" })
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/Model to test/i),
+      MODELS[1].id
+    );
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestShowing")?.textContent
+      ).toContain("showing 2 of 2 results")
+    );
+    const showing = document.getElementById("adminOpsTestShowing");
+    expect(showing?.textContent).toContain("all keys → 1 model");
+    const rows = document.querySelectorAll("#adminOpsTestResults li");
+    expect(rows).toHaveLength(2);
+    // Failures first even here, and every key renders its masked hint —
+    // never a token, which the client never receives.
+    expect(rows[0].textContent).toContain("key-2 (ag-****c3d4)");
+    expect(rows[0].textContent).toContain("is parked");
+    expect(rows[1].textContent).toContain("key-1 (sk-yt****fa12)");
+    expect(rows[1].textContent).toContain("30 ms");
   });
 });

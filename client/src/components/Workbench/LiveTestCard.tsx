@@ -22,6 +22,20 @@ export interface LiveTestCardProps {
   onRun: (request: RunKeyTestRequest) => void;
 }
 
+/** How many strip rows are shown; the showing line accounts for the rest. */
+const STRIP_CAP = 4;
+
+/**
+ * The rows the strip shows, most relevant first: every failure (the
+ * operator needs the error text), then the passes by latency, cut to
+ * the cap. The showing line names what the cap hid.
+ */
+function stripRows(results: KeyTestResult[]): KeyTestResult[] {
+  const failures = results.filter((row) => !row.ok);
+  const passes = results.filter((row) => row.ok).sort((a, b) => a.ms - b.ms);
+  return [...failures, ...passes].slice(0, STRIP_CAP);
+}
+
 function scopeChipClass(active: boolean): string {
   return `chip ${active ? "text-white" : "text-muted"}`;
 }
@@ -81,6 +95,7 @@ export function LiveTestCard({
   // A 200 whose body is not the pinned shape is a broken answer, not a
   // crash: the strip renders what arrived, nothing if nothing did.
   const runResults = lastRun?.results ?? [];
+  const rows = stripRows(runResults);
 
   return (
     <div>
@@ -171,7 +186,7 @@ export function LiveTestCard({
       {lastRun ? (
         <div id="adminOpsTestResults" className="mt-3">
           <ul className="space-y-1">
-            {runResults.map((row) => (
+            {rows.map((row) => (
               <li
                 key={`${row.keyId}-${row.modelId}`}
                 className="flex items-center justify-between gap-2 text-xs"
@@ -196,6 +211,14 @@ export function LiveTestCard({
               </li>
             ))}
           </ul>
+          <p id="adminOpsTestShowing" className="text-xs text-muted mt-2">
+            {keyTestScope(lastRun.request) === "key"
+              ? "1 key → all models"
+              : "all keys → 1 model"}
+            {" · showing "}
+            {rows.length} of {runResults.length}{" "}
+            {runResults.length === 1 ? "result" : "results"}
+          </p>
         </div>
       ) : null}
     </div>
