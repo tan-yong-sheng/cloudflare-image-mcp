@@ -1048,7 +1048,9 @@ describe("admin keys live test (#149)", () => {
   // stub global fetch explicitly — no-network.ts throws on unstubbed calls,
   // so a forgotten stub fails loudly instead of reading as a probe failure.
 
-  /** D1-shaped fake serving the probe's key rows from provider_keys. */
+  /** D1-shaped fake serving the probe's key rows from provider_keys. It
+   * honors the enabled filter the production SQL carries, the way D1
+   * applies a WHERE clause. */
   function dbWithProbeRows(rows: Record<string, unknown>[]): unknown {
     return {
       prepare: (sql: string) => {
@@ -1056,7 +1058,11 @@ describe("admin keys live test (#149)", () => {
           first: async () => null,
           all: async () =>
             sql.includes("FROM provider_keys")
-              ? { results: rows }
+              ? {
+                  results: sql.includes("enabled = 1")
+                    ? rows.filter((r) => r.enabled === 1)
+                    : rows,
+                }
               : { results: [] },
           run: async () => ({ meta: { changes: 0 } }),
         };
@@ -1423,6 +1429,29 @@ describe("admin keys live test (#149)", () => {
       [1, true],
       [2, true],
     ]);
+  });
+
+  test("the key wildcard probes only enabled keys", async () => {
+    const rows = [
+      await probeRow({ id: 1 }),
+      await probeRow({
+        id: 2,
+        label: "probe-key-2",
+        enabled: 0,
+        accountId: "acct-2",
+      }),
+    ];
+    const calls = stubProbeFetch();
+    const results = await resultsOf(
+      { keyIds: ["*"], modelIds: [SCHNELL] },
+      rows
+    );
+    // Spec #146: the wildcard tests all ENABLED keys on one model. The
+    // parked key produces no result row and schedules no inference;
+    // re-enabling it makes it testable again.
+    expect(results.map((r) => r.keyId)).toEqual([1]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).not.toContain("acct-2");
   });
 
   test("a wildcard pairing count over the cap is refused before any inference runs", async () => {

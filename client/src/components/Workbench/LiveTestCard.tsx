@@ -133,11 +133,16 @@ export function LiveTestCard({
           onChange={(event) => setKeyId(event.target.value)}
         >
           <option value="">Select a key…</option>
-          {keys.map((key) => (
-            <option key={key.id} value={String(key.id)}>
-              {key.label} ({key.maskedKey ?? `#${key.id}`})
-            </option>
-          ))}
+          {keys
+            // The probe store lists enabled keys only, so a parked key
+            // would only answer "unknown": it is not offered here.
+            // Re-enabling it makes it testable again.
+            .filter((key) => key.enabled !== false)
+            .map((key) => (
+              <option key={key.id} value={String(key.id)}>
+                {key.label} ({key.maskedKey ?? `#${key.id}`})
+              </option>
+            ))}
         </select>
         <select
           id="adminOpsTestModelSelect"
