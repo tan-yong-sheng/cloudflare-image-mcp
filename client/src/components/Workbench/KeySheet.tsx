@@ -188,7 +188,7 @@ export function KeySheet({
           borderBottom: 0,
         }}
       >
-        <p id="adminSheetEyebrow" className="text-xs text-muted font-mono mb-1">
+        <p id="adminSheetEyebrow" className="text-xs opacity-60 font-mono mb-1">
           {isEdit ? "EDIT" : "NEW"}
         </p>
         <h3 id="adminSheetTitle" className="text-lg font-bold mb-1">
@@ -201,7 +201,7 @@ export function KeySheet({
               ")"
             : "New Key (" + (provider?.id ?? "") + ")"}
         </h3>
-        <p id="adminSheetNote" className="text-xs text-muted mb-3">
+        <p id="adminSheetNote" className="text-xs opacity-60 mb-3">
           {isEdit
             ? "Leave the token blank to keep the current version. Filling it rotates as part of save."
             : "The key will be sealed server-side on save."}
@@ -214,7 +214,7 @@ export function KeySheet({
           >
             <label
               htmlFor="adminSheetAcct"
-              className="block text-xs text-muted mb-1"
+              className="block text-xs opacity-60 mb-1"
             >
               Cloudflare account ID
             </label>
@@ -229,7 +229,7 @@ export function KeySheet({
               value={accountId}
               onChange={(event) => setAccountId(event.target.value)}
             />
-            <p className="text-xs text-muted mt-1">
+            <p className="text-xs opacity-60 mt-1">
               Required — inference calls{" "}
               <code>{"/accounts/{account_id}/ai/run/…"}</code>. Stored alongside
               the key (not sealed).
@@ -239,10 +239,10 @@ export function KeySheet({
           <div>
             <label
               htmlFor="adminSheetToken"
-              className="block text-xs text-muted mb-1"
+              className="block text-xs opacity-60 mb-1"
             >
               API token{" "}
-              <span id="adminSheetTokenHint" className="text-muted">
+              <span id="adminSheetTokenHint" className="opacity-60">
                 {isEdit &&
                 editingKey.activeVersion !== null &&
                 editingKey.activeVersion !== undefined
@@ -253,7 +253,7 @@ export function KeySheet({
                   : ""}
               </span>
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <input
                 type={tokenVisible ? "text" : "password"}
                 id="adminSheetToken"
@@ -267,7 +267,8 @@ export function KeySheet({
               <button
                 id="adminSheetTokenEye"
                 type="button"
-                className="btn btn-secondary p-2"
+                className="btn btn-secondary h-12 w-12 p-0 flex items-center justify-center rounded shrink-0"
+                style={{ height: "48px", width: "48px", padding: 0 }}
                 aria-label={tokenVisible ? "Hide token" : "Show token"}
                 title={tokenVisible ? "Hide token" : "Show token"}
                 onClick={() => {
@@ -288,7 +289,7 @@ export function KeySheet({
             <div className="flex-1">
               <label
                 htmlFor="adminSheetWeight"
-                className="block text-xs text-muted mb-1"
+                className="block text-xs opacity-60 mb-1"
               >
                 Scheduling weight
               </label>
@@ -305,25 +306,19 @@ export function KeySheet({
                 onChange={(event) => setWeight(event.target.value)}
               />
             </div>
-            <label className="flex gap-2 items-center text-xs pb-2 cursor-pointer">
+            <label className="flex gap-2 items-center text-xs pb-2">
               <input
                 type="checkbox"
                 id="adminSheetEnabled"
-                className="w-12 h-12 cursor-pointer accent-primary"
-                style={{
-                  width: "48px",
-                  height: "48px",
-                  minWidth: "48px",
-                  minHeight: "48px",
-                }}
+                style={{ width: "auto" }}
                 checked={enabled}
                 onChange={(event) => setEnabled(event.target.checked)}
               />
               Enabled{" "}
-              <span className="text-muted">— uncheck to park the key</span>
+              <span className="opacity-60">— uncheck to park the key</span>
             </label>
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs opacity-60">
             Default 1 · ≤ 0 is excluded · maximum{" "}
             {MAX_WEIGHT.toLocaleString("en-US")}.
           </p>
