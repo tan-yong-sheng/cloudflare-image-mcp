@@ -407,7 +407,21 @@ test.describe("Workbench", () => {
       await page.fill("#adminSheetToken", "ui-e2e-token-value");
       await page.click("#adminSheetSave");
 
-      const row = page.locator("#adminKeys tr").filter({ hasText: accountId });
+      // The table masks both identity columns, so neither the account id nor
+      // the token hint can find a row. Anchor on the key id the server
+      // assigned, which is what `data-key-id` exists for.
+      let keyId = 0;
+      await expect
+        .poll(async () => {
+          keyId =
+            (await healthKeys(request)).find(
+              (key) => key.accountId === accountId
+            )?.id ?? 0;
+          return keyId;
+        })
+        .toBeGreaterThan(0);
+
+      const row = page.locator(`#adminKeys tr[data-key-id="${keyId}"]`);
       await expect(row).toHaveCount(1);
       await expect(row).toContainText("v1");
 
@@ -432,35 +446,20 @@ test.describe("Workbench", () => {
       await page.reload();
       await expect(page.locator("#adminGate")).toBeVisible();
       await unlock(page);
-      const parked = page
-        .locator("#adminKeys tr")
-        .filter({ hasText: accountId })
-        .getByRole("switch");
+      const parked = row.getByRole("switch");
       await expect(parked).toHaveAttribute("aria-checked", "false");
 
       // A new token in the edit drawer rotates the version.
-      await page
-        .locator("#adminKeys tr")
-        .filter({ hasText: accountId })
-        .getByRole("button", { name: /^Edit key/ })
-        .click();
+      await row.getByRole("button", { name: /^Edit key/ }).click();
       await expect(page.locator("#adminSheet")).toBeVisible();
       await page.fill("#adminSheetToken", "ui-e2e-token-value-rotated");
       await page.click("#adminSheetSave");
-      await expect(
-        page.locator("#adminKeys tr").filter({ hasText: accountId })
-      ).toContainText("v2");
+      await expect(row).toContainText("v2");
 
       // Clean up: the delete is confirmed by the operator.
       page.once("dialog", (dialog) => void dialog.accept());
-      await page
-        .locator("#adminKeys tr")
-        .filter({ hasText: accountId })
-        .getByRole("button", { name: /^Delete key/ })
-        .click();
-      await expect(
-        page.locator("#adminKeys tr").filter({ hasText: accountId })
-      ).toHaveCount(0);
+      await row.getByRole("button", { name: /^Delete key/ }).click();
+      await expect(row).toHaveCount(0);
     } finally {
       // The key is removed even when an assertion fails, so a broken run
       // does not leave a row behind in the target's key table.

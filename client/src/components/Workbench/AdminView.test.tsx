@@ -38,7 +38,8 @@ const HEALTH = {
       weight: 1,
       enabled: true,
       activeVersion: 3,
-      accountId: "acct-1",
+      accountId: "023e105f4ecef8ad9ca31a8372d0c353",
+      maskedKey: "sk-yt****fa12",
     },
     {
       id: 2,
@@ -48,6 +49,7 @@ const HEALTH = {
       enabled: false,
       activeVersion: 1,
       accountId: null,
+      maskedKey: "ag-****c3d4",
     },
   ],
   exposure: [],
@@ -201,21 +203,70 @@ describe("the provider credentials workbench", () => {
     expect(rail?.textContent).toContain("Agnes");
   });
 
-  it("asks for an account id only for a cloudflare-rest family", async () => {
+  it("shows the account column only for a cloudflare-rest family", async () => {
     stubApi();
     const user = userEvent.setup();
     renderWorkbench();
 
     await unlock(user);
 
-    // The first family is cloudflare-rest, so the account column is the
-    // account id.
+    // The first family is cloudflare-rest, so both identity columns exist.
+    expect(screen.getByText("Key")).toBeInTheDocument();
     expect(screen.getByText("Account ID")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Agnes/i }));
 
-    // Agnes is openai-compat: it has no Cloudflare account behind it.
+    // Agnes is openai-compat: it has no Cloudflare account behind it, so the
+    // column goes away instead of rendering an empty one.
     expect(screen.getByText("Key")).toBeInTheDocument();
+    expect(screen.queryByText("Account ID")).toBeNull();
+  });
+
+  it("identifies a row by the masked hint, never by the account id", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    const row = document.querySelector('[data-key-id="1"]');
+    expect(row?.textContent).toContain("sk-yt****fa12");
+    expect(row?.textContent).toContain("v3");
+    // The hint is what identifies the key; the account id is identity too and
+    // is not printed whole anywhere in the row.
+    expect(row?.textContent).not.toContain("023e105f4ecef8ad9ca31a8372d0c353");
+  });
+
+  it("masks the account id and keeps the full value in its tooltip", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    const accountCell = screen.getByTitle("023e105f4ecef8ad9ca31a8372d0c353");
+    expect(accountCell.textContent).toBe("023e…c353");
+  });
+
+  it("shows a dash when the envelope will not open", async () => {
+    // A key the data key cannot open arrives without a hint. The row still
+    // renders, because that row is where the operator repairs the key.
+    stubApi((route) =>
+      route.path === "/api/admin/health"
+        ? jsonResponse(true, {
+            ...HEALTH,
+            keys: [{ ...HEALTH.keys[0], maskedKey: undefined }],
+          })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    const keyCell = document.querySelector('[data-key-id="1"] td');
+    expect(keyCell?.textContent).toContain("—");
+    expect(screen.getByRole("button", { name: /Edit key #1/i })).toBeEnabled();
   });
 
   it("refuses to save a cloudflare-rest key without an account id", async () => {
@@ -308,6 +359,9 @@ describe("the provider credentials workbench", () => {
     await unlock(user);
     await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
     expect(screen.getByText(/blank = keep v3/i)).toBeInTheDocument();
+    expect(
+      document.getElementById("adminSheetTokenHint")?.textContent
+    ).toContain("sk-yt****fa12");
     await user.click(screen.getByRole("button", { name: /^Save$/i }));
 
     await waitFor(() =>
