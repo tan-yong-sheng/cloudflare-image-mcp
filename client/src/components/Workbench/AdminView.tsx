@@ -200,12 +200,12 @@ export function AdminView() {
       role="main"
       aria-labelledby="adminViewTitle"
     >
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
         <div className="flex items-center space-x-3">
           <button
             id="adminBackBtn"
             type="button"
-            className="btn btn-secondary p-2 h-10 flex items-center justify-center rounded"
+            className="btn btn-secondary p-2 h-12 flex items-center justify-center rounded"
             aria-label="Back to Image Generator"
             onClick={() => {
               window.location.hash = "";
@@ -215,7 +215,7 @@ export function AdminView() {
             Back
           </button>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span
             id="adminChipsActive"
             className={`chip chip-ok${
@@ -234,7 +234,7 @@ export function AdminView() {
           <button
             id="adminLock"
             type="button"
-            className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
+            className={`btn btn-secondary p-2 h-12 flex items-center justify-center${
               unlocked ? "" : " hidden"
             }`}
             aria-label="Lock provider credentials"

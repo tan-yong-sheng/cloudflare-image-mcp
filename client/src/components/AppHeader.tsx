@@ -16,7 +16,7 @@ export function ThemeToggleButton({ id }: { id: string }) {
     <button
       id={id}
       type="button"
-      className="btn btn-secondary p-2 h-10 w-10 flex items-center justify-center"
+      className="btn btn-secondary p-2 h-12 w-12 flex items-center justify-center"
       aria-label="Toggle dark theme"
       onClick={toggleTheme}
     >
@@ -34,7 +34,7 @@ export function LogoutButton({ id }: { id: string }) {
     <button
       id={id}
       type="button"
-      className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
+      className={`btn btn-secondary p-2 h-12 flex items-center justify-center${
         isAuthenticated ? "" : " hidden"
       }`}
       aria-label="Logout"
@@ -57,7 +57,7 @@ export function AdminWorkbenchButton() {
     <button
       id="adminWorkbenchButton"
       type="button"
-      className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
+      className={`btn btn-secondary p-2 h-12 flex items-center justify-center${
         isAuthenticated ? "" : " hidden"
       }`}
       aria-label="Manage provider credentials"

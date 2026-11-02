@@ -284,7 +284,7 @@ export function GeneratorView() {
       role="main"
       aria-labelledby="generatorViewTitle"
     >
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1
           id="generatorViewTitle"
           className="text-2xl md:text-3xl font-bold flex items-center"
@@ -292,7 +292,7 @@ export function GeneratorView() {
           <i className="fa-solid fa-image mr-2" />
           AI Image Generator
         </h1>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <AdminWorkbenchButton />
           <LogoutButton id="logoutButton" />
           <ThemeToggleButton id="themeToggle" />
@@ -403,14 +403,14 @@ export function GeneratorView() {
 
           <p
             id="noKeysWarning"
-            className={`text-sm p-3 mb-3 rounded bg-yellow-900/30 text-yellow-300 border border-yellow-700${
+            className={`alert-warning text-sm p-3 mb-3 rounded${
               credentialsConfigured ? " hidden" : ""
             }`}
             role="alert"
           >
             <i className="fa-solid fa-triangle-exclamation mr-2" />
             No API keys configured.{" "}
-            <a href="#admin" className="underline hover:text-yellow-200">
+            <a href="#admin" className="underline hover:opacity-80">
               Set up credentials
             </a>{" "}
             in the admin panel first.

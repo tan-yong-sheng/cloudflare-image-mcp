@@ -68,7 +68,7 @@ export function KeyTable({
       </div>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left opacity-60 border-b border-gray-800">
+          <tr className="text-left text-muted border-b border-gray-800">
             <th id="adminKeysHead" className="p-3 font-medium">
               Key
             </th>
@@ -91,7 +91,7 @@ export function KeyTable({
                   {key.maskedKey || "—"}
                   {key.activeVersion !== null &&
                   key.activeVersion !== undefined ? (
-                    <span className="opacity-60 text-xs ml-2">
+                    <span className="text-muted text-xs ml-2">
                       v{key.activeVersion}
                     </span>
                   ) : null}
@@ -105,7 +105,7 @@ export function KeyTable({
                   </td>
                 ) : null}
                 <td className="p-3 whitespace-nowrap text-right">
-                  <span className="inline-flex gap-2 items-center">
+                  <span className="inline-flex items-center gap-3">
                     <label
                       className="tswitch"
                       title={(key.enabled ? "Disable " : "Enable ") + key.label}
@@ -127,44 +127,53 @@ export function KeyTable({
                         <span className="thumb" />
                       </span>
                     </label>
-                    <button
-                      type="button"
-                      className="btn btn-secondary text-xs py-1 px-2"
-                      aria-label={"Edit key #" + key.id}
-                      title={"Edit key #" + key.id}
-                      disabled={pending}
-                      onClick={() => onEdit(key)}
-                    >
-                      <i className="fa-solid fa-pen" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger text-xs py-1 px-2"
-                      aria-label={"Delete key #" + key.id}
-                      title={"Delete key #" + key.id}
-                      disabled={pending}
-                      onClick={() => {
-                        const who =
-                          key.maskedKey ||
-                          key.accountId ||
-                          key.label ||
-                          "#" + key.id;
-                        if (
-                          !window.confirm(
-                            "Delete key #" +
-                              key.id +
-                              " (" +
-                              who +
-                              ")? This cannot be undone."
-                          )
-                        ) {
-                          return;
-                        }
-                        onDelete(key);
-                      }}
-                    >
-                      <i className="fa-solid fa-trash" />
-                    </button>
+
+                    <span
+                      className="inline-block h-4 w-px"
+                      style={{ backgroundColor: "var(--border)" }}
+                      aria-hidden="true"
+                    />
+
+                    <span className="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-secondary text-xs h-8 w-8 p-0 inline-flex items-center justify-center rounded"
+                        aria-label={"Edit key #" + key.id}
+                        title={"Edit key #" + key.id}
+                        disabled={pending}
+                        onClick={() => onEdit(key)}
+                      >
+                        <i className="fa-solid fa-pen" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-danger text-xs h-8 w-8 p-0 inline-flex items-center justify-center rounded"
+                        aria-label={"Delete key #" + key.id}
+                        title={"Delete key #" + key.id}
+                        disabled={pending}
+                        onClick={() => {
+                          const who =
+                            key.maskedKey ||
+                            key.accountId ||
+                            key.label ||
+                            "#" + key.id;
+                          if (
+                            !window.confirm(
+                              "Delete key #" +
+                                key.id +
+                                " (" +
+                                who +
+                                ")? This cannot be undone."
+                            )
+                          ) {
+                            return;
+                          }
+                          onDelete(key);
+                        }}
+                      >
+                        <i className="fa-solid fa-trash" />
+                      </button>
+                    </span>
                   </span>
                 </td>
               </tr>
@@ -174,7 +183,7 @@ export function KeyTable({
       </table>
       <p
         id="adminEmpty"
-        className={`text-sm opacity-60 text-center py-10${
+        className={`text-sm text-muted text-center py-10${
           rows.length > 0 ? " hidden" : ""
         }`}
       >

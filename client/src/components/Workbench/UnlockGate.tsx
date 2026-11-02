@@ -40,7 +40,7 @@ export function UnlockGate({ error, hidden, onUnlock }: UnlockGateProps) {
             <i className="fa-solid fa-shield-halved text-xl" />
           </div>
           <h2 className="text-lg font-bold">Unlock Provider Administration</h2>
-          <p className="text-xs opacity-60">
+          <p className="text-xs text-muted">
             Enter your management key to inspect and configure provider
             credentials.
           </p>
