@@ -7,6 +7,7 @@ import { AdminKeyProvider } from "../../app/admin-key";
 import { AuthProvider, useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { AdminView } from "./AdminView";
+import { ModelFilterCard } from "./ModelFilterCard";
 
 /**
  * The workbench.
@@ -1184,6 +1185,21 @@ describe("the model filter chips in the operations rail", () => {
     );
   }
 
+  // The Working chip's lit path takes its data from Card 2, which no
+  // ticket in flight populates yet — so the prop contract is exercised
+  // against the card directly, the way #153 will thread it through the
+  // rail's filters slot.
+  function renderFilterCard(workingModels?: Set<string>) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ModelFilterCard providers={[]} workingModels={workingModels} />
+      </QueryClientProvider>
+    );
+  }
+
   it("lists every model with a shown/total count until a chip is toggled", async () => {
     stubModels(MODELS);
     const user = userEvent.setup();
@@ -1325,5 +1341,59 @@ describe("the model filter chips in the operations rail", () => {
     // listed, the request path refuses it elsewhere.
     expect(screen.getByText("2 of 2 models")).toBeInTheDocument();
     expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
+
+  it("keeps the Working chip greyed and inert before a live test has run", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // The Working chip is #153's anchor: it exists from the start, but
+    // with no test-run data behind it stays in the greyed pre-run state
+    // and activating it must not narrow anything.
+    const working = screen.getByRole("button", { name: "Working" });
+    expect(document.getElementById("adminOpsChipWorking")).toBe(working);
+    expect(working).toBeDisabled();
+    expect(working.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(working);
+    expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
+
+  it("keeps the Working chip greyed while the working set is empty", async () => {
+    stubModels(MODELS);
+    renderFilterCard(new Set());
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsModelCount")).toBeInTheDocument()
+    );
+
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
+  });
+
+  it("lights the Working chip once a test run supplies working models", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderFilterCard(
+      new Set(["@cf/runwayml/stable-diffusion-v1-5-inpainting"])
+    );
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsModelCount")).toBeInTheDocument()
+    );
+
+    const working = screen.getByRole("button", { name: "Working" });
+    expect(working).toBeEnabled();
+    await user.click(working);
+    expect(working.getAttribute("aria-pressed")).toBe("true");
+
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Stable Diffusion XL")).not.toBeInTheDocument();
+
+    // A non-empty working set joins the other chips as an independent
+    // AND-composable filter, not an exclusive mode.
+    await user.click(screen.getByRole("button", { name: "Free" }));
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
   });
 });
