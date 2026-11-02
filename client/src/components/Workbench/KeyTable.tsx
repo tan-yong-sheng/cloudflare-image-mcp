@@ -137,7 +137,7 @@ export function KeyTable({
                     <span className="inline-flex items-center gap-2">
                       <button
                         type="button"
-                        className="btn btn-secondary text-xs h-8 w-8 p-0 inline-flex items-center justify-center rounded"
+                        className="btn btn-secondary btn-sm-icon text-xs"
                         aria-label={"Edit key #" + key.id}
                         title={"Edit key #" + key.id}
                         disabled={pending}
@@ -147,7 +147,7 @@ export function KeyTable({
                       </button>
                       <button
                         type="button"
-                        className="btn btn-danger text-xs h-8 w-8 p-0 inline-flex items-center justify-center rounded"
+                        className="btn btn-danger btn-sm-icon text-xs"
                         aria-label={"Delete key #" + key.id}
                         title={"Delete key #" + key.id}
                         disabled={pending}

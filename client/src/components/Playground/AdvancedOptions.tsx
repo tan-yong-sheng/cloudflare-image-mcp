@@ -143,8 +143,7 @@ export function AdvancedOptions({
             <button
               id="randomSeed"
               type="button"
-              className="btn btn-secondary h-12 w-12 p-0 flex items-center justify-center rounded shrink-0"
-              style={{ height: "48px", width: "48px", padding: 0 }}
+              className="btn btn-secondary btn-icon rounded"
               aria-label="Randomize seed"
               onClick={() =>
                 onSeedChange(String(Math.floor(Math.random() * 4294967295)))

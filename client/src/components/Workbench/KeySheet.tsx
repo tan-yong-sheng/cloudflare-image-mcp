@@ -267,8 +267,7 @@ export function KeySheet({
               <button
                 id="adminSheetTokenEye"
                 type="button"
-                className="btn btn-secondary h-12 w-12 p-0 flex items-center justify-center rounded shrink-0"
-                style={{ height: "48px", width: "48px", padding: 0 }}
+                className="btn btn-secondary btn-icon rounded"
                 aria-label={tokenVisible ? "Hide token" : "Show token"}
                 title={tokenVisible ? "Hide token" : "Show token"}
                 onClick={() => {
