@@ -6,8 +6,10 @@
 # Build artifacts
 dist/
 node_modules
+.pnpm-store
 .vscode/
 .lavish/
+.tmp/
 
 # Worktrees
 .worktrees/
