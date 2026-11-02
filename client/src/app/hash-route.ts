@@ -49,7 +49,13 @@ export function parseRoute(hash: string, pathname = ""): Route {
   const fragment = hash.replace(/^#/, "");
   if (fragment === "admin") return "admin";
   if (fragment === "admin/api-keys") return "admin-api-keys";
-  return routeForPath(pathname);
+  // A named fragment the router does not know is the hash's answer, not an
+  // invitation to fall back to the path: the path decides the route only on
+  // the way in, and a hash that carries a route has already been adopted. So
+  // only an empty fragment lets the path speak, and `#admin/keys` on
+  // `/admin/api-keys` lands on the generator rather than reopening an admin
+  // screen the fragment did not name.
+  return fragment === "" ? routeForPath(pathname) : "generator";
 }
 
 export function useHashRoute(): Route {

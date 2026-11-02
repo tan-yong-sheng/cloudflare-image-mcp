@@ -39,6 +39,21 @@ describe("the route", () => {
     expect(parseRoute("#admin/keys")).toBe("generator");
   });
 
+  it("does not let an unknown fragment reopen the path's admin screen", () => {
+    // The fragment and the path are two claims about the route. When the
+    // fragment makes one — even an unknown one — it is the one that wins,
+    // so a stale or hand-edited hash cannot be rescued by the entry path
+    // into a screen the fragment did not name.
+    expect(parseRoute("#admin/keys", "/admin")).toBe("generator");
+    expect(parseRoute("#admin/keys", "/admin/api-keys")).toBe("generator");
+    expect(parseRoute("#generate", "/admin/api-keys")).toBe("generator");
+  });
+
+  it("lets the path decide only while the fragment is empty", () => {
+    expect(parseRoute("", "/admin")).toBe("admin");
+    expect(parseRoute("", "/admin/api-keys")).toBe("admin-api-keys");
+  });
+
   it("keeps the generator everywhere else", () => {
     expect(parseRoute("")).toBe("generator");
     expect(parseRoute("", "/")).toBe("generator");
