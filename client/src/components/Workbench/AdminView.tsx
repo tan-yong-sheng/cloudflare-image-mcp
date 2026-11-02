@@ -91,6 +91,15 @@ export function AdminView() {
   const family =
     providers.find((provider) => provider.id === selectedId) ?? null;
 
+  // Card 1's Working chip reads the most recent run's passes: the model
+  // ids that answered ok. A new run replaces the set (handleRunTest);
+  // empty keeps the chip in its greyed pre-run state.
+  const workingModels = new Set(
+    (lastRun?.results ?? [])
+      .filter((result) => result.ok)
+      .map((result) => result.modelId)
+  );
+
   // A rejected key re-locks the panel and explains itself on the gate.
   useEffect(() => {
     if (!health.isError) {
@@ -122,6 +131,15 @@ export function AdminView() {
     const timer = setTimeout(() => setNotice(null), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // Locking drops the probe results with the rest of the session's
+  // payload: a re-unlocked panel starts pre-run, its Working chip greyed
+  // again until the operator runs a fresh test.
+  useEffect(() => {
+    if (unlocked) return;
+    setLastRun(null);
+    setTestError(null);
+  }, [unlocked]);
 
   // Escape leaves the workbench for the generator. The add/edit drawer
   // owns its own Escape, so an open drawer swallows it first.
@@ -394,7 +412,12 @@ export function AdminView() {
           </div>
           <OperationsRail
             open={operationsOpen}
-            filters={<ModelFilterCard providers={providers} />}
+            filters={
+              <ModelFilterCard
+                providers={providers}
+                workingModels={workingModels}
+              />
+            }
             test={
               <LiveTestCard
                 keys={keys}
