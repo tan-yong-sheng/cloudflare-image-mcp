@@ -61,6 +61,9 @@ export function listModels(
   // resolves credentials by: `provider` names the model's author, so
   // several of them share one transport.
   inferenceProvider: string;
+  // What the model itself costs ("free" | "paid"); the Free chip (#152)
+  // reads it off /api/internal/models, which spreads this projection.
+  costClass?: ModelConfig["costClass"];
   supportedSizes: string[];
 }> {
   // R0: disabled models are absent from every listing surface.
@@ -77,6 +80,7 @@ export function listModels(
       limits: config.limits,
       provider: config.provider,
       inferenceProvider: config.inferenceProvider,
+      costClass: config.costClass,
       supportedSizes: config.limits.supportedSizes,
     }));
 }
