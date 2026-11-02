@@ -191,14 +191,21 @@ export function AdminView() {
           ...(values.apiToken ? { apiToken: values.apiToken } : {}),
         });
       } else {
-        await mutations.addKey.mutateAsync({
-          providerId: family?.id ?? "",
-          label: "key-" + Date.now(),
-          apiToken: values.apiToken,
-          accountId: values.accountId,
-          weight: values.weight,
-          enabled: values.enabled,
-        });
+        // One sequential add per pasted token, in the order the operator
+        // entered them. A refusal stops the batch where it is: the
+        // server's reason goes to the drawer, which stays open, and the
+        // keys the server already took stay added.
+        const batchLabel = "key-" + Date.now();
+        for (let index = 0; index < values.apiTokens.length; index += 1) {
+          await mutations.addKey.mutateAsync({
+            providerId: family?.id ?? "",
+            label: batchLabel + "-" + (index + 1),
+            apiToken: values.apiTokens[index],
+            accountId: values.accountId,
+            weight: values.weight,
+            enabled: values.enabled,
+          });
+        }
       }
       // The panel error belongs to the panel, not to this drawer. A
       // late answer from a drawer the operator has already dismissed

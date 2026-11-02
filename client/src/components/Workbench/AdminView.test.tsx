@@ -1964,3 +1964,170 @@ describe("the live test card in the operations rail", () => {
     expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
   });
 });
+
+describe("bulk token onboarding in the add drawer", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("counts valid tokens as they are typed or pasted", async () => {
+    // The counter is what the operator trusts before submitting: it
+    // counts the tokens that will actually be provisioned, after the
+    // drawer trims each line, drops blank and too-short lines, and
+    // removes duplicates in the order they were entered.
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+
+    await user.type(
+      screen.getByLabelText(/API token/i),
+      "  tok-alpha-01 \n\ntok-beta-02\ntok-alpha-01\nshort\ntok-gamma-03"
+    );
+
+    expect(
+      document.getElementById("adminSheetTokenCount")?.textContent
+    ).toContain("3 valid tokens");
+  });
+
+  it("adds every unique token under the family with its own incremental label", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(
+      screen.getByLabelText(/API token/i),
+      "tok-alpha-01\ntok-beta-02\ntok-alpha-01"
+    );
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(
+        calls.filter((call) => call.path === "/api/admin/keys")
+      ).toHaveLength(2)
+    );
+    const adds = calls.filter((call) => call.path === "/api/admin/keys");
+    expect(adds[0]?.body).toMatchObject({
+      providerId: "cloudflare",
+      label: expect.stringMatching(/^key-\d+-1$/),
+      apiToken: "tok-alpha-01",
+      weight: 1,
+      enabled: true,
+    });
+    expect(adds[1]?.body).toMatchObject({
+      providerId: "cloudflare",
+      label: expect.stringMatching(/^key-\d+-2$/),
+      apiToken: "tok-beta-02",
+      weight: 1,
+      enabled: true,
+    });
+  });
+
+  it("stops the batch and keeps the drawer open when an add is refused", async () => {
+    // One refused add is a refused batch: the server's reason lands in
+    // the drawer's error area, the drawer stays open so it can be
+    // corrected, and the keys the server already took stay added.
+    let addsSeen = 0;
+    const calls = stubApi((route) => {
+      if (route.path === "/api/admin/keys" && route.method === "POST") {
+        addsSeen += 1;
+        if (addsSeen === 2) {
+          return jsonResponse(
+            false,
+            { error: { message: "label 'key-2' already exists" } },
+            409
+          );
+        }
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(
+      screen.getByLabelText(/API token/i),
+      "tok-alpha-01\ntok-beta-02\ntok-gamma-03"
+    );
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(document.getElementById("adminSheetError")?.textContent).toContain(
+        "label 'key-2' already exists"
+      )
+    );
+    expect(document.getElementById("adminSheetError")?.className).not.toMatch(
+      /hidden/
+    );
+    // The third token was never sent: the batch stopped at the refusal.
+    expect(
+      calls.filter((call) => call.path === "/api/admin/keys")
+    ).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Add key" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add key" })).toBeInTheDocument();
+  });
+
+  it("refuses to submit when no pasted line holds a valid token", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+
+    const field = screen.getByLabelText(/API token/i);
+    await user.type(field, "   \n\n  ");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+    expect(
+      await screen.findByText(/API token is required/i)
+    ).toBeInTheDocument();
+
+    await user.type(field, "short");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+    expect(
+      await screen.findByText(/Token looks too short/i)
+    ).toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/admin/keys")).toBe(false);
+  });
+
+  it("keeps the single-line masked token input in edit mode", async () => {
+    // Edit replaces one stored version: a single-line field, masked
+    // until the operator asks, with no bulk counter.
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+
+    const field = screen.getByLabelText(/API token/i) as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(field.type).toBe("password");
+    expect(
+      screen.getByRole("button", { name: /Show token/i })
+    ).toBeInTheDocument();
+    expect(document.getElementById("adminSheetTokenCount")).toBeNull();
+  });
+});

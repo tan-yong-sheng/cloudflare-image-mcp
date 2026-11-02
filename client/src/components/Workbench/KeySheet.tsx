@@ -4,7 +4,10 @@ import { MAX_WEIGHT } from "../../config/limits";
 
 export interface SheetValues {
   accountId: string;
+  /** Edit mode: the replacement token; blank keeps the stored version. */
   apiToken: string;
+  /** Add mode: the parsed tokens to provision, in entry order. Empty in edit mode. */
+  apiTokens: string[];
   weight: number;
   enabled: boolean;
 }
@@ -23,6 +26,26 @@ interface KeySheetProps {
 
 /** The shortest token worth accepting as a pasted credential. */
 const MIN_TOKEN_LENGTH = 8;
+
+/**
+ * Splits the drawer's raw token text into the tokens worth adding: each
+ * line is trimmed, blank and too-short lines are dropped, and exact
+ * duplicates are removed in first-seen order. The counter and the
+ * submit path both read this list, so what the operator is shown is
+ * exactly what will be provisioned.
+ */
+function parseTokens(raw: string): string[] {
+  const tokens: string[] = [];
+  const seen = new Set<string>();
+  for (const line of raw.split("\n")) {
+    const token = line.trim();
+    if (token.length < MIN_TOKEN_LENGTH) continue;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    tokens.push(token);
+  }
+  return tokens;
+}
 
 /**
  * The add/edit drawer.
@@ -54,10 +77,22 @@ export function KeySheet({
   const [enabled, setEnabled] = useState(isEdit ? !!editingKey.enabled : true);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // The tokens the operator is bringing in. Edit mode replaces a single
+  // stored version, so it never parses the field into a batch.
+  const parsedTokens = isEdit ? [] : parseTokens(token);
+
   const accountRef = useRef<HTMLInputElement>(null);
-  const tokenRef = useRef<HTMLInputElement>(null);
+  const tokenInputRef = useRef<HTMLInputElement>(null);
+  const tokenAreaRef = useRef<HTMLTextAreaElement>(null);
   const weightRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Exactly one of the two token fields is mounted; focus that one.
+  const focusToken = (): void => {
+    if (tokenAreaRef.current) tokenAreaRef.current.focus();
+    else tokenInputRef.current?.focus();
+  };
+
   // The close handler is re-created on every render, so the listener
   // reads it through a ref instead of re-subscribing each time.
   const onCloseRef = useRef(onClose);
@@ -66,7 +101,7 @@ export function KeySheet({
   // Focus the first field the operator can actually fill.
   useEffect(() => {
     if (needsAccountId) accountRef.current?.focus();
-    else tokenRef.current?.focus();
+    else focusToken();
   }, [needsAccountId]);
 
   // The drawer is a modal: Escape dismisses it and Tab stays inside it,
@@ -106,7 +141,7 @@ export function KeySheet({
   ): void => {
     setLocalError(message);
     if (focus === "account") accountRef.current?.focus();
-    if (focus === "token") tokenRef.current?.focus();
+    if (focus === "token") focusToken();
     if (focus === "weight") weightRef.current?.focus();
   };
 
@@ -121,15 +156,21 @@ export function KeySheet({
       fail("Cloudflare account ID is required.", "account");
       return;
     }
-    if (!isEdit && !trimmedToken) {
-      fail("API token is required.", "token");
+    if (!isEdit && parsedTokens.length === 0) {
+      // Nothing in the field can be provisioned. A blank field is a
+      // missing token; anything typed that is only too short is a
+      // truncated paste.
+      fail(
+        trimmedToken
+          ? "Token looks too short — paste the full value."
+          : "API token is required.",
+        "token"
+      );
       return;
     }
-    if (trimmedToken && trimmedToken.length < MIN_TOKEN_LENGTH) {
+    if (isEdit && trimmedToken && trimmedToken.length < MIN_TOKEN_LENGTH) {
       fail(
-        isEdit
-          ? "Token looks too short — paste the full value, or leave blank to keep."
-          : "Token looks too short — paste the full value.",
+        "Token looks too short — paste the full value, or leave blank to keep.",
         "token"
       );
       return;
@@ -150,6 +191,7 @@ export function KeySheet({
     onSave({
       accountId: trimmedAccount,
       apiToken: trimmedToken,
+      apiTokens: parsedTokens,
       weight: parsedWeight,
       enabled,
     });
@@ -253,35 +295,82 @@ export function KeySheet({
                   : ""}
               </span>
             </label>
-            <div className="flex gap-2 items-center">
-              <input
-                type={tokenVisible ? "text" : "password"}
-                id="adminSheetToken"
-                ref={tokenRef}
-                className="w-full"
-                autoComplete="new-password"
-                data-1p-ignore="true"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-              />
-              <button
-                id="adminSheetTokenEye"
-                type="button"
-                className="btn btn-secondary btn-icon rounded"
-                aria-label={tokenVisible ? "Hide token" : "Show token"}
-                title={tokenVisible ? "Hide token" : "Show token"}
-                onClick={() => {
-                  setTokenVisible((visible) => !visible);
-                  tokenRef.current?.focus();
-                }}
-              >
-                <i
-                  className={`fa-solid ${
-                    tokenVisible ? "fa-eye-slash" : "fa-eye"
-                  }`}
+            {isEdit ? (
+              <div className="flex gap-2 items-center">
+                <input
+                  type={tokenVisible ? "text" : "password"}
+                  id="adminSheetToken"
+                  ref={tokenInputRef}
+                  className="w-full"
+                  autoComplete="new-password"
+                  data-1p-ignore="true"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
                 />
-              </button>
-            </div>
+                <button
+                  id="adminSheetTokenEye"
+                  type="button"
+                  className="btn btn-secondary btn-icon rounded"
+                  aria-label={tokenVisible ? "Hide token" : "Show token"}
+                  title={tokenVisible ? "Hide token" : "Show token"}
+                  onClick={() => {
+                    setTokenVisible((visible) => !visible);
+                    tokenInputRef.current?.focus();
+                  }}
+                >
+                  <i
+                    className={`fa-solid ${
+                      tokenVisible ? "fa-eye-slash" : "fa-eye"
+                    }`}
+                  />
+                </button>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  id="adminSheetToken"
+                  ref={tokenAreaRef}
+                  className={`w-full font-mono${
+                    tokenVisible ? "" : " token-masked"
+                  }`}
+                  rows={5}
+                  autoComplete="new-password"
+                  data-1p-ignore="true"
+                  spellCheck={false}
+                  placeholder="One token per line"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                />
+                <div className="flex gap-2 items-center mt-1">
+                  <p
+                    id="adminSheetTokenCount"
+                    className="text-xs text-muted flex-1"
+                    role="status"
+                  >
+                    {parsedTokens.length === 1
+                      ? "1 valid token ready to add."
+                      : `${parsedTokens.length} valid tokens ready to add.`}
+                  </p>
+                  <button
+                    id="adminSheetTokenEye"
+                    type="button"
+                    className="btn btn-secondary btn-icon rounded"
+                    aria-label={tokenVisible ? "Hide token" : "Show token"}
+                    title={tokenVisible ? "Hide token" : "Show token"}
+                    onClick={() => {
+                      setTokenVisible((visible) => !visible);
+                      focusToken();
+                    }}
+                  >
+                    <i
+                      className={`fa-solid ${
+                        tokenVisible ? "fa-eye-slash" : "fa-eye"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex gap-3 items-end">
