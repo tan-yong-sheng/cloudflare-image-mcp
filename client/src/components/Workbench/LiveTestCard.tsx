@@ -161,6 +161,7 @@ export function LiveTestCard({
           id="adminOpsTestRun"
           className="btn btn-primary text-sm w-full"
           disabled={!ready || running}
+          aria-busy={running}
           onClick={run}
         >
           {running ? "Testing…" : "Run test"}
