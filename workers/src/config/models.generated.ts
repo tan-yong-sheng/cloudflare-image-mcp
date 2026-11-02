@@ -13,6 +13,7 @@ import type { ModelConfig } from "../types.js";
 // - flux-2 dims bounds are functional but unverified (Cloudflare publishes an opaque multipart schema); BFL's own 4MP ceiling suggests ours may be conservative. Live size probing deferred to post-0.2.0.
 // - flux-1-schnell limits are inert: it declares no width/height params, so toCFPayload drops dims and the UI hides size; the shape stays because ModelConfig.limits requires all bounds plus supportedSizes.
 // - modelAliases is read by no code path: resolveModelId resolves an alias from the model's own exposure.alias block. Kept until a decision is taken to drop it.
+// - costClass (R4-#150): "free" only where a source shows the provider bills $0 for the model itself - the Unit Pricing $0.00/step rows on the Cloudflare model pages for sd-xl-base-1.0, sdxl-lightning and sd-v1-5-inpainting (re-checked 2026-11-03). Everything else is "paid": flux-1-schnell, flux-2-*, lucid-origin and phoenix-1.0 are priced on the Cloudflare image pricing table (2026-11-03); dreamshaper-8-lcm publishes no pricing anywhere; the Agnes models carry a non-zero list price and the vendor's current $0 charge is a promotion. The account-level daily Neuron allocation is an account free tier, not a free model.
 
 export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   "@cf/black-forest-labs/flux-1-schnell": {
@@ -22,6 +23,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Fast 12B parameter rectified flow transformer for rapid image generation",
     provider: "black-forest-labs",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "base64",
@@ -67,6 +69,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Ultra-fast distilled model unifying image generation and editing",
     provider: "black-forest-labs",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "multipart",
     responseFormat: "base64",
@@ -136,6 +139,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     description: "High-quality image model with multi-reference support",
     provider: "black-forest-labs",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "multipart",
     responseFormat: "base64",
@@ -206,6 +210,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Ultra-fast, distilled 9B image model with enhanced quality, unifying generation and editing",
     provider: "black-forest-labs",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "multipart",
     responseFormat: "base64",
@@ -275,6 +280,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     description: "High-quality diffusion model by Stability AI",
     provider: "stabilityai",
     inferenceProvider: "cloudflare-rest",
+    costClass: "free",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "binary",
@@ -373,6 +379,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     description: "Lightning-fast SDXL model for high-quality 1024px images",
     provider: "bytedance",
     inferenceProvider: "cloudflare-rest",
+    costClass: "free",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "binary",
@@ -442,12 +449,14 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       supportedSizes: ["1024x1024"],
     },
   },
+  // costClass 'paid' (R4-#150): no Unit Pricing row on the Cloudflare model page and absent from the image pricing table (checked 2026-11-03) - no source proves free, so the conservative default stands.
   "@cf/lykon/dreamshaper-8-lcm": {
     id: "@cf/lykon/dreamshaper-8-lcm",
     name: "@cf/lykon/dreamshaper-8-lcm 8 LCM",
     description: "Enhanced photorealistic SD model with LCM acceleration",
     provider: "lykon",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "binary",
@@ -538,6 +547,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     description: "Leonardo.AI's most adaptable and prompt-responsive model",
     provider: "leonardo",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "base64",
@@ -609,6 +619,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Leonardo.AI model with exceptional prompt adherence and coherent text",
     provider: "leonardo",
     inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "binary",
@@ -684,6 +695,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     description: "Stable Diffusion for masked edits (requires mask)",
     provider: "runwayml",
     inferenceProvider: "cloudflare-rest",
+    costClass: "free",
     apiVersion: 2,
     inputFormat: "json",
     responseFormat: "binary",
@@ -784,6 +796,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Agnes AI text-to-image and image-composition model with 1K-4K output tiers and aspect-ratio control",
     provider: "agnes",
     inferenceProvider: "openai-compat",
+    costClass: "paid",
     apiVersion: 1,
     inputFormat: "json",
     responseFormat: "base64",
@@ -834,6 +847,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Agnes AI text-to-image and image-composition model tuned for high-information-density visuals, with 1K-4K output tiers and aspect-ratio control",
     provider: "agnes",
     inferenceProvider: "openai-compat",
+    costClass: "paid",
     apiVersion: 1,
     inputFormat: "json",
     responseFormat: "base64",
@@ -885,6 +899,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
       "Agnes AI text-to-image, image-to-image, and multi-image composition model addressed by exact output size",
     provider: "agnes",
     inferenceProvider: "openai-compat",
+    costClass: "paid",
     apiVersion: 1,
     inputFormat: "json",
     responseFormat: "base64",
