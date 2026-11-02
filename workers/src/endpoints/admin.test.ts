@@ -1003,6 +1003,20 @@ describe("caller-key list (#125)", () => {
     ]);
   });
 
+  test("the list is not cacheable", async () => {
+    const response = await handleAdmin(
+      get(
+        "/api/admin/caller-keys",
+        bearer("user-key", { "X-Admin-Key": "admin-key" })
+      ),
+      "/api/admin/caller-keys",
+      envWithCallerKeys()
+    );
+    // Masked key hints must not linger in a browser or proxy cache after the
+    // operator locks the workbench (#125).
+    expect(response?.headers.get("Cache-Control")).toBe("no-store");
+  });
+
   test("the list never carries the verifier", async () => {
     const response = await handleAdmin(
       get(

@@ -232,5 +232,9 @@ test.describe("Admin caller keys", () => {
     expect(serialized).not.toMatch(/secret_hash|secretHash|salt|pepper/i);
     expect(serialized).not.toMatch(/sk-mgmt-[A-Za-z0-9]{24,}/);
     expect(serialized).not.toMatch(/Bearer [A-Za-z0-9._~+/-]{8,}/);
+
+    // The list is per-operator state: a cached copy would outlive the
+    // unlock that fetched it (#125).
+    expect(response.headers()["cache-control"]).toContain("no-store");
   });
 });

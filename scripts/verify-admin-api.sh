@@ -73,8 +73,8 @@ ESC_TOKEN="$(json_escape "$TOKEN")"
 ESC_ACCOUNT_ID="$(json_escape "$ACCOUNT_ID")"
 
 pass=0; fail=0
-BODY="$(mktemp)"; LEAKS="$(mktemp)"
-trap 'rm -f "$BODY" "$LEAKS"' EXIT
+BODY="$(mktemp)"; LEAKS="$(mktemp)"; HEADERS="$(mktemp)"
+trap 'rm -f "$BODY" "$LEAKS" "$HEADERS"' EXIT
 
 # Prints the first configured secret present in $BODY, else nothing.
 leaked_secret() {
@@ -88,7 +88,8 @@ leaked_secret() {
 }
 
 # raw METHOD PATH [--bearer V|--no-bearer] [--admin V|--no-admin] [--body JSON]
-# Prints the HTTP status on stdout; the body lands in $BODY.
+# Prints the HTTP status on stdout; the body lands in $BODY and the response
+# headers in $HEADERS.
 raw() {
   local method="$1" path="$2"; shift 2
   local bearer="$API_KEY" admin="$ADMIN_KEY" body=""
@@ -102,7 +103,7 @@ raw() {
       *) echo "raw: unknown argument $1" >&2; exit 2 ;;
     esac
   done
-  local args=(-sS -o "$BODY" -w '%{http_code}' -X "$method" "$BASE_URL$path")
+  local args=(-sS -o "$BODY" -D "$HEADERS" -w '%{http_code}' -X "$method" "$BASE_URL$path")
   [ -n "$body" ]   && args+=(-H 'Content-Type: application/json' --data-binary "$body")
   [ -n "$bearer" ] && args+=(-H "Authorization: Bearer $bearer")
   [ -n "$admin" ]  && args+=(-H "X-Admin-Key: $admin")
@@ -165,6 +166,13 @@ echo "== caller keys (read path, #125) =="
 check "caller keys without a bearer is a 401"             401 "$(raw GET /api/admin/caller-keys --no-bearer)"
 check "caller keys with a wrong admin key is a 403"       403 "$(raw GET /api/admin/caller-keys --admin not-the-key)"
 check "caller keys with both gates is a 200"              200 "$(raw GET /api/admin/caller-keys)"
+# Masked key hints must not outlive the unlock that fetched them: a cached
+# copy would survive the lock and the session end (#125).
+if grep -qi '^cache-control: *no-store' "$HEADERS"; then
+  printf 'PASS  %-56s present\n' "caller keys response is not cacheable"; pass=$((pass + 1))
+else
+  printf 'FAIL  %-56s missing\n' "caller keys response is not cacheable"; fail=$((fail + 1))
+fi
 show
 if grep -q '"keys"' "$BODY"; then
   printf 'PASS  %-56s present\n' "caller keys response carries a keys list"; pass=$((pass + 1))
