@@ -1121,3 +1121,148 @@ describe("the operations rail", () => {
     );
   });
 });
+
+describe("the model filter chips in the operations rail", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // 2 free + 2 paid, 2 image-edit capable, and one duplicate-name pair
+  // ("Flux Schnell" / "flux schnell") served over two different
+  // transports — the fixture #152's card reads its rules from.
+  const MODELS = [
+    {
+      id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+      name: "Stable Diffusion XL",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "cloudflare-rest",
+      costClass: "free",
+      available: true,
+    },
+    {
+      id: "@cf/black-forest-labs/flux-1-schnell",
+      name: "Flux Schnell",
+      taskTypes: ["text-to-image", "image-to-image"],
+      inferenceProvider: "cloudflare-rest",
+      costClass: "paid",
+      available: true,
+    },
+    {
+      id: "agnes-image-2.5-flash",
+      name: "Agnes Flash",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "openai-compat",
+      costClass: "paid",
+      available: true,
+    },
+    {
+      id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+      name: "flux schnell",
+      taskTypes: ["image-to-image"],
+      inferenceProvider: "openai-compat",
+      costClass: "free",
+      available: true,
+    },
+  ];
+
+  function stubModels(models: unknown) {
+    return stubApi((route) =>
+      route.path === "/api/internal/models" ? jsonResponse(true, models) : null
+    );
+  }
+
+  async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+    await unlock(user);
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsModelCount")).toBeInTheDocument()
+    );
+  }
+
+  it("lists every model with a shown/total count until a chip is toggled", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    expect(document.getElementById("adminOpsCardFilters")).not.toBeNull();
+    expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Stable Diffusion XL")).toBeInTheDocument();
+    expect(screen.getByText("Flux Schnell")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+  });
+
+  it("toggles the Free chip and narrows the list to free models", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    const free = screen.getByRole("button", { name: "Free" });
+    expect(free.getAttribute("aria-pressed")).toBe("false");
+    await user.click(free);
+    expect(free.getAttribute("aria-pressed")).toBe("true");
+
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Stable Diffusion XL")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Flux Schnell")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash")).not.toBeInTheDocument();
+  });
+
+  it("toggles the Image-edit chip and narrows the list to image-edit capable models", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    const imageEdit = screen.getByRole("button", { name: "Image-edit" });
+    expect(imageEdit.getAttribute("aria-pressed")).toBe("false");
+    await user.click(imageEdit);
+    expect(imageEdit.getAttribute("aria-pressed")).toBe("true");
+
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Flux Schnell")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Stable Diffusion XL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash")).not.toBeInTheDocument();
+  });
+
+  it("narrows the list to the intersection when both chips are on", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    await user.click(screen.getByRole("button", { name: "Free" }));
+    await user.click(screen.getByRole("button", { name: "Image-edit" }));
+
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Stable Diffusion XL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Flux Schnell")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash")).not.toBeInTheDocument();
+  });
+
+  it("restores the full list when a chip is toggled back off", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    const free = screen.getByRole("button", { name: "Free" });
+    await user.click(free);
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+
+    await user.click(free);
+    expect(free.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
+});
