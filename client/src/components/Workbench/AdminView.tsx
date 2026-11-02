@@ -4,7 +4,7 @@ import {
   useHealth,
   usePendingAdminKeyIds,
 } from "../../api/admin";
-import type { AdminKey } from "../../api/types";
+import type { AdminKey, KeyTestRun, RunKeyTestRequest } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
@@ -13,6 +13,7 @@ import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
+import { LiveTestCard } from "./LiveTestCard";
 import { ModelFilterCard } from "./ModelFilterCard";
 import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
@@ -66,6 +67,12 @@ export function AdminView() {
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Card 2's most recent run, lifted here so Card 1's Working chip can
+  // read the same data (see handleRunTest): the request carries the
+  // scope the run used, the results carry the per-pairing outcomes.
+  const [lastRun, setLastRun] = useState<KeyTestRun | null>(null);
+  // The run's request-level failure, if the POST itself was refused.
+  const [testError, setTestError] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
 
   const unlocked = adminKey !== null;
@@ -188,6 +195,20 @@ export function AdminView() {
         setSavingSheet(null);
       }
     }
+  };
+
+  // Card 2's run. The card owns the scope and the concrete selection;
+  // the outcome is lifted here so Card 1's Working chip reads the same
+  // data. A completed run replaces the previous one — the working set
+  // is the latest run's passes, never an accumulation.
+  const handleRunTest = (request: RunKeyTestRequest) => {
+    setTestError(null);
+    mutations.testKeys.mutate(request, {
+      onSuccess: (response) =>
+        setLastRun({ request, results: response.results }),
+      onError: (cause) =>
+        setTestError(cause instanceof Error ? cause.message : String(cause)),
+    });
   };
 
   // Every key with a request in flight, not just the last one the
@@ -374,6 +395,15 @@ export function AdminView() {
           <OperationsRail
             open={operationsOpen}
             filters={<ModelFilterCard providers={providers} />}
+            test={
+              <LiveTestCard
+                keys={keys}
+                running={mutations.testKeys.isPending}
+                error={testError}
+                lastRun={lastRun}
+                onRun={handleRunTest}
+              />
+            }
           />
         </div>
       </div>

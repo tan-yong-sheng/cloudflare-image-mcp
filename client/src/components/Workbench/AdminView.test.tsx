@@ -69,7 +69,9 @@ function jsonResponse(ok: boolean, body: unknown, status = 200): Response {
 
 type Route = { path: string; body: unknown; method: string };
 
-function stubApi(overrides: (route: Route) => Response | null = () => null) {
+function stubApi(
+  overrides: (route: Route) => Response | Promise<Response> | null = () => null
+) {
   const calls: Route[] = [];
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1395,5 +1397,269 @@ describe("the model filter chips in the operations rail", () => {
     // AND-composable filter, not an exclusive mode.
     await user.click(screen.getByRole("button", { name: "Free" }));
     expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+  });
+});
+
+describe("the live test card in the operations rail", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // The registry Card 2's model selector reads from — the same fixture
+  // shape the filter-chip suite uses.
+  const MODELS = [
+    {
+      id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+      name: "Stable Diffusion XL",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "cloudflare-rest",
+      costClass: "free",
+      available: true,
+    },
+    {
+      id: "@cf/black-forest-labs/flux-1-schnell",
+      name: "Flux Schnell",
+      taskTypes: ["text-to-image", "image-to-image"],
+      inferenceProvider: "cloudflare-rest",
+      costClass: "paid",
+      available: true,
+    },
+    {
+      id: "agnes-image-2.5-flash",
+      name: "Agnes Flash",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "openai-compat",
+      costClass: "paid",
+      available: true,
+    },
+    {
+      id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+      name: "flux schnell",
+      taskTypes: ["image-to-image"],
+      inferenceProvider: "openai-compat",
+      costClass: "free",
+      available: true,
+    },
+  ];
+
+  function stubTestApi(
+    overrides: (route: Route) => Response | Promise<Response> | null = () =>
+      null
+  ) {
+    return stubApi((route) => {
+      if (route.path === "/api/internal/models") {
+        return jsonResponse(true, MODELS);
+      }
+      return overrides(route);
+    });
+  }
+
+  async function openCard(user: ReturnType<typeof userEvent.setup>) {
+    await unlock(user);
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestRun")).toBeInTheDocument()
+    );
+  }
+
+  function testCall(calls: Route[]) {
+    return calls.find((call) => call.path === "/api/admin/keys/test");
+  }
+
+  it("renders the two scope selections, one live selector, and the quota warning", async () => {
+    const calls = stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // No probe may fire on mount: a run is operator-triggered only.
+    expect(calls.some((call) => call.path === "/api/admin/keys/test")).toBe(
+      false
+    );
+
+    // Exactly two scopes exist — the two the endpoint permits. There is
+    // no third mode, so no UI path can offer all-keys by all-models.
+    const keyScope = screen.getByRole("button", {
+      name: "1 key → all models",
+    });
+    const modelScope = screen.getByRole("button", {
+      name: "all keys → 1 model",
+    });
+    expect(document.getElementById("adminOpsScopeKey")).toBe(keyScope);
+    expect(document.getElementById("adminOpsScopeModel")).toBe(modelScope);
+    expect(keyScope.getAttribute("aria-pressed")).toBe("true");
+    expect(modelScope.getAttribute("aria-pressed")).toBe("false");
+
+    // The scope-irrelevant selector is taken out of action, not removed:
+    // the operator always sees both sides they may pick from.
+    expect(screen.getByLabelText(/Key to test/i)).toBeEnabled();
+    expect(screen.getByLabelText(/Model to test/i)).toBeDisabled();
+
+    const warning = document.getElementById("adminOpsTestWarning");
+    expect(warning?.textContent).toContain("never");
+    expect(warning?.textContent).toContain("quota");
+  });
+
+  it("keeps the run trigger disabled until one concrete side is selected", async () => {
+    stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // A run needs one concrete selection — a key or a model. The other
+    // side is always the wildcard, so an unselected trigger is the
+    // by-construction guard against a body the server would refuse.
+    const run = document.getElementById("adminOpsTestRun");
+    expect(run).not.toBeNull();
+    expect(run).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    expect(run).toBeEnabled();
+
+    await user.click(
+      screen.getByRole("button", { name: "all keys → 1 model" })
+    );
+    expect(run).toBeDisabled();
+
+    await user.selectOptions(
+      screen.getByLabelText(/Model to test/i),
+      MODELS[1].id
+    );
+    expect(run).toBeEnabled();
+  });
+
+  it("sends one key against every model in scope 1", async () => {
+    const calls = stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() => expect(testCall(calls)).toBeDefined());
+    const call = testCall(calls)!;
+    expect(call.method).toBe("POST");
+    // The exact wire body: the concrete key on one side, the wildcard on
+    // the other. The double wildcard is not constructible from this card.
+    expect(call.body).toEqual({ keyIds: [1], modelIds: ["*"] });
+  });
+
+  it("sends every key against one model in scope 2", async () => {
+    const calls = stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "all keys → 1 model" })
+    );
+    // Switching scope swaps which selector is live.
+    expect(screen.getByLabelText(/Key to test/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Model to test/i)).toBeEnabled();
+
+    await user.selectOptions(
+      screen.getByLabelText(/Model to test/i),
+      MODELS[1].id
+    );
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() => expect(testCall(calls)).toBeDefined());
+    expect(testCall(calls)?.method).toBe("POST");
+    expect(testCall(calls)?.body).toEqual({
+      keyIds: ["*"],
+      modelIds: ["@cf/black-forest-labs/flux-1-schnell"],
+    });
+  });
+
+  it("shows a loading state while the run is in flight", async () => {
+    let resolveRun: (response: Response) => void = () => {};
+    const calls = stubTestApi((route) => {
+      if (route.path !== "/api/admin/keys/test") return null;
+      return new Promise<Response>((resolve) => {
+        resolveRun = resolve;
+      });
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    const run = document.getElementById("adminOpsTestRun");
+    await waitFor(() => expect(run?.textContent).toBe("Testing…"));
+    expect(run).toBeDisabled();
+    expect(testCall(calls)?.body).toEqual({ keyIds: [1], modelIds: ["*"] });
+
+    resolveRun(
+      jsonResponse(true, {
+        results: [{ keyId: 1, modelId: MODELS[0].id, ok: true, ms: 42 }],
+      })
+    );
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestResults")).not.toBeNull()
+    );
+    expect(run?.textContent).toBe("Run test");
+  });
+
+  it("surfaces a failed run's error message and records no results", async () => {
+    const calls = stubTestApi((route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(
+            false,
+            {
+              error: {
+                message: "Both wildcards are refused.",
+                code: "invalid_request",
+              },
+            },
+            400
+          )
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestError")?.textContent
+      ).toContain("Both wildcards are refused.")
+    );
+    // A refused run leaves no strip behind: there are no results to show.
+    expect(document.getElementById("adminOpsTestResults")).toBeNull();
+    expect(testCall(calls)?.body).toEqual({ keyIds: [1], modelIds: ["*"] });
+  });
+
+  it("ends the session when the live test is refused with 401", async () => {
+    stubTestApi((route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
+        : null
+    );
+    const user = userEvent.setup();
+    const { session } = renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    // The live test rides the same gates as every other admin mutation:
+    // a refused bearer key ends the whole session, management key and all.
+    await waitFor(() =>
+      expect(session.endedReason).toBe(SESSION_EXPIRED_MESSAGE)
+    );
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
   });
 });
