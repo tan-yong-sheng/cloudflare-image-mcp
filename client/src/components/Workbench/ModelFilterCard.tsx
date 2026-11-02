@@ -115,11 +115,7 @@ export function ModelFilterCard({
   const duplicates = duplicateGroups(models, providers);
 
   const chipClass = (active: boolean) =>
-    `chip ${active ? "text-white" : "text-muted"} disabled:opacity-45`;
-  const chipStyle = (active: boolean) =>
-    active
-      ? { backgroundColor: "var(--primary)", borderColor: "var(--primary)" }
-      : undefined;
+    `chip ${active ? "chip-active" : "text-muted"} disabled:opacity-45`;
 
   return (
     <div>
@@ -128,7 +124,6 @@ export function ModelFilterCard({
           type="button"
           id="adminOpsChipFree"
           className={chipClass(freeOnly)}
-          style={chipStyle(freeOnly)}
           aria-pressed={freeOnly}
           title="Models priced at $0"
           onClick={() => setFreeOnly((on) => !on)}
@@ -139,7 +134,6 @@ export function ModelFilterCard({
           type="button"
           id="adminOpsChipImageEdit"
           className={chipClass(imageEditOnly)}
-          style={chipStyle(imageEditOnly)}
           aria-pressed={imageEditOnly}
           title="Models that accept image input"
           onClick={() => setImageEditOnly((on) => !on)}
@@ -150,7 +144,6 @@ export function ModelFilterCard({
           type="button"
           id="adminOpsChipWorking"
           className={chipClass(workingActive)}
-          style={chipStyle(workingActive)}
           aria-pressed={workingActive}
           disabled={!hasWorkingData}
           title="Models that passed the last live test"
