@@ -13,6 +13,7 @@ import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
+import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
 
 type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
@@ -350,6 +351,7 @@ export function AdminView() {
               </button>
             </div>
           </div>
+          <OperationsRail open={false} />
         </div>
       </div>
 

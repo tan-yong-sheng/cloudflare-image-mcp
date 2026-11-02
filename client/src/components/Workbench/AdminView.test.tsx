@@ -1015,3 +1015,37 @@ describe("the provider credentials workbench", () => {
     );
   });
 });
+
+describe("the operations rail", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.location.hash = "#admin";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders the third column with its three cards once unlocked", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The workbench row is three columns: the family rail, the key
+    // table, and the operations rail. jsdom has no layout, so the
+    // columns are asserted by DOM structure, not by computed width.
+    const row = document.querySelector("#adminPanel > div");
+    expect(row?.children).toHaveLength(3);
+    const rail = document.getElementById("adminOpsRail");
+    expect(rail).not.toBeNull();
+    expect(rail?.textContent).toContain("Model filters");
+    expect(rail?.textContent).toContain("Live test");
+    expect(rail?.textContent).toContain("Liveness history");
+    expect(document.getElementById("adminOpsCardFilters")).not.toBeNull();
+    expect(document.getElementById("adminOpsCardTest")).not.toBeNull();
+    expect(document.getElementById("adminOpsCardHistory")).not.toBeNull();
+  });
+});
