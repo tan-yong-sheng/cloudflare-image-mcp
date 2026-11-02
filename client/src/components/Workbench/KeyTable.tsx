@@ -38,6 +38,12 @@ function maskAccountId(accountId: string): string {
  *
  * `data-key-id` is the row's stable anchor: the account id and the hint are
  * both masked or absent, so neither can identify a row to a test or a tool.
+ *
+ * A parked key reads muted rather than faded. An opacity on the row
+ * composites the text below the AA bar (3.69:1 for the name cell in the
+ * light theme) while the muted colour token stays at 7.18:1 light and
+ * 9.88:1 dark; the version badge drops its own fade for the same reason
+ * (2.81:1 over a muted row).
  */
 export function KeyTable({
   family,
@@ -87,13 +93,19 @@ export function KeyTable({
               <tr
                 key={key.id}
                 data-key-id={key.id}
-                style={key.enabled ? undefined : { opacity: ".55" }}
+                className={key.enabled ? undefined : "row-muted"}
               >
                 <td className="p-3 font-mono text-sm">
                   {key.maskedKey || "—"}
                   {key.activeVersion !== null &&
                   key.activeVersion !== undefined ? (
-                    <span className="opacity-60 text-xs ml-2">
+                    // A parked row is already muted; fading the badge on top of
+                    // that would put the version under 4.5:1 in the light theme.
+                    <span
+                      className={
+                        key.enabled ? "opacity-60 text-xs ml-2" : "text-xs ml-2"
+                      }
+                    >
                       v{key.activeVersion}
                     </span>
                   ) : null}
