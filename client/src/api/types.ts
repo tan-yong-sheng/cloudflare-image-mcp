@@ -40,6 +40,13 @@ export interface ModelConfig {
   limits: ModelLimits;
   provider: string;
   inferenceProvider: string;
+  /**
+   * What the model itself costs, as classified in the Worker's registry:
+   * "free" when the provider bills $0 for it, "paid" otherwise. Optional
+   * because the registry is the enforcement point — the endpoint mirrors
+   * whatever models.json declares.
+   */
+  costClass?: "free" | "paid";
   available?: boolean;
 }
 

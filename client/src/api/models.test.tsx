@@ -26,7 +26,12 @@ describe("the model registry", () => {
   });
 
   it("reads the registry", async () => {
-    const registry = [{ id: "sdxl", available: true }];
+    // The stub carries both cost classes so the Free filter (#152) is
+    // testable against the shape /api/internal/models actually sends.
+    const registry = [
+      { id: "sdxl", available: true, costClass: "free" },
+      { id: "flux-2-dev", available: true, costClass: "paid" },
+    ];
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse(true, registry))
