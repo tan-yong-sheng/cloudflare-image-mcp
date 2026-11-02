@@ -18,7 +18,12 @@ import { ModelFilterCard } from "./ModelFilterCard";
 import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
 
-type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
+type SheetState = {
+  mode: "add" | "edit";
+  key: AdminKey | null;
+  /** Set when the drawer was entered from a row's rotate action. */
+  entry?: "rotate";
+} | null;
 
 /**
  * The provider credentials workbench.
@@ -191,14 +196,21 @@ export function AdminView() {
           ...(values.apiToken ? { apiToken: values.apiToken } : {}),
         });
       } else {
-        await mutations.addKey.mutateAsync({
-          providerId: family?.id ?? "",
-          label: "key-" + Date.now(),
-          apiToken: values.apiToken,
-          accountId: values.accountId,
-          weight: values.weight,
-          enabled: values.enabled,
-        });
+        // One sequential add per pasted token, in the order the operator
+        // entered them. A refusal stops the batch where it is: the
+        // server's reason goes to the drawer, which stays open, and the
+        // keys the server already took stay added.
+        const batchLabel = "key-" + Date.now();
+        for (let index = 0; index < values.apiTokens.length; index += 1) {
+          await mutations.addKey.mutateAsync({
+            providerId: family?.id ?? "",
+            label: batchLabel + "-" + (index + 1),
+            apiToken: values.apiTokens[index],
+            accountId: values.accountId,
+            weight: values.weight,
+            enabled: values.enabled,
+          });
+        }
       }
       // The panel error belongs to the panel, not to this drawer. A
       // late answer from a drawer the operator has already dismissed
@@ -380,6 +392,10 @@ export function AdminView() {
                 setSheetError(null);
                 setSheet({ mode: "edit", key });
               }}
+              onRotate={(key) => {
+                setSheetError(null);
+                setSheet({ mode: "edit", key, entry: "rotate" });
+              }}
               onDelete={(key) => {
                 setPanelError(null);
                 mutations.deleteKey.mutate(
@@ -460,6 +476,7 @@ export function AdminView() {
           mode={sheet.mode}
           provider={family}
           editingKey={sheet.key}
+          entry={sheet.entry}
           saving={savingSheet === sheet}
           error={sheetError}
           onClose={() => {
