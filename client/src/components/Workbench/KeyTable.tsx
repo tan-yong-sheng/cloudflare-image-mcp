@@ -75,9 +75,7 @@ export function KeyTable({
             {hasAccount ? (
               <th className="p-3 font-medium">Account ID</th>
             ) : null}
-            <th className="p-3 font-medium">
-              <span className="sr-only">Actions</span>
-            </th>
+            <th className="p-3 font-medium text-right">Actions</th>
           </tr>
         </thead>
         <tbody id="adminKeys">
