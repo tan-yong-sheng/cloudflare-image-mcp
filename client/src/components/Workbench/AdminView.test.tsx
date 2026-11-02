@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect, type ReactNode } from "react";
@@ -1532,6 +1532,24 @@ describe("the live test card in the operations rail", () => {
       MODELS[1].id
     );
     expect(run).toBeEnabled();
+  });
+
+  it("offers only enabled keys in the single-key dropdown", async () => {
+    stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // The health payload carries a parked key (key-2, enabled: false).
+    // The probe store lists enabled keys only, so the dropdown must not
+    // offer it; re-enabling makes it testable again.
+    const dropdown = screen.getByLabelText(/Key to test/i);
+    expect(
+      within(dropdown).getByRole("option", { name: /key-1/ })
+    ).toBeInTheDocument();
+    expect(
+      within(dropdown).queryByRole("option", { name: /key-2/ })
+    ).not.toBeInTheDocument();
   });
 
   it("sends one key against every model in scope 1", async () => {

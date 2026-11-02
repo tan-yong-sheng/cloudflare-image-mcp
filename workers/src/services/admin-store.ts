@@ -333,7 +333,7 @@ async function keyRow(db: AdminD1, keyId: number): Promise<KeyRow | null> {
     .first<KeyRow>();
 }
 
-/** One key row as the live probe (#149) reads it. */
+/** One enabled key row as the live probe (#149) reads it. */
 export interface ProbeKeyRow {
   id: number;
   providerId: string;
@@ -341,18 +341,20 @@ export interface ProbeKeyRow {
   transport: string | null;
   label: string;
   accountId: string | null;
-  enabled: boolean;
   /** Still-sealed active envelope; null when no version is active. */
   envelope: string | null;
 }
 
 /**
- * Active-credential rows for the live probe (#149), across all keys. Same
- * active-envelope subselect as getAdminHealth; the transport comes from the
- * owning providers row (ADR-002) so the probe can refuse a key whose
- * provider cannot serve a model before building any transport. The envelope
- * is opened only by the endpoint holding PROVIDER_DATA_KEY — this module
- * never sees token material, on the read side exactly as on the write side.
+ * Active-credential rows for the live probe (#149), across all enabled keys —
+ * spec #146 scopes the wildcard to "testing all enabled keys on 1 specific
+ * model", so a parked key is never probed by an expansion (an explicit probe
+ * of it reports unknown instead). Same active-envelope subselect as
+ * getAdminHealth; the transport comes from the owning providers row (ADR-002)
+ * so the probe can refuse a key whose provider cannot serve a model before
+ * building any transport. The envelope is opened only by the endpoint holding
+ * PROVIDER_DATA_KEY — this module never sees token material, on the read side
+ * exactly as on the write side.
  */
 export async function listProbeKeys(db: AdminD1): Promise<ProbeKeyRow[]> {
   const records = rows<Record<string, unknown>>(
@@ -363,14 +365,14 @@ export async function listProbeKeys(db: AdminD1): Promise<ProbeKeyRow[]> {
                 p.transport AS transport,
                 k.label AS label,
                 k.external_account_id AS accountId,
-                k.enabled AS enabled,
                 (SELECT envelope
                    FROM credential_versions
                   WHERE provider_key_id = k.id AND revoked_at IS NULL
                   ORDER BY version DESC
                   LIMIT 1) AS envelope
            FROM provider_keys k
-           LEFT JOIN providers p ON p.id = k.provider_id`
+           LEFT JOIN providers p ON p.id = k.provider_id
+          WHERE k.enabled = 1`
       )
       .all()
   );
@@ -386,7 +388,6 @@ export async function listProbeKeys(db: AdminD1): Promise<ProbeKeyRow[]> {
       r["accountId"] === null || r["accountId"] === undefined
         ? null
         : String(r["accountId"]),
-    enabled: num(r["enabled"]) === 1,
     envelope:
       typeof r["envelope"] === "string" && r["envelope"].length > 0
         ? r["envelope"]
