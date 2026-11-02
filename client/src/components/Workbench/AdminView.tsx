@@ -186,15 +186,18 @@ export function AdminView() {
     setSavingSheet(submitted);
     savingSheetRef.current = submitted;
     try {
-      if (submitted?.mode === "edit" && submitted.key) {
-        await mutations.updateKey.mutateAsync({
-          keyId: submitted.key.id,
-          accountId: values.accountId,
-          weight: values.weight,
-          enabled: values.enabled,
-          // A blank token keeps the stored version; a value rotates it.
-          ...(values.apiToken ? { apiToken: values.apiToken } : {}),
-        });
+      if (values.mode === "edit") {
+        const key = submitted?.key;
+        if (key) {
+          await mutations.updateKey.mutateAsync({
+            keyId: key.id,
+            accountId: values.accountId,
+            weight: values.weight,
+            enabled: values.enabled,
+            // A blank token keeps the stored version; a value rotates it.
+            ...(values.apiToken ? { apiToken: values.apiToken } : {}),
+          });
+        }
       } else {
         // One sequential add per pasted token, in the order the operator
         // entered them. A refusal stops the batch where it is: the
