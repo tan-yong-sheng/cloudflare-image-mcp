@@ -16,6 +16,13 @@ export const ADMIN_HEALTH_PATH = "/api/admin/health";
 export const ADMIN_KEYS_PATH = "/api/admin/keys";
 
 /**
+ * The route that runs one minimal live inference per (key, model) pairing
+ * and reports each pairing's pass/fail (#149). Shared for the same reason
+ * as the constants above: the workbench card calls it by this exact path.
+ */
+export const ADMIN_KEYS_TEST_PATH = "/api/admin/keys/test";
+
+/**
  * The collection the caller-key reads are served from.
  *
  * Caller keys are the bearer tokens clients send to reach /v1/* and /mcp*

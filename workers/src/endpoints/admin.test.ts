@@ -1038,3 +1038,158 @@ describe("caller-key list (#125)", () => {
     ).toEqual(["createdAt", "enabled", "id", "maskedKey", "name", "updatedAt"]);
   });
 });
+
+describe("admin keys live test (#149)", () => {
+  // The live-test route runs one minimal real inference per (key, model)
+  // pairing. This block pins the contract the workbench card (#153) consumes:
+  // the two-gate order every admin route shares, the request body shape, and
+  // the quota-waste guards (double wildcard, pairing cap). Execution tests
+  // stub global fetch explicitly — no-network.ts throws on unstubbed calls,
+  // so a forgotten stub fails loudly instead of reading as a probe failure.
+
+  /** D1-shaped fake serving the probe's key rows from provider_keys. */
+  function dbWithProbeRows(rows: Record<string, unknown>[]): unknown {
+    return {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => null,
+          all: async () =>
+            sql.includes("FROM provider_keys")
+              ? { results: rows }
+              : { results: [] },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return { ...stmt, bind: () => ({ ...stmt }) };
+      },
+      batch: async () => [],
+    };
+  }
+
+  function envWithDb(db: unknown): Env {
+    return { ...env(), PROVIDER_DB: db } as unknown as Env;
+  }
+
+  function post(path: string, body: unknown, adminKey = "admin-key"): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "POST",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": adminKey }),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function statusOf(request: Request, db?: unknown): Promise<Response> {
+    const response = await worker.fetch(
+      request,
+      db === undefined ? env() : envWithDb(db)
+    );
+    return response;
+  }
+
+  test("the shared routes module exports the test path the client imports", async () => {
+    const routes = await import("../routes.js");
+    expect(routes.ADMIN_KEYS_TEST_PATH).toBe("/api/admin/keys/test");
+  });
+
+  test("no bearer at all is a 401 through the existing gate", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: { "X-Admin-Key": "admin-key" },
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("wrong bearer is a 401 even with the right admin key", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: bearer("wrong-key", { "X-Admin-Key": "admin-key" }),
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("right bearer but wrong admin key is a 403", async () => {
+    const response = await statusOf(
+      post(
+        "/api/admin/keys/test",
+        { keyIds: [1], modelIds: ["m"] },
+        "wrong-admin-key"
+      )
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("an unconfigured bearer gate refuses the live test even with the right management key", async () => {
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).API_KEYS;
+    const response = await worker.fetch(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: ["m"] }),
+      unconfigured
+    );
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as {
+      error: { code: string | null };
+    };
+    expect(body.error.code).toBe("admin_disabled");
+  });
+
+  test("the live test needs a store like every other keyed route (no db is a 500)", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: ["m"] })
+    );
+    expect(response.status).toBe(500);
+  });
+
+  test("a body that is not shaped like the contract is a 400", async () => {
+    const db = dbWithProbeRows([]);
+    for (const body of [
+      { modelIds: ["@cf/x"] }, // keyIds missing
+      { keyIds: [1] }, // modelIds missing
+      { keyIds: 1, modelIds: ["@cf/x"] }, // keyIds not an array
+      { keyIds: [1], modelIds: "@cf/x" }, // modelIds not an array
+      { keyIds: [], modelIds: ["@cf/x"] }, // empty key list
+      { keyIds: [1], modelIds: [] }, // empty model list
+      { keyIds: ["1"], modelIds: ["@cf/x"] }, // string key id
+      { keyIds: [1.5], modelIds: ["@cf/x"] }, // non-integer key id
+      { keyIds: [1], modelIds: [42] }, // numeric model id
+      { keyIds: [1], modelIds: [""] }, // empty model id
+      { keyIds: ["*", 1], modelIds: ["@cf/x"] }, // wildcard mixed with ids
+      { keyIds: [1], modelIds: ["*", "@cf/x"] }, // wildcard mixed with ids
+    ]) {
+      const response = await statusOf(post("/api/admin/keys/test", body), db);
+      expect(response.status, `body ${JSON.stringify(body)}`).toBe(400);
+    }
+  });
+
+  test("both wildcards together are refused with the quota guard as a 400", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: ["*"], modelIds: ["*"] }),
+      dbWithProbeRows([])
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/subrequest|quota/i);
+  });
+
+  test("a pairing count over the cap is refused before any inference runs", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", {
+        keyIds: Array.from({ length: 51 }, (_, i) => i + 1),
+        modelIds: ["@cf/black-forest-labs/flux-1-schnell"],
+      }),
+      dbWithProbeRows([])
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/50/);
+  });
+});
