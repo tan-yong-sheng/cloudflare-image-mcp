@@ -2,15 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import type { AdminKey, AdminProvider } from "../../api/types";
 import { MAX_WEIGHT } from "../../config/limits";
 
-export interface SheetValues {
-  accountId: string;
-  /** Edit mode: the replacement token; blank keeps the stored version. */
-  apiToken: string;
-  /** Add mode: the parsed tokens to provision, in entry order. Empty in edit mode. */
-  apiTokens: string[];
-  weight: number;
-  enabled: boolean;
-}
+/** What a save ships: an add provisions the parsed batch, an edit the
+ * single replacement token — no dead field rides along. */
+export type SheetValues =
+  | {
+      mode: "add";
+      accountId: string;
+      /** The parsed tokens to provision, in entry order. */
+      apiTokens: string[];
+      weight: number;
+      enabled: boolean;
+    }
+  | {
+      mode: "edit";
+      accountId: string;
+      /** The replacement token; blank keeps the stored version. */
+      apiToken: string;
+      weight: number;
+      enabled: boolean;
+    };
 
 interface KeySheetProps {
   mode: "add" | "edit";
@@ -199,13 +209,25 @@ export function KeySheet({
     }
 
     setLocalError(null);
-    onSave({
-      accountId: trimmedAccount,
-      apiToken: trimmedToken,
-      apiTokens: parsedTokens,
-      weight: parsedWeight,
-      enabled,
-    });
+    // The effective mode decides the shape: add ships the parsed batch,
+    // edit the single token.
+    onSave(
+      isEdit
+        ? {
+            mode: "edit",
+            accountId: trimmedAccount,
+            apiToken: trimmedToken,
+            weight: parsedWeight,
+            enabled,
+          }
+        : {
+            mode: "add",
+            accountId: trimmedAccount,
+            apiTokens: parsedTokens,
+            weight: parsedWeight,
+            enabled,
+          }
+    );
   };
 
   const versionTag =
