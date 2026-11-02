@@ -369,6 +369,14 @@ textarea:focus {
   border-color: var(--border);
   color: var(--text-light);
 }
+/* The pressed state of a toggle chip (model filters, live-test scopes):
+   filled with the primary accent, white label — the inverse of the muted
+   resting chip. */
+.chip-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
 /* A parked row. The muted colour is applied at full opacity rather than
    fading the row: a faded row takes the text with it, under the contrast
    bar, in the theme where the muted token is already lightest. */

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { keyTestScope, type KeyTestScope } from "../../api/admin";
 import { useModels } from "../../api/models";
 import type {
@@ -37,13 +37,7 @@ function stripRows(results: KeyTestResult[]): KeyTestResult[] {
 }
 
 function scopeChipClass(active: boolean): string {
-  return `chip ${active ? "text-white" : "text-muted"}`;
-}
-
-function scopeChipStyle(active: boolean): CSSProperties | undefined {
-  return active
-    ? { backgroundColor: "var(--primary)", borderColor: "var(--primary)" }
-    : undefined;
+  return `chip ${active ? "chip-active" : "text-muted"}`;
 }
 
 /**
@@ -104,7 +98,6 @@ export function LiveTestCard({
           type="button"
           id="adminOpsScopeKey"
           className={scopeChipClass(scope === "key")}
-          style={scopeChipStyle(scope === "key")}
           aria-pressed={scope === "key"}
           title="Probe every exposed model with one key"
           onClick={() => setScope("key")}
@@ -115,7 +108,6 @@ export function LiveTestCard({
           type="button"
           id="adminOpsScopeModel"
           className={scopeChipClass(scope === "model")}
-          style={scopeChipStyle(scope === "model")}
           aria-pressed={scope === "model"}
           title="Probe one model with every key"
           onClick={() => setScope("model")}
