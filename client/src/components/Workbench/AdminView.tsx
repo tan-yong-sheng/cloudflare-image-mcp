@@ -13,6 +13,7 @@ import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
+import { ModelFilterCard } from "./ModelFilterCard";
 import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
 
@@ -370,7 +371,10 @@ export function AdminView() {
               </button>
             </div>
           </div>
-          <OperationsRail open={operationsOpen} />
+          <OperationsRail
+            open={operationsOpen}
+            filters={<ModelFilterCard providers={providers} />}
+          />
         </div>
       </div>
 
