@@ -205,21 +205,31 @@ describe("the workbench's DOM contract", () => {
       "adminLock",
       "themeToggleAdmin",
       "logoutButtonAdmin",
+      "adminNavSpaces",
     ]) {
       expect(document.getElementById(id), id).not.toBeNull();
     }
 
-    // The rail lists both spaces, and the one that is open says so.
-    const spaces = document.querySelectorAll("#adminNav a[aria-current]");
-    expect(spaces.length).toBe(1);
-    expect(spaces[0].id).toBe("adminNav-admin");
-    expect(document.getElementById("adminNav-admin-api-keys")).not.toBeNull();
+    // The admin spaces are hidden while locked, and reveal on unlock.
+    expect(document.getElementById("adminNavSpaces")?.className).toContain(
+      "hidden"
+    );
 
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
     await user.click(screen.getByRole("button", { name: /Unlock/i }));
     await waitFor(() =>
       expect(document.getElementById("adminRail")).not.toBeNull()
     );
+
+    expect(document.getElementById("adminNavSpaces")?.className).not.toContain(
+      "hidden"
+    );
+
+    // The rail lists both spaces, and the one that is open says so.
+    const spaces = document.querySelectorAll("#adminNav a[aria-current]");
+    expect(spaces.length).toBe(1);
+    expect(spaces[0].id).toBe("adminNav-admin");
+    expect(document.getElementById("adminNav-admin-api-keys")).not.toBeNull();
 
     // The ids that need the panel open.
     for (const id of [

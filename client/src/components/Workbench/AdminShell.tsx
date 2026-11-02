@@ -181,39 +181,44 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <span>Playground</span>
           </a>
 
-          <div className="hidden md:block my-2 border-t border-gray-700/60" />
+          <div
+            id="adminNavSpaces"
+            className={`flex flex-col gap-1${unlocked ? "" : " hidden"}`}
+          >
+            <div className="hidden md:block my-2 border-t border-gray-700/60" />
 
-          <div className="text-xs font-bold uppercase tracking-wider text-muted px-2 pt-1 pb-1">
-            Admin Spaces
+            <div className="text-xs font-bold uppercase tracking-wider text-muted px-2 pt-1 pb-1">
+              Admin Spaces
+            </div>
+
+            {ADMIN_SPACES.map((space) => {
+              const active = space.route === route;
+              return (
+                <a
+                  key={space.route}
+                  id={`adminNav-${space.route}`}
+                  href={space.hash}
+                  aria-current={active ? "page" : undefined}
+                  title={space.label}
+                  className={`flex items-center gap-2.5 p-2 rounded border text-sm transition-colors ${
+                    active ? "font-semibold" : ""
+                  }`}
+                  style={{
+                    borderColor: active ? "var(--primary)" : "transparent",
+                    backgroundColor: active
+                      ? "rgba(var(--primary-rgb),.12)"
+                      : "transparent",
+                    color: active ? "var(--primary-light)" : "inherit",
+                  }}
+                >
+                  <i
+                    className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center`}
+                  />
+                  <span>{space.label}</span>
+                </a>
+              );
+            })}
           </div>
-
-          {ADMIN_SPACES.map((space) => {
-            const active = space.route === route;
-            return (
-              <a
-                key={space.route}
-                id={`adminNav-${space.route}`}
-                href={space.hash}
-                aria-current={active ? "page" : undefined}
-                title={space.label}
-                className={`flex items-center gap-2.5 p-2 rounded border text-sm transition-colors ${
-                  active ? "font-semibold" : ""
-                }`}
-                style={{
-                  borderColor: active ? "var(--primary)" : "transparent",
-                  backgroundColor: active
-                    ? "rgba(var(--primary-rgb),.12)"
-                    : "transparent",
-                  color: active ? "var(--primary-light)" : "inherit",
-                }}
-              >
-                <i
-                  className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center`}
-                />
-                <span>{space.label}</span>
-              </a>
-            );
-          })}
         </nav>
 
         <div id="adminContent" className="flex-1 min-w-0" tabIndex={-1}>
