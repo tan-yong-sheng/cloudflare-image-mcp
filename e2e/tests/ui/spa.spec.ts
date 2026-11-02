@@ -294,6 +294,37 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminChipsFamilies")).toBeVisible();
   });
 
+  test("the API-keys page has its own address and keeps the unlock", async ({
+    page,
+  }) => {
+    // The page is a screen, not a section: it carries its own path so it
+    // can be bookmarked, and it sits behind the same management-key gate
+    // as the workbench, so moving between them is one session.
+    await signIn(page);
+    await page.click("#adminWorkbenchButton");
+    await unlock(page);
+
+    await page.click("#adminApiKeysBtn");
+    await expect(page).toHaveURL(/#admin\/api-keys$/);
+    await expect(page.locator("#apiKeysView")).toBeVisible();
+    // The page says what the keys are for, and which secret they are not.
+    await expect(page.locator("#apiKeysIntro")).toContainText(
+      "provider credentials"
+    );
+    await expect(page.locator("#adminCallerKeysHead")).toHaveText("Name");
+
+    // Back returns to the workbench without asking for the key again: the
+    // two screens share one unlock.
+    await page.click("#apiKeysBackBtn");
+    await expect(page.locator("#adminView")).toBeVisible();
+    await expect(page.locator("#adminGate")).toBeHidden();
+
+    // A cold open of the path lands on the page and adopts its fragment.
+    await page.goto("/admin/api-keys");
+    await expect(page).toHaveURL(/#admin\/api-keys$/);
+    await expect(page.locator("#apiKeysView")).toBeVisible();
+  });
+
   test("leaving the workbench ends the admin session", async ({ page }) => {
     await signIn(page);
     await page.click("#adminWorkbenchButton");

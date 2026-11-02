@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { AdminView } from "./components/Workbench/AdminView";
+import { ApiKeysPage } from "./components/Workbench/ApiKeysPage";
 import { LoginDialog } from "./components/Auth/LoginDialog";
 import { GeneratorView } from "./components/Playground/GeneratorView";
 import { AdminKeyProvider, useAdminKey } from "./app/admin-key";
@@ -29,8 +30,8 @@ function AppShell() {
   const { lock } = useAdminKey();
 
   // Signing out ends the admin session too: the management key must not
-  // outlive the operator's own session, and the workbench is a surface
-  // only a signed-in operator may open.
+  // outlive the operator's own session, and the admin screens are a
+  // surface only a signed-in operator may open.
   //
   // The route is left alone until the operator actually signs out. The
   // legacy shell reacted to an auth change, not to the first render, so
@@ -40,24 +41,37 @@ function AppShell() {
   useEffect(() => {
     if (!isAuthenticated) {
       lock();
-      if (wasAuthenticated.current && window.location.hash === "#admin") {
+      // Both admin screens count: signing out from either one ends the
+      // session, and neither address may outlive it.
+      if (
+        wasAuthenticated.current &&
+        window.location.hash.startsWith("#admin")
+      ) {
         window.location.hash = "";
       }
     }
     wasAuthenticated.current = isAuthenticated;
   }, [isAuthenticated, lock]);
 
-  // Leaving the workbench ends the admin session as well. The legacy
+  // Leaving the admin area ends the admin session as well. The legacy
   // cleared the management key whenever it showed the generator, so the
-  // key lived exactly as long as the workbench was open; the key is
-  // asked for again on the way back in.
+  // key lived exactly as long as the admin screen was open; moving
+  // between the workbench and the API-keys page keeps it, because that
+  // is one session and one gate.
+  const inAdminArea = route === "admin" || route === "admin-api-keys";
   useEffect(() => {
-    if (route !== "admin") lock();
-  }, [route, lock]);
+    if (!inAdminArea) lock();
+  }, [inAdminArea, lock]);
 
   return (
     <>
-      {route === "admin" ? <AdminView /> : <GeneratorView />}
+      {route === "admin" ? (
+        <AdminView />
+      ) : route === "admin-api-keys" ? (
+        <ApiKeysPage />
+      ) : (
+        <GeneratorView />
+      )}
       {!isAuthenticated ? <LoginDialog /> : null}
     </>
   );

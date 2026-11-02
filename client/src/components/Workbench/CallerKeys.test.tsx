@@ -7,15 +7,16 @@ import { AdminKeyProvider } from "../../app/admin-key";
 import { AuthProvider } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { CALLER_KEYS_QUERY_FAMILY } from "../../api/admin";
-import { AdminView } from "./AdminView";
+import { ApiKeysPage } from "./ApiKeysPage";
 
 /**
- * The caller-key list.
+ * The API-keys page.
  *
- * A caller key is the bearer token a client sends to reach this Worker's
- * API. The rules these tests pin: the list is behind the gate like
+ * These are the keys a client presents to reach this Worker's API (the
+ * domain calls them caller keys; the UI calls them API keys). The rules
+ * these tests pin: the list is behind the management-key gate like
  * everything else behind it, each key is shown by name and masked hint,
- * a disabled key is visible as disabled, and locking the panel leaves
+ * a disabled key is visible as disabled, and locking the page leaves
  * nothing of the list behind to read.
  */
 
@@ -91,7 +92,7 @@ function stubApi(
   return calls;
 }
 
-function renderWorkbench() {
+function renderApiKeysPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -104,7 +105,7 @@ function renderWorkbench() {
       </ThemeProvider>
     </QueryClientProvider>
   );
-  const utils = render(<AdminView />, { wrapper });
+  const utils = render(<ApiKeysPage />, { wrapper });
   return { ...utils, client };
 }
 
@@ -116,12 +117,12 @@ async function unlock(user: ReturnType<typeof userEvent.setup>) {
   );
 }
 
-describe("the caller-key list", () => {
+describe("the API-keys page", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
     window.localStorage.clear();
     window.sessionStorage.setItem("api_key", "bearer-key");
-    window.location.hash = "#admin";
+    window.location.hash = "#admin/api-keys";
   });
 
   afterEach(() => {
@@ -131,7 +132,7 @@ describe("the caller-key list", () => {
   it("asks for the caller keys only after the management key is entered", async () => {
     const calls = stubApi();
     const user = userEvent.setup();
-    renderWorkbench();
+    renderApiKeysPage();
 
     // Nothing behind the gate is requested before the key is entered.
     expect(calls.some((call) => call.path === "/api/admin/caller-keys")).toBe(
@@ -148,7 +149,7 @@ describe("the caller-key list", () => {
   it("shows each caller key by name and masked hint", async () => {
     stubApi();
     const user = userEvent.setup();
-    renderWorkbench();
+    renderApiKeysPage();
 
     await unlock(user);
 
@@ -162,7 +163,7 @@ describe("the caller-key list", () => {
   it("marks a disabled caller key and mutes its row", async () => {
     stubApi();
     const user = userEvent.setup();
-    renderWorkbench();
+    renderApiKeysPage();
 
     await unlock(user);
 
@@ -180,7 +181,7 @@ describe("the caller-key list", () => {
   it("shows an empty state when there are no caller keys", async () => {
     stubApi({ keys: [] });
     const user = userEvent.setup();
-    renderWorkbench();
+    renderApiKeysPage();
 
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
     await user.click(screen.getByRole("button", { name: /Unlock/i }));
@@ -188,36 +189,36 @@ describe("the caller-key list", () => {
     await waitFor(() =>
       expect(
         document.getElementById("adminCallerKeysEmpty")?.textContent
-      ).toContain("No caller keys yet.")
+      ).toContain("No API keys yet.")
     );
   });
 
   it("does not present a failed read as an empty list", async () => {
     stubApi({ error: { message: "boom" } }, 500);
     const user = userEvent.setup();
-    renderWorkbench();
+    renderApiKeysPage();
 
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
     await user.click(screen.getByRole("button", { name: /Unlock/i }));
 
-    // "No caller keys yet." is a claim about what the server said. A
+    // "No API keys yet." is a claim about what the server said. A
     // request that failed has no answer to claim, so the table says the
     // list is unknown and the panel's alert carries the reason.
     await waitFor(() =>
       expect(
         document.getElementById("adminCallerKeysEmpty")?.textContent
-      ).toContain("Could not load caller keys.")
+      ).toContain("Could not load API keys.")
     );
     expect(
       document.getElementById("adminCallerKeysEmpty")?.textContent
-    ).not.toContain("No caller keys yet.");
+    ).not.toContain("No API keys yet.");
   });
 
   it("says a failed refresh left the rows stale", async () => {
     // The first read succeeds, the next one fails.
     stubApi(CALLER_KEYS, (attempt) => (attempt === 0 ? 200 : 500));
     const user = userEvent.setup();
-    const { client } = renderWorkbench();
+    const { client } = renderApiKeysPage();
 
     await unlock(user);
 
@@ -230,7 +231,7 @@ describe("the caller-key list", () => {
     await waitFor(() =>
       expect(
         document.getElementById("adminCallerKeysEmpty")?.textContent
-      ).toContain("Could not refresh caller keys.")
+      ).toContain("Could not refresh API keys.")
     );
     // The message has to be visible, not merely present: the paragraph is
     // hidden while rows are on screen, and a hidden message tells the
@@ -244,13 +245,11 @@ describe("the caller-key list", () => {
   it("leaves nothing of the list behind when the panel is locked", async () => {
     stubApi();
     const user = userEvent.setup();
-    const { client } = renderWorkbench();
+    const { client } = renderApiKeysPage();
 
     await unlock(user);
 
-    await user.click(
-      screen.getByRole("button", { name: /Lock provider credentials/i })
-    );
+    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
 
     // A locked panel must leave nothing behind to read: neither the
     // active session's list nor the placeholder the locked session left.
@@ -265,7 +264,7 @@ describe("the caller-key list", () => {
   it("never writes a caller key to a storage backend", async () => {
     stubApi();
     const user = userEvent.setup();
-    renderWorkbench();
+    renderApiKeysPage();
 
     await unlock(user);
 

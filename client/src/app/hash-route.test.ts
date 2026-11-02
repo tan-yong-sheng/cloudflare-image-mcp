@@ -24,6 +24,21 @@ describe("the route", () => {
     expect(parseRoute("", "/admin/")).toBe("admin");
   });
 
+  it("opens the API-keys page on its fragment", () => {
+    expect(parseRoute("#admin/api-keys")).toBe("admin-api-keys");
+  });
+
+  it("opens the API-keys page on its path", () => {
+    expect(parseRoute("", "/admin/api-keys")).toBe("admin-api-keys");
+    expect(parseRoute("", "/admin/api-keys/")).toBe("admin-api-keys");
+  });
+
+  it("keeps a deeper admin fragment on the generator route", () => {
+    // The path decides nothing once the fragment names a route: an
+    // unknown admin fragment is not the workbench by another name.
+    expect(parseRoute("#admin/keys")).toBe("generator");
+  });
+
   it("keeps the generator everywhere else", () => {
     expect(parseRoute("")).toBe("generator");
     expect(parseRoute("", "/")).toBe("generator");
