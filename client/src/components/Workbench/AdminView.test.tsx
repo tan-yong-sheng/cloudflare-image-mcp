@@ -1097,4 +1097,27 @@ describe("the operations rail", () => {
       "hidden"
     );
   });
+
+  it("keeps the key drawer on top of the open operations rail", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // With the rail expanded, the add drawer still overlays everything:
+    // it keeps its z-50 stacking and the rail stays mounted under it
+    // rather than being displaced by the overlay.
+    await user.click(
+      screen.getByRole("button", { name: /Toggle operations rail/i })
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+
+    expect(document.getElementById("adminSheet")?.className).toContain("z-50");
+    expect(document.getElementById("adminOpsRail")?.className).not.toContain(
+      "hidden"
+    );
+  });
 });
