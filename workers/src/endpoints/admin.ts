@@ -20,7 +20,7 @@
 // 201 is the only time the secret is ever served. It rides no-store like
 // every admin response, so the one-shot secret cannot linger in a cache.
 
-import type { Env } from "../types.js";
+import type { Env, ModelConfig } from "../types.js";
 import {
   ADMIN_CALLER_KEYS_PATH,
   ADMIN_HEALTH_PATH,
@@ -51,6 +51,7 @@ import {
   deleteProviderKey,
   disableProviderKey,
   getAdminHealth,
+  listProbeKeys,
   MAX_WEIGHT,
   rotateProviderKey,
   updateProviderKey,
@@ -58,7 +59,19 @@ import {
   type AdminD1,
   type AdminWrite,
   type CredentialReadiness,
+  type ProbeKeyRow,
 } from "../services/admin-store.js";
+import { ParamParser } from "../services/param-parser.js";
+import { ProviderPool } from "../services/provider-pool.js";
+import {
+  DispatchingAITransport,
+  TRANSPORT_FACTORIES,
+} from "../services/transports.js";
+import {
+  getModelConfig,
+  isModelExposed,
+  MODEL_CONFIGS,
+} from "../config/models.js";
 
 /** Routes the client also calls; workers/src/routes.ts is the shared source. */
 export {
@@ -669,6 +682,108 @@ async function handleDeleteKey(
 /** Most pairings one live-test request may run (#149). */
 const MAX_TEST_PAIRINGS = 50;
 
+const PROBE_PROMPT = "liveness test";
+
+/**
+ * One per-pairing live-test outcome — the shape the workbench card (#153)
+ * renders. ms is 0 when the pairing was refused before any inference ran;
+ * error is absent exactly when ok is true.
+ */
+export interface KeyTestResult {
+  keyId: number;
+  modelId: string;
+  ok: boolean;
+  ms: number;
+  error?: string;
+}
+
+/** A refusal that happened before any inference: no time was spent. */
+function failedPairing(
+  keyId: number,
+  modelId: string,
+  error: string
+): KeyTestResult {
+  return { keyId, modelId, ok: false, ms: 0, error };
+}
+
+/**
+ * Minimal inference payload for one model, derived from its registry entry:
+ * the declared default step count and the smallest dimensions the model
+ * accepts (the dimension parameter's step when the limits declare no floor).
+ * The registry is the single source — nothing per-model is hardcoded. Only
+ * parameters the model declares reach the payload (the payload contract), so
+ * a model without dimension parameters simply uses its provider defaults.
+ */
+function probePayload(model: ModelConfig): Record<string, unknown> {
+  const width = Math.max(
+    model.limits.minWidth,
+    model.parameters["width"]?.step ?? 1,
+    1
+  );
+  const height = Math.max(
+    model.limits.minHeight,
+    model.parameters["height"]?.step ?? 1,
+    1
+  );
+  const params = {
+    prompt: PROBE_PROMPT,
+    rawPrompt: PROBE_PROMPT,
+    ...(model.parameters["steps"] || model.parameters["num_steps"]
+      ? { steps: model.limits.defaultSteps }
+      : {}),
+    ...(model.parameters["width"] && model.parameters["height"]
+      ? { width, height }
+      : {}),
+    ...(model.parameters["size"] ? { size: `${width}x${height}` } : {}),
+  };
+  return ParamParser.buildPayload(params, model).payload;
+}
+
+/**
+ * One minimal inference against one (key, model) pairing. A one-key pool
+ * (weight 1, enabled) makes the weighted pick deterministic — the probe
+ * tests THIS credential, not a pool draw — and the narrowing poolFor keeps
+ * every other provider's credentials out of reach. The transport runs
+ * directly, so nothing reaches R2 (a probe stores no images), and error
+ * text has already passed the transport's credential scrubbing.
+ */
+async function runProbe(
+  key: {
+    label: string;
+    accountId: string;
+    apiToken: string;
+    transport: string;
+  },
+  model: ModelConfig
+): Promise<{ ms: number; error?: string }> {
+  const started = Date.now();
+  try {
+    const pool = new ProviderPool(
+      [
+        {
+          label: key.label,
+          accountId: key.accountId,
+          apiToken: key.apiToken,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+      { source: "d1" }
+    );
+    const transport = new DispatchingAITransport({
+      factories: TRANSPORT_FACTORIES,
+      poolFor: (name) => (name === key.transport ? pool : undefined),
+    });
+    await transport.run(model.id, probePayload(model), model);
+    return { ms: Date.now() - started };
+  } catch (error) {
+    return {
+      ms: Date.now() - started,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function isKeyIdEntry(entry: unknown): entry is number {
   return typeof entry === "number" && Number.isInteger(entry);
 }
@@ -756,9 +871,137 @@ async function handleKeysTest(
         "request. Narrow the key or model list."
     );
   }
-  // The per-pairing probe executor lands with its own slice; until then an
-  // allowed request is an honest server error, never a fabricated result.
-  return internalError("live-test probe is not wired up yet");
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (!dataKey) {
+    return internalError("no sealing key configured");
+  }
+  const keyRows = await listProbeKeys(store);
+  // The cap counts REQUESTED pairings, before ids are resolved: 51 ids are
+  // 51 provider calls if they all exist, and the refusal must not depend on
+  // how many of them do.
+  const selectedModels: { requested: string; config: ModelConfig | null }[] =
+    models.wildcard
+      ? Object.values(MODEL_CONFIGS)
+          .filter(isModelExposed)
+          .map((config) => ({ requested: config.id, config }))
+      : models.ids.map((id) => ({ requested: id, config: getModelConfig(id) }));
+  const selectedKeys: { requested: number; row: ProbeKeyRow | null }[] =
+    keys.wildcard
+      ? keyRows.map((row) => ({ requested: row.id, row }))
+      : keys.ids.map((id) => ({
+          requested: id,
+          row: keyRows.find((row) => row.id === id) ?? null,
+        }));
+  if (selectedKeys.length * selectedModels.length > MAX_TEST_PAIRINGS) {
+    throw new AdminStoreError(
+      400,
+      `refusing to run ${selectedKeys.length * selectedModels.length} ` +
+        `pairings: a live-test request is capped at ${MAX_TEST_PAIRINGS} ` +
+        "because every pairing is one provider inference and Workers cap " +
+        "subrequests per request. Narrow the key or model list."
+    );
+  }
+  // Sequential by design: parallel fan-out would burst provider quota —
+  // exactly what the guards above exist to prevent — and per-pairing latency
+  // is only meaningful when each call runs on its own.
+  const results: KeyTestResult[] = [];
+  for (const key of selectedKeys) {
+    const row = key.row;
+    if (!row) {
+      for (const model of selectedModels) {
+        results.push(
+          failedPairing(
+            key.requested,
+            model.requested,
+            `unknown provider key ${key.requested}`
+          )
+        );
+      }
+      continue;
+    }
+    if (row.transport === null) {
+      for (const model of selectedModels) {
+        results.push(
+          failedPairing(
+            key.requested,
+            model.requested,
+            `provider '${row.providerId}' of key '${row.label}' has no transport row`
+          )
+        );
+      }
+      continue;
+    }
+    if (row.envelope === null) {
+      for (const model of selectedModels) {
+        results.push(
+          failedPairing(
+            key.requested,
+            model.requested,
+            `key '${row.label}' has no active credential version to test`
+          )
+        );
+      }
+      continue;
+    }
+    let token: string;
+    try {
+      token = await openEnvelope(row.envelope, dataKey);
+    } catch {
+      // AES-GCM cannot say why it failed; report what it means, at the
+      // label level only — never any byte of the credential.
+      console.warn(`live test: envelope for key '${row.label}' will not open`);
+      for (const model of selectedModels) {
+        results.push(
+          failedPairing(
+            key.requested,
+            model.requested,
+            `credential for key '${row.label}' will not open`
+          )
+        );
+      }
+      continue;
+    }
+    for (const model of selectedModels) {
+      const config = model.config;
+      if (!config) {
+        results.push(
+          failedPairing(
+            key.requested,
+            model.requested,
+            `unknown model: ${model.requested}`
+          )
+        );
+        continue;
+      }
+      if (config.inferenceProvider !== row.transport) {
+        results.push(
+          failedPairing(
+            key.requested,
+            model.requested,
+            `key '${row.label}' serves transport '${row.transport}', model '${config.id}' needs '${config.inferenceProvider}'`
+          )
+        );
+        continue;
+      }
+      const probe = await runProbe(
+        {
+          label: row.label,
+          accountId: row.accountId ?? "",
+          apiToken: token,
+          transport: row.transport,
+        },
+        config
+      );
+      results.push({
+        keyId: key.requested,
+        modelId: model.requested,
+        ok: probe.error === undefined,
+        ms: probe.ms,
+        ...(probe.error === undefined ? {} : { error: probe.error }),
+      });
+    }
+  }
+  return json({ results });
 }
 
 /**
