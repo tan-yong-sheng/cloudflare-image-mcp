@@ -141,6 +141,12 @@ export function AdminView() {
     setTestError(null);
   }, [unlocked]);
 
+  // The unlocked state as of the moment a run's answer lands (same
+  // read-during-render pattern as sheetRef above), so a late answer
+  // knows whether the session it belongs to still exists.
+  const unlockedRef = useRef(unlocked);
+  unlockedRef.current = unlocked;
+
   // Escape leaves the workbench for the generator. The add/edit drawer
   // owns its own Escape, so an open drawer swallows it first.
   const sheetRef = useRef(sheet);
@@ -222,10 +228,18 @@ export function AdminView() {
   const handleRunTest = (request: RunKeyTestRequest) => {
     setTestError(null);
     mutations.testKeys.mutate(request, {
-      onSuccess: (response) =>
-        setLastRun({ request, results: response.results }),
-      onError: (cause) =>
-        setTestError(cause instanceof Error ? cause.message : String(cause)),
+      onSuccess: (response) => {
+        // The probe can take a while — the pairings run sequentially —
+        // so the operator may lock before it answers. An answer that
+        // lands after the lock belongs to a session that is over: the
+        // lock dropped the results, and it must not put them back.
+        if (!unlockedRef.current) return;
+        setLastRun({ request, results: response.results });
+      },
+      onError: (cause) => {
+        if (!unlockedRef.current) return;
+        setTestError(cause instanceof Error ? cause.message : String(cause));
+      },
     });
   };
 

@@ -1596,6 +1596,7 @@ describe("the live test card in the operations rail", () => {
     const run = document.getElementById("adminOpsTestRun");
     await waitFor(() => expect(run?.textContent).toBe("Testing…"));
     expect(run).toBeDisabled();
+    expect(run?.getAttribute("aria-busy")).toBe("true");
     expect(testCall(calls)?.body).toEqual({ keyIds: [1], modelIds: ["*"] });
 
     resolveRun(
@@ -1914,5 +1915,52 @@ describe("the live test card in the operations rail", () => {
       expect(screen.getByRole("button", { name: "Working" })).toBeDisabled()
     );
     expect(document.getElementById("adminOpsTestResults")).toBeNull();
+  });
+
+  it("ignores a run that answers after the panel was locked", async () => {
+    let resolveRun: (response: Response) => void = () => {};
+    stubTestApi(MODELS, (route) => {
+      if (route.path !== "/api/admin/keys/test") return null;
+      return new Promise<Response>((resolve) => {
+        resolveRun = resolve;
+      });
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestRun")?.textContent).toBe(
+        "Testing…"
+      )
+    );
+
+    // The operator locks while the run is still in flight...
+    await user.click(
+      screen.getByRole("button", { name: /Lock provider credentials/i })
+    );
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+
+    // ...and the answer lands afterwards: it belongs to a session that
+    // is over, so it must not repopulate the results the lock dropped.
+    resolveRun(
+      jsonResponse(true, {
+        results: [{ keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 }],
+      })
+    );
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestRun")?.textContent).toBe(
+        "Run test"
+      )
+    );
+    expect(document.getElementById("adminOpsTestResults")).toBeNull();
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
   });
 });
