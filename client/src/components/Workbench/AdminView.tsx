@@ -15,7 +15,10 @@ import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
 import { UnlockGate } from "./UnlockGate";
 
-type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
+type SheetState = {
+  mode: "add" | "edit" | "rotate";
+  key: AdminKey | null;
+} | null;
 
 /**
  * The provider credentials workbench.
@@ -143,7 +146,10 @@ export function AdminView() {
     setSavingSheet(submitted);
     savingSheetRef.current = submitted;
     try {
-      if (submitted?.mode === "edit" && submitted.key) {
+      if (
+        (submitted?.mode === "edit" || submitted?.mode === "rotate") &&
+        submitted.key
+      ) {
         await mutations.updateKey.mutateAsync({
           keyId: submitted.key.id,
           accountId: values.accountId,
@@ -302,6 +308,10 @@ export function AdminView() {
               keys={keys}
               loading={health.isPending}
               pendingKeyIds={pendingKeyIds}
+              onRotate={(key) => {
+                setSheetError(null);
+                setSheet({ mode: "rotate", key });
+              }}
               onEdit={(key) => {
                 setSheetError(null);
                 setSheet({ mode: "edit", key });

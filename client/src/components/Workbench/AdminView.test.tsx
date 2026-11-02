@@ -388,6 +388,63 @@ describe("the provider credentials workbench", () => {
     expect(update?.body).toMatchObject({ apiToken: "a-rotated-token" });
   });
 
+  it("opens the rotation drawer on inline rotate action with token focused and rotation copy", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // Each credential row displays an inline rotate action button alongside Edit and Delete
+    const rotateBtn = screen.getByRole("button", { name: /Rotate key #1/i });
+    expect(rotateBtn).toBeInTheDocument();
+
+    // Clicking rotate opens the drawer with the token field automatically focused
+    await user.click(rotateBtn);
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).not.toBeNull()
+    );
+
+    expect(document.getElementById("adminSheetTitle")?.textContent).toContain(
+      "Rotate Key #1"
+    );
+    expect(document.getElementById("adminSheetNote")?.textContent).toContain(
+      "supersede the active version"
+    );
+    expect(document.activeElement?.id).toBe("adminSheetToken");
+
+    // Submitting a non-empty token successfully supersedes the active version
+    await user.type(screen.getByLabelText(/API token/i), "a-new-rotated-token");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/api/admin/keys/1")).toBe(true)
+    );
+    const update = calls.find((call) => call.path === "/api/admin/keys/1");
+    expect(update?.body).toMatchObject({ apiToken: "a-new-rotated-token" });
+  });
+
+  it("leaving the token blank during rotate action preserves the current version without rotation", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Rotate key #1/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).not.toBeNull()
+    );
+
+    // Leave token blank and save
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/api/admin/keys/1")).toBe(true)
+    );
+    const update = calls.find((call) => call.path === "/api/admin/keys/1");
+    expect(update?.body).not.toHaveProperty("apiToken");
+  });
+
   it("masks the token until the operator asks to see it", async () => {
     stubApi();
     const user = userEvent.setup();

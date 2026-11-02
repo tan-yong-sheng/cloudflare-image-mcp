@@ -10,7 +10,7 @@ export interface SheetValues {
 }
 
 interface KeySheetProps {
-  mode: "add" | "edit";
+  mode: "add" | "edit" | "rotate";
   provider: AdminProvider | null;
   /** The key being edited; null when adding. */
   editingKey: AdminKey | null;
@@ -40,7 +40,8 @@ export function KeySheet({
   saving,
   error,
 }: KeySheetProps) {
-  const isEdit = mode === "edit" && editingKey !== null;
+  const isEdit = (mode === "edit" || mode === "rotate") && editingKey !== null;
+  const isRotate = mode === "rotate" && editingKey !== null;
   const needsAccountId = provider?.transport === "cloudflare-rest";
 
   const [accountId, setAccountId] = useState(
@@ -64,10 +65,12 @@ export function KeySheet({
   onCloseRef.current = onClose;
 
   // Focus the first field the operator can actually fill.
+  // When rotating, jump straight to the token field ready for pasting.
   useEffect(() => {
-    if (needsAccountId) accountRef.current?.focus();
+    if (isRotate) tokenRef.current?.focus();
+    else if (needsAccountId) accountRef.current?.focus();
     else tokenRef.current?.focus();
-  }, [needsAccountId]);
+  }, [isRotate, needsAccountId]);
 
   // The drawer is a modal: Escape dismisses it and Tab stays inside it,
   // so a keyboard user cannot wander into the page behind it.
@@ -189,22 +192,31 @@ export function KeySheet({
         }}
       >
         <p id="adminSheetEyebrow" className="text-xs text-muted font-mono mb-1">
-          {isEdit ? "EDIT" : "NEW"}
+          {isRotate ? "ROTATE" : isEdit ? "EDIT" : "NEW"}
         </p>
         <h3 id="adminSheetTitle" className="text-lg font-bold mb-1">
-          {isEdit
-            ? "Edit Key #" +
+          {isRotate
+            ? "Rotate Key #" +
               editingKey.id +
               " (" +
               editingKey.providerId +
               versionTag +
               ")"
-            : "New Key (" + (provider?.id ?? "") + ")"}
+            : isEdit
+              ? "Edit Key #" +
+                editingKey.id +
+                " (" +
+                editingKey.providerId +
+                versionTag +
+                ")"
+              : "New Key (" + (provider?.id ?? "") + ")"}
         </h3>
         <p id="adminSheetNote" className="text-xs text-muted mb-3">
-          {isEdit
-            ? "Leave the token blank to keep the current version. Filling it rotates as part of save."
-            : "The key will be sealed server-side on save."}
+          {isRotate
+            ? "Submitting a replacement token will seal it and supersede the active version. Leaving it blank preserves the current version."
+            : isEdit
+              ? "Leave the token blank to keep the current version. Filling it rotates as part of save."
+              : "The key will be sealed server-side on save."}
         </p>
 
         <div className="space-y-3 flex-1">

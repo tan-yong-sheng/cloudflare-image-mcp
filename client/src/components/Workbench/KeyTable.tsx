@@ -8,6 +8,7 @@ interface KeyTableProps {
   loading: boolean;
   /** The key ids with a request in flight, so their row cannot be acted on twice. */
   pendingKeyIds: number[];
+  onRotate: (key: AdminKey) => void;
   onEdit: (key: AdminKey) => void;
   onDelete: (key: AdminKey) => void;
   onToggle: (key: AdminKey, enabled: boolean) => void;
@@ -44,6 +45,7 @@ export function KeyTable({
   keys,
   loading,
   pendingKeyIds,
+  onRotate,
   onEdit,
   onDelete,
   onToggle,
@@ -135,6 +137,16 @@ export function KeyTable({
                     />
 
                     <span className="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm-icon text-xs"
+                        aria-label={"Rotate key #" + key.id}
+                        title={"Rotate key #" + key.id}
+                        disabled={pending}
+                        onClick={() => onRotate(key)}
+                      >
+                        <i className="fa-solid fa-arrows-rotate" />
+                      </button>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm-icon text-xs"
