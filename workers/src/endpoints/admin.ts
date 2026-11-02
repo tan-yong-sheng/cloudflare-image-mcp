@@ -858,19 +858,6 @@ async function handleKeysTest(
         "provider quota. Pick specific keys or models."
     );
   }
-  if (
-    !keys.wildcard &&
-    !models.wildcard &&
-    keys.ids.length * models.ids.length > MAX_TEST_PAIRINGS
-  ) {
-    throw new AdminStoreError(
-      400,
-      `refusing to run ${keys.ids.length * models.ids.length} pairings: a ` +
-        `live-test request is capped at ${MAX_TEST_PAIRINGS} because every ` +
-        "pairing is one provider inference and Workers cap subrequests per " +
-        "request. Narrow the key or model list."
-    );
-  }
   const dataKey = env.PROVIDER_DATA_KEY;
   if (!dataKey) {
     return internalError("no sealing key configured");
@@ -878,7 +865,8 @@ async function handleKeysTest(
   const keyRows = await listProbeKeys(store);
   // The cap counts REQUESTED pairings, before ids are resolved: 51 ids are
   // 51 provider calls if they all exist, and the refusal must not depend on
-  // how many of them do.
+  // how many of them do. Wildcards expand to every key row / every exposed
+  // registry model, so the count is only known after expansion.
   const selectedModels: { requested: string; config: ModelConfig | null }[] =
     models.wildcard
       ? Object.values(MODEL_CONFIGS)
