@@ -142,17 +142,60 @@ async function unlock(user: ReturnType<typeof userEvent.setup>) {
   );
 }
 
+/**
+ * The model registry fixture the filter-chip and live-test suites share:
+ * 2 free + 2 paid, 2 image-edit capable, and one duplicate-name pair
+ * ("Flux Schnell" / "flux schnell") served over two different transports.
+ */
+const MODELS = [
+  {
+    id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    name: "Stable Diffusion XL",
+    taskTypes: ["text-to-image"],
+    inferenceProvider: "cloudflare-rest",
+    costClass: "free",
+    available: true,
+  },
+  {
+    id: "@cf/black-forest-labs/flux-1-schnell",
+    name: "Flux Schnell",
+    taskTypes: ["text-to-image", "image-to-image"],
+    inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
+    available: true,
+  },
+  {
+    id: "agnes-image-2.5-flash",
+    name: "Agnes Flash",
+    taskTypes: ["text-to-image"],
+    inferenceProvider: "openai-compat",
+    costClass: "paid",
+    available: true,
+  },
+  {
+    id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+    name: "flux schnell",
+    taskTypes: ["image-to-image"],
+    inferenceProvider: "openai-compat",
+    costClass: "free",
+    available: true,
+  },
+];
+
+// One shared setup for every describe in this file: a clean hash and
+// storage per test, and unstubbed globals afterwards. Vitest runs the
+// top-level hooks for all tests in the file.
+beforeEach(() => {
+  window.sessionStorage.clear();
+  window.localStorage.clear();
+  window.location.hash = "#admin";
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("the provider credentials workbench", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("keeps the panel behind the gate until the management key is entered", async () => {
     const calls = stubApi();
     renderWorkbench();
@@ -1020,16 +1063,6 @@ describe("the provider credentials workbench", () => {
 });
 
 describe("the operations rail", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("renders the third column with its three cards once unlocked", async () => {
     stubApi();
     const user = userEvent.setup();
@@ -1126,54 +1159,6 @@ describe("the operations rail", () => {
 });
 
 describe("the model filter chips in the operations rail", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  // 2 free + 2 paid, 2 image-edit capable, and one duplicate-name pair
-  // ("Flux Schnell" / "flux schnell") served over two different
-  // transports — the fixture #152's card reads its rules from.
-  const MODELS = [
-    {
-      id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
-      name: "Stable Diffusion XL",
-      taskTypes: ["text-to-image"],
-      inferenceProvider: "cloudflare-rest",
-      costClass: "free",
-      available: true,
-    },
-    {
-      id: "@cf/black-forest-labs/flux-1-schnell",
-      name: "Flux Schnell",
-      taskTypes: ["text-to-image", "image-to-image"],
-      inferenceProvider: "cloudflare-rest",
-      costClass: "paid",
-      available: true,
-    },
-    {
-      id: "agnes-image-2.5-flash",
-      name: "Agnes Flash",
-      taskTypes: ["text-to-image"],
-      inferenceProvider: "openai-compat",
-      costClass: "paid",
-      available: true,
-    },
-    {
-      id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
-      name: "flux schnell",
-      taskTypes: ["image-to-image"],
-      inferenceProvider: "openai-compat",
-      costClass: "free",
-      available: true,
-    },
-  ];
-
   function stubModels(models: unknown) {
     return stubApi((route) =>
       route.path === "/api/internal/models" ? jsonResponse(true, models) : null
@@ -1401,53 +1386,6 @@ describe("the model filter chips in the operations rail", () => {
 });
 
 describe("the live test card in the operations rail", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  // The registry Card 2's model selector reads from — the same fixture
-  // shape the filter-chip suite uses.
-  const MODELS = [
-    {
-      id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
-      name: "Stable Diffusion XL",
-      taskTypes: ["text-to-image"],
-      inferenceProvider: "cloudflare-rest",
-      costClass: "free",
-      available: true,
-    },
-    {
-      id: "@cf/black-forest-labs/flux-1-schnell",
-      name: "Flux Schnell",
-      taskTypes: ["text-to-image", "image-to-image"],
-      inferenceProvider: "cloudflare-rest",
-      costClass: "paid",
-      available: true,
-    },
-    {
-      id: "agnes-image-2.5-flash",
-      name: "Agnes Flash",
-      taskTypes: ["text-to-image"],
-      inferenceProvider: "openai-compat",
-      costClass: "paid",
-      available: true,
-    },
-    {
-      id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
-      name: "flux schnell",
-      taskTypes: ["image-to-image"],
-      inferenceProvider: "openai-compat",
-      costClass: "free",
-      available: true,
-    },
-  ];
-
   function stubTestApi(
     models: unknown = MODELS,
     overrides: (route: Route) => Response | Promise<Response> | null = () =>
@@ -1984,16 +1922,6 @@ describe("the live test card in the operations rail", () => {
 });
 
 describe("bulk token onboarding in the add drawer", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("counts valid tokens as they are typed or pasted", async () => {
     // The counter is what the operator trusts before submitting: it
     // counts the tokens that will actually be provisioned, after the
@@ -2154,16 +2082,6 @@ describe("the inline rotate action on key rows", () => {
   // Assembled at runtime: a stand-in replacement credential whose only
   // property under test is that it clears the drawer's minimum length.
   const ROTATE_TOKEN = ["tok", "rotate", "01"].join("-");
-
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
 
   it("renders a rotate action before Edit on every key row", async () => {
     stubApi();
