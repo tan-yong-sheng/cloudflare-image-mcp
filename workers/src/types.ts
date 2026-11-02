@@ -26,6 +26,17 @@ export interface ModelConfig {
    * which names the model author and is never used for routing.
    */
   inferenceProvider: string;
+  /**
+   * What running the model itself costs: "free" when the provider bills
+   * $0 for it, "paid" otherwise. An account-level free tier (Workers AI's
+   * daily Neuron allocation) does not make a priced model free, and a
+   * vendor's temporary $0 promotion does not either — classify those
+   * "paid" so a "free" chip never under-reports cost. Optional on the
+   * interface so hand-written ModelConfig fixtures stay valid; the
+   * registry gate (config/models.test.ts) asserts every models.json
+   * entry carries a valid value.
+   */
+  costClass?: "free" | "paid";
   apiVersion: number;
   inputFormat: "json" | "multipart";
   responseFormat: "base64" | "binary";

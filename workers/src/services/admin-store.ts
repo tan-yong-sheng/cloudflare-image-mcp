@@ -326,6 +326,68 @@ async function keyRow(db: AdminD1, keyId: number): Promise<KeyRow | null> {
     .first<KeyRow>();
 }
 
+/** One enabled key row as the live probe (#149) reads it. */
+export interface ProbeKeyRow {
+  id: number;
+  providerId: string;
+  /** The owning providers row's transport; null when that row is missing. */
+  transport: string | null;
+  label: string;
+  accountId: string | null;
+  /** Still-sealed active envelope; null when no version is active. */
+  envelope: string | null;
+}
+
+/**
+ * Active-credential rows for the live probe (#149), across all enabled keys —
+ * spec #146 scopes the wildcard to "testing all enabled keys on 1 specific
+ * model", so a parked key is never probed by an expansion (an explicit probe
+ * of it reports unknown instead). Same active-envelope subselect as
+ * getAdminHealth; the transport comes from the owning providers row (ADR-002)
+ * so the probe can refuse a key whose provider cannot serve a model before
+ * building any transport. The envelope is opened only by the endpoint holding
+ * PROVIDER_DATA_KEY — this module never sees token material, on the read side
+ * exactly as on the write side.
+ */
+export async function listProbeKeys(db: AdminD1): Promise<ProbeKeyRow[]> {
+  const records = rows<Record<string, unknown>>(
+    await db
+      .prepare(
+        `SELECT k.id AS id,
+                k.provider_id AS providerId,
+                p.transport AS transport,
+                k.label AS label,
+                k.external_account_id AS accountId,
+                (SELECT envelope
+                   FROM credential_versions
+                  WHERE provider_key_id = k.id AND revoked_at IS NULL
+                  ORDER BY version DESC
+                  LIMIT 1) AS envelope
+           FROM provider_keys k
+           LEFT JOIN providers p ON p.id = k.provider_id
+          WHERE k.enabled = 1`
+      )
+      .all()
+  );
+  return records.map((r) => ({
+    id: num(r["id"]),
+    providerId: String(r["providerId"]),
+    transport:
+      r["transport"] === null || r["transport"] === undefined
+        ? null
+        : String(r["transport"]),
+    label: String(r["label"]),
+    accountId:
+      r["accountId"] === null || r["accountId"] === undefined
+        ? null
+        : String(r["accountId"]),
+    envelope:
+      typeof r["envelope"] === "string" && r["envelope"].length > 0
+        ? r["envelope"]
+        : null,
+  }));
+}
+
 /** Registry transport for a provider row; null when the row is unknown. */
 async function providerTransport(
   db: AdminD1,

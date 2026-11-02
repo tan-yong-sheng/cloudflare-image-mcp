@@ -275,6 +275,12 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(80, 70, 229, 0.1);
 }
 
+/* Masks a multi-line credential field the way type="password" masks a
+   single-line one (Blink/WebKit; the eye button is the reveal). */
+.token-masked {
+  -webkit-text-security: disc;
+}
+
 #adminSheetEnabled {
   width: 48px;
   height: 48px;
@@ -362,6 +368,14 @@ textarea:focus {
   background: transparent;
   border-color: var(--border);
   color: var(--text-light);
+}
+/* The pressed state of a toggle chip (model filters, live-test scopes):
+   filled with the primary accent, white label — the inverse of the muted
+   resting chip. */
+.chip-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 /* A parked row. The muted colour is applied at full opacity rather than
    fading the row: a faded row takes the text with it, under the contrast

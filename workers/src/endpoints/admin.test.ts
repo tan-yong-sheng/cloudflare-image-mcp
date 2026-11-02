@@ -8,12 +8,13 @@
 // hint per key — the S3 tripwire asserts no secret character reaches any
 // admin response, and the hint keeps its visible run under that floor.
 
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import worker from "../index.js";
 import { handleAdmin } from "./admin.js";
 import type { AdminD1 } from "../services/admin-store.js";
 import { resetPoolCache } from "../services/pool-cache.js";
 import { sealToken } from "../services/provider-crypto.js";
+import { MODEL_CONFIGS, isModelExposed } from "../config/models.js";
 import type { Env } from "../types.js";
 
 function env(): Env {
@@ -1036,5 +1037,458 @@ describe("caller-key list (#125)", () => {
         (JSON.parse(text) as { keys: Record<string, unknown>[] }).keys[0] ?? {}
       ).sort()
     ).toEqual(["createdAt", "enabled", "id", "maskedKey", "name", "updatedAt"]);
+  });
+});
+
+describe("admin keys live test (#149)", () => {
+  // The live-test route runs one minimal real inference per (key, model)
+  // pairing. This block pins the contract the workbench card (#153) consumes:
+  // the two-gate order every admin route shares, the request body shape, and
+  // the quota-waste guards (double wildcard, pairing cap). Execution tests
+  // stub global fetch explicitly — no-network.ts throws on unstubbed calls,
+  // so a forgotten stub fails loudly instead of reading as a probe failure.
+
+  /** D1-shaped fake serving the probe's key rows from provider_keys. It
+   * honors the enabled filter the production SQL carries, the way D1
+   * applies a WHERE clause. */
+  function dbWithProbeRows(rows: Record<string, unknown>[]): unknown {
+    return {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => null,
+          all: async () =>
+            sql.includes("FROM provider_keys")
+              ? {
+                  results: sql.includes("enabled = 1")
+                    ? rows.filter((r) => r.enabled === 1)
+                    : rows,
+                }
+              : { results: [] },
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+        return { ...stmt, bind: () => ({ ...stmt }) };
+      },
+      batch: async () => [],
+    };
+  }
+
+  function envWithDb(db: unknown): Env {
+    return { ...env(), PROVIDER_DB: db } as unknown as Env;
+  }
+
+  function post(path: string, body: unknown, adminKey = "admin-key"): Request {
+    return new Request(`https://worker.test${path}`, {
+      method: "POST",
+      headers: {
+        ...bearer("user-key", { "X-Admin-Key": adminKey }),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function statusOf(request: Request, db?: unknown): Promise<Response> {
+    const response = await worker.fetch(
+      request,
+      db === undefined ? env() : envWithDb(db)
+    );
+    return response;
+  }
+
+  test("the shared routes module exports the test path the client imports", async () => {
+    const routes = await import("../routes.js");
+    expect(routes.ADMIN_KEYS_TEST_PATH).toBe("/api/admin/keys/test");
+  });
+
+  test("no bearer at all is a 401 through the existing gate", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: { "X-Admin-Key": "admin-key" },
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("wrong bearer is a 401 even with the right admin key", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/keys/test", {
+        method: "POST",
+        headers: bearer("wrong-key", { "X-Admin-Key": "admin-key" }),
+        body: JSON.stringify({ keyIds: [1], modelIds: ["m"] }),
+      }),
+      env()
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("right bearer but wrong admin key is a 403", async () => {
+    const response = await statusOf(
+      post(
+        "/api/admin/keys/test",
+        { keyIds: [1], modelIds: ["m"] },
+        "wrong-admin-key"
+      )
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("an unconfigured bearer gate refuses the live test even with the right management key", async () => {
+    const unconfigured = env();
+    delete (unconfigured as Partial<Env>).API_KEYS;
+    const response = await worker.fetch(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: ["m"] }),
+      unconfigured
+    );
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as {
+      error: { code: string | null };
+    };
+    expect(body.error.code).toBe("admin_disabled");
+  });
+
+  test("the live test needs a store like every other keyed route (no db is a 500)", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: ["m"] })
+    );
+    expect(response.status).toBe(500);
+  });
+
+  test("a body that is not shaped like the contract is a 400", async () => {
+    const db = dbWithProbeRows([]);
+    for (const body of [
+      { modelIds: ["@cf/x"] }, // keyIds missing
+      { keyIds: [1] }, // modelIds missing
+      { keyIds: 1, modelIds: ["@cf/x"] }, // keyIds not an array
+      { keyIds: [1], modelIds: "@cf/x" }, // modelIds not an array
+      { keyIds: [], modelIds: ["@cf/x"] }, // empty key list
+      { keyIds: [1], modelIds: [] }, // empty model list
+      { keyIds: ["1"], modelIds: ["@cf/x"] }, // string key id
+      { keyIds: [1.5], modelIds: ["@cf/x"] }, // non-integer key id
+      { keyIds: [1], modelIds: [42] }, // numeric model id
+      { keyIds: [1], modelIds: [""] }, // empty model id
+      { keyIds: ["*", 1], modelIds: ["@cf/x"] }, // wildcard mixed with ids
+      { keyIds: [1], modelIds: ["*", "@cf/x"] }, // wildcard mixed with ids
+    ]) {
+      const response = await statusOf(post("/api/admin/keys/test", body), db);
+      expect(response.status, `body ${JSON.stringify(body)}`).toBe(400);
+    }
+  });
+
+  test("both wildcards together are refused with the quota guard as a 400", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: ["*"], modelIds: ["*"] }),
+      dbWithProbeRows([])
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/subrequest|quota/i);
+  });
+
+  test("a pairing count over the cap is refused before any inference runs", async () => {
+    const response = await statusOf(
+      post("/api/admin/keys/test", {
+        keyIds: Array.from({ length: 51 }, (_, i) => i + 1),
+        modelIds: ["@cf/black-forest-labs/flux-1-schnell"],
+      }),
+      dbWithProbeRows([])
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/50/);
+  });
+
+  // --- execution (per-pairing probe) -------------------------------------
+
+  const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
+  const SDXL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
+  const AGNES = "agnes-image-2.5-flash";
+  const PROBE_TOKEN_1 = "sk-live-probe-token-1";
+
+  /**
+   * One provider_keys-shaped row for the probe's store fake. The envelope is
+   * really sealed with the env's data key, so the probe's openEnvelope call
+   * is the production codec, not a mock.
+   */
+  async function probeRow(
+    overrides: {
+      id?: number;
+      providerId?: string;
+      transport?: string;
+      label?: string;
+      accountId?: string | null;
+      enabled?: number;
+      envelope?: string | null;
+      token?: string;
+    } = {}
+  ): Promise<Record<string, unknown>> {
+    const { token = PROBE_TOKEN_1, ...rest } = overrides;
+    return {
+      id: 1,
+      providerId: "cloudflare",
+      transport: "cloudflare-rest",
+      label: "probe-key-1",
+      accountId: "acct-1",
+      enabled: 1,
+      envelope: await sealToken(token, "r2-test-sealing-key"),
+      ...rest,
+    };
+  }
+
+  /** Recording fetch stub: captures the probe's outbound requests. */
+  function stubProbeFetch(status = 200, body?: string) {
+    const calls: { url: string; headers: Headers; body: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        const headers = new Headers(init?.headers ?? {});
+        calls.push({
+          url: String(input),
+          headers,
+          body: typeof init?.body === "string" ? init.body : "",
+        });
+        return new Response(
+          body ?? JSON.stringify({ result: { image: "ZmFrZQ==" } }),
+          { status, headers: { "Content-Type": "application/json" } }
+        );
+      })
+    );
+    return calls;
+  }
+
+  type LiveResult = {
+    keyId: number;
+    modelId: string;
+    ok: boolean;
+    ms: number;
+    error?: string;
+  };
+
+  async function resultsOf(
+    body: unknown,
+    rows: Record<string, unknown>[]
+  ): Promise<LiveResult[]> {
+    const response = await statusOf(
+      post("/api/admin/keys/test", body),
+      dbWithProbeRows(rows)
+    );
+    expect(response.status).toBe(200);
+    const parsed = (await response.json()) as { results: LiveResult[] };
+    return parsed.results;
+  }
+
+  test("one pairing runs a minimal inference with the opened credential", async () => {
+    const rows = [await probeRow()];
+    const calls = stubProbeFetch();
+    const results = await resultsOf({ keyIds: [1], modelIds: [SCHNELL] }, rows);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual({
+      keyId: 1,
+      modelId: SCHNELL,
+      ok: true,
+      ms: expect.any(Number),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain(`/ai/run/${SCHNELL}`);
+    expect(calls[0].url).toContain("acct-1");
+    // The envelope was opened server-side and used as the bearer token.
+    expect(calls[0].headers.get("Authorization")).toBe(
+      `Bearer ${PROBE_TOKEN_1}`
+    );
+    const payload = JSON.parse(calls[0].body) as Record<string, unknown>;
+    expect(payload["prompt"]).toBe("liveness test");
+    // Minimal payload derives from the registry, not hardcoded values.
+    expect(payload["steps"]).toBe(MODEL_CONFIGS[SCHNELL].limits.defaultSteps);
+    // schnell declares no dimension parameters: none may reach the payload.
+    expect(payload["width"]).toBeUndefined();
+    expect(payload["height"]).toBeUndefined();
+  });
+
+  test("dimension-carrying models take their registry minimums", async () => {
+    const rows = [await probeRow()];
+    const calls = stubProbeFetch();
+    await resultsOf({ keyIds: [1], modelIds: [SDXL] }, rows);
+    const payload = JSON.parse(calls[0].body) as Record<string, unknown>;
+    expect(payload["width"]).toBe(MODEL_CONFIGS[SDXL].limits.minWidth);
+    expect(payload["height"]).toBe(MODEL_CONFIGS[SDXL].limits.minHeight);
+  });
+
+  test("pairings report in key-major order for N keys x M models", async () => {
+    const rows = [
+      await probeRow({ id: 1 }),
+      await probeRow({
+        id: 2,
+        label: "probe-key-2",
+        token: "sk-live-probe-token-2",
+      }),
+    ];
+    stubProbeFetch();
+    const results = await resultsOf(
+      { keyIds: [1, 2], modelIds: [SCHNELL, SDXL] },
+      rows
+    );
+    expect(results.map((r) => [r.keyId, r.modelId, r.ok])).toEqual([
+      [1, SCHNELL, true],
+      [1, SDXL, true],
+      [2, SCHNELL, true],
+      [2, SDXL, true],
+    ]);
+  });
+
+  test("an unknown key id is a failed pairing, not a failed request", async () => {
+    const rows = [await probeRow()];
+    const calls = stubProbeFetch();
+    const results = await resultsOf(
+      { keyIds: [999], modelIds: [SCHNELL] },
+      rows
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(false);
+    expect(results[0].keyId).toBe(999);
+    expect(results[0].modelId).toBe(SCHNELL);
+    expect(results[0].error).toMatch(/unknown provider key 999/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("an unknown model id is a failed pairing, not a failed request", async () => {
+    const rows = [await probeRow()];
+    const calls = stubProbeFetch();
+    const results = await resultsOf(
+      { keyIds: [1], modelIds: ["@cf/does/not-exist"] },
+      rows
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(false);
+    expect(results[0].error).toMatch(/unknown model/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("a key whose provider cannot serve the model fails that pairing with an explanatory error", async () => {
+    const rows = [await probeRow({ transport: "cloudflare-rest" })];
+    const calls = stubProbeFetch();
+    const results = await resultsOf({ keyIds: [1], modelIds: [AGNES] }, rows);
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(false);
+    expect(results[0].error).toMatch(/transport/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("a key with no active credential version fails its pairings without calling the provider", async () => {
+    const rows = [await probeRow({ envelope: null })];
+    const calls = stubProbeFetch();
+    const results = await resultsOf({ keyIds: [1], modelIds: [SCHNELL] }, rows);
+    expect(results[0].ok).toBe(false);
+    expect(results[0].error).toMatch(/credential version/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("an unopenable envelope fails its pairings and schedules no inference", async () => {
+    const rows = [await probeRow({ envelope: "not-a-v1-envelope" })];
+    const calls = stubProbeFetch();
+    const results = await resultsOf({ keyIds: [1], modelIds: [SCHNELL] }, rows);
+    expect(results[0].ok).toBe(false);
+    expect(results[0].error).toMatch(/will not open/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("model wildcard probes every exposed registry model for the one key", async () => {
+    const rows = [await probeRow()];
+    const calls = stubProbeFetch();
+    const results = await resultsOf({ keyIds: [1], modelIds: ["*"] }, rows);
+    const exposed = Object.values(MODEL_CONFIGS).filter(isModelExposed);
+    expect(results.map((r) => r.modelId)).toEqual(exposed.map((m) => m.id));
+    // Models the key's transport serves pass; the rest are per-pairing
+    // transport-mismatch failures, never a failed request.
+    const matching = exposed.filter(
+      (m) => m.inferenceProvider === "cloudflare-rest"
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(matching.length);
+    expect(calls).toHaveLength(matching.length);
+    for (const mismatch of results.filter((r) => !r.ok)) {
+      expect(mismatch.error).toMatch(/transport/);
+    }
+  });
+
+  test("key wildcard probes every key row against the one model", async () => {
+    const rows = [
+      await probeRow({ id: 1 }),
+      await probeRow({
+        id: 2,
+        label: "probe-key-2",
+        token: "sk-live-probe-token-2",
+      }),
+    ];
+    stubProbeFetch();
+    const results = await resultsOf(
+      { keyIds: ["*"], modelIds: [SCHNELL] },
+      rows
+    );
+    expect(results.map((r) => [r.keyId, r.ok])).toEqual([
+      [1, true],
+      [2, true],
+    ]);
+  });
+
+  test("the key wildcard probes only enabled keys", async () => {
+    const rows = [
+      await probeRow({ id: 1 }),
+      await probeRow({
+        id: 2,
+        label: "probe-key-2",
+        enabled: 0,
+        accountId: "acct-2",
+      }),
+    ];
+    const calls = stubProbeFetch();
+    const results = await resultsOf(
+      { keyIds: ["*"], modelIds: [SCHNELL] },
+      rows
+    );
+    // Spec #146: the wildcard tests all ENABLED keys on one model. The
+    // parked key produces no result row and schedules no inference;
+    // re-enabling it makes it testable again.
+    expect(results.map((r) => r.keyId)).toEqual([1]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).not.toContain("acct-2");
+  });
+
+  test("a wildcard pairing count over the cap is refused before any inference runs", async () => {
+    const rows = await Promise.all(
+      Array.from({ length: 51 }, (_, i) =>
+        probeRow({ id: i + 1, label: `probe-key-${i + 1}` })
+      )
+    );
+    const calls = stubProbeFetch();
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: ["*"], modelIds: [SCHNELL] }),
+      dbWithProbeRows(rows)
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/50/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("error text from the provider is scrubbed of credential material", async () => {
+    const leaked = "sk-live-probe-secret-zz9";
+    const rows = [await probeRow({ token: leaked })];
+    stubProbeFetch(
+      500,
+      JSON.stringify({ error: { message: `bad token ${leaked}` } })
+    );
+    const response = await statusOf(
+      post("/api/admin/keys/test", { keyIds: [1], modelIds: [SCHNELL] }),
+      dbWithProbeRows(rows)
+    );
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    // The upstream body echoed the token; the response must carry the
+    // transport's redaction, never the credential itself.
+    expect(text).not.toContain(leaked);
+    expect(text).toContain("[redacted]");
+    const parsed = JSON.parse(text) as { results: LiveResult[] };
+    expect(parsed.results[0].ok).toBe(false);
   });
 });

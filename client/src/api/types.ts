@@ -40,6 +40,13 @@ export interface ModelConfig {
   limits: ModelLimits;
   provider: string;
   inferenceProvider: string;
+  /**
+   * What the model itself costs, as classified in the Worker's registry:
+   * "free" when the provider bills $0 for it, "paid" otherwise. Optional
+   * because the registry is the enforcement point — the endpoint mirrors
+   * whatever models.json declares.
+   */
+  costClass?: "free" | "paid";
   available?: boolean;
 }
 
@@ -107,6 +114,44 @@ export interface AdminCallerKey {
 
 export interface AdminCallerKeys {
   keys: AdminCallerKey[];
+}
+
+/**
+ * One per-pairing outcome of a live key test. `ms` is always present (0
+ * when the pairing was refused before any inference ran) and `error` is
+ * absent exactly when `ok` is true.
+ */
+export interface KeyTestResult {
+  keyId: number;
+  modelId: string;
+  ok: boolean;
+  ms: number;
+  error?: string;
+}
+
+/** The live-test route's answer: one entry per requested pairing. */
+export interface KeyTestResponse {
+  results: KeyTestResult[];
+}
+
+/**
+ * The body of one live-test run. The two permitted scopes are the only
+ * representable shapes — one concrete key against every model, or every
+ * key against one concrete model — so the all-keys × all-models body the
+ * endpoint refuses cannot be constructed, let alone sent.
+ */
+export type RunKeyTestRequest =
+  | { readonly keyIds: readonly [number]; readonly modelIds: readonly ["*"] }
+  | { readonly keyIds: readonly ["*"]; readonly modelIds: readonly [string] };
+
+/**
+ * The most recent live-test run as the workbench holds it: the request
+ * (which carries the scope the run used) and its per-pairing results.
+ * A new run replaces it; runs never accumulate.
+ */
+export interface KeyTestRun {
+  request: RunKeyTestRequest;
+  results: KeyTestResult[];
 }
 
 /** One image from a generation response. */

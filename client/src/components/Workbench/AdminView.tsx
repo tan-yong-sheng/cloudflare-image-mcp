@@ -4,7 +4,7 @@ import {
   useHealth,
   usePendingAdminKeyIds,
 } from "../../api/admin";
-import type { AdminKey } from "../../api/types";
+import type { AdminKey, KeyTestRun, RunKeyTestRequest } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
@@ -13,9 +13,17 @@ import { adminRefusal, gateErrorFor } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
+import { LiveTestCard } from "./LiveTestCard";
+import { ModelFilterCard } from "./ModelFilterCard";
+import { OperationsRail } from "./OperationsRail";
 import { UnlockGate } from "./UnlockGate";
 
-type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
+type SheetState = {
+  mode: "add" | "edit";
+  key: AdminKey | null;
+  /** Set when the drawer was entered from a row's rotate action. */
+  entry?: "rotate";
+} | null;
 
 /**
  * The provider credentials workbench.
@@ -46,6 +54,11 @@ export function AdminView() {
   const health = useHealth(session);
   const mutations = useAdminMutations(session, endRefusedSession);
   const [selected, setSelected] = useState("");
+  // The operations rail collapses below the md breakpoint; this toggle
+  // opens it there. At md and above the rail is visible regardless, so
+  // the state only feeds the CSS classes and the toggle's expanded
+  // state — never a matchMedia branch.
+  const [operationsOpen, setOperationsOpen] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
   // The drawer whose own save is in flight. Another drawer opened while
@@ -59,6 +72,12 @@ export function AdminView() {
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Card 2's most recent run, lifted here so Card 1's Working chip can
+  // read the same data (see handleRunTest): the request carries the
+  // scope the run used, the results carry the per-pairing outcomes.
+  const [lastRun, setLastRun] = useState<KeyTestRun | null>(null);
+  // The run's request-level failure, if the POST itself was refused.
+  const [testError, setTestError] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
 
   const unlocked = adminKey !== null;
@@ -76,6 +95,15 @@ export function AdminView() {
     : (providers[0]?.id ?? "");
   const family =
     providers.find((provider) => provider.id === selectedId) ?? null;
+
+  // Card 1's Working chip reads the most recent run's passes: the model
+  // ids that answered ok. A new run replaces the set (handleRunTest);
+  // empty keeps the chip in its greyed pre-run state.
+  const workingModels = new Set(
+    (lastRun?.results ?? [])
+      .filter((result) => result.ok)
+      .map((result) => result.modelId)
+  );
 
   // A rejected key re-locks the panel and explains itself on the gate.
   useEffect(() => {
@@ -108,6 +136,21 @@ export function AdminView() {
     const timer = setTimeout(() => setNotice(null), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // Locking drops the probe results with the rest of the session's
+  // payload: a re-unlocked panel starts pre-run, its Working chip greyed
+  // again until the operator runs a fresh test.
+  useEffect(() => {
+    if (unlocked) return;
+    setLastRun(null);
+    setTestError(null);
+  }, [unlocked]);
+
+  // The unlocked state as of the moment a run's answer lands (same
+  // read-during-render pattern as sheetRef above), so a late answer
+  // knows whether the session it belongs to still exists.
+  const unlockedRef = useRef(unlocked);
+  unlockedRef.current = unlocked;
 
   // Escape leaves the workbench for the generator. The add/edit drawer
   // owns its own Escape, so an open drawer swallows it first.
@@ -143,24 +186,34 @@ export function AdminView() {
     setSavingSheet(submitted);
     savingSheetRef.current = submitted;
     try {
-      if (submitted?.mode === "edit" && submitted.key) {
-        await mutations.updateKey.mutateAsync({
-          keyId: submitted.key.id,
-          accountId: values.accountId,
-          weight: values.weight,
-          enabled: values.enabled,
-          // A blank token keeps the stored version; a value rotates it.
-          ...(values.apiToken ? { apiToken: values.apiToken } : {}),
-        });
+      if (values.mode === "edit") {
+        const key = submitted?.key;
+        if (key) {
+          await mutations.updateKey.mutateAsync({
+            keyId: key.id,
+            accountId: values.accountId,
+            weight: values.weight,
+            enabled: values.enabled,
+            // A blank token keeps the stored version; a value rotates it.
+            ...(values.apiToken ? { apiToken: values.apiToken } : {}),
+          });
+        }
       } else {
-        await mutations.addKey.mutateAsync({
-          providerId: family?.id ?? "",
-          label: "key-" + Date.now(),
-          apiToken: values.apiToken,
-          accountId: values.accountId,
-          weight: values.weight,
-          enabled: values.enabled,
-        });
+        // One sequential add per pasted token, in the order the operator
+        // entered them. A refusal stops the batch where it is: the
+        // server's reason goes to the drawer, which stays open, and the
+        // keys the server already took stay added.
+        const batchLabel = "key-" + Date.now();
+        for (let index = 0; index < values.apiTokens.length; index += 1) {
+          await mutations.addKey.mutateAsync({
+            providerId: family?.id ?? "",
+            label: batchLabel + "-" + (index + 1),
+            apiToken: values.apiTokens[index],
+            accountId: values.accountId,
+            weight: values.weight,
+            enabled: values.enabled,
+          });
+        }
       }
       // The panel error belongs to the panel, not to this drawer. A
       // late answer from a drawer the operator has already dismissed
@@ -181,6 +234,28 @@ export function AdminView() {
         setSavingSheet(null);
       }
     }
+  };
+
+  // Card 2's run. The card owns the scope and the concrete selection;
+  // the outcome is lifted here so Card 1's Working chip reads the same
+  // data. A completed run replaces the previous one — the working set
+  // is the latest run's passes, never an accumulation.
+  const handleRunTest = (request: RunKeyTestRequest) => {
+    setTestError(null);
+    mutations.testKeys.mutate(request, {
+      onSuccess: (response) => {
+        // The probe can take a while — the pairings run sequentially —
+        // so the operator may lock before it answers. An answer that
+        // lands after the lock belongs to a session that is over: the
+        // lock dropped the results, and it must not put them back.
+        if (!unlockedRef.current) return;
+        setLastRun({ request, results: response.results });
+      },
+      onError: (cause) => {
+        if (!unlockedRef.current) return;
+        setTestError(cause instanceof Error ? cause.message : String(cause));
+      },
+    });
   };
 
   // Every key with a request in flight, not just the last one the
@@ -226,6 +301,20 @@ export function AdminView() {
             {providers.length}{" "}
             {providers.length === 1 ? "provider family" : "provider families"}
           </span>
+          <button
+            id="adminOpsToggle"
+            type="button"
+            className={`btn btn-primary p-2 h-10 flex items-center justify-center${
+              unlocked ? "" : " hidden"
+            }`}
+            aria-label="Toggle operations rail"
+            title="Toggle operations rail"
+            aria-expanded={operationsOpen}
+            onClick={() => setOperationsOpen((open) => !open)}
+          >
+            <i className="fa-solid fa-gear mr-2" />
+            Operations
+          </button>
           <button
             id="adminApiKeysBtn"
             type="button"
@@ -306,6 +395,10 @@ export function AdminView() {
                 setSheetError(null);
                 setSheet({ mode: "edit", key });
               }}
+              onRotate={(key) => {
+                setSheetError(null);
+                setSheet({ mode: "edit", key, entry: "rotate" });
+              }}
               onDelete={(key) => {
                 setPanelError(null);
                 mutations.deleteKey.mutate(
@@ -350,6 +443,24 @@ export function AdminView() {
               </button>
             </div>
           </div>
+          <OperationsRail
+            open={operationsOpen}
+            filters={
+              <ModelFilterCard
+                providers={providers}
+                workingModels={workingModels}
+              />
+            }
+            test={
+              <LiveTestCard
+                keys={keys}
+                running={mutations.testKeys.isPending}
+                error={testError}
+                lastRun={lastRun}
+                onRun={handleRunTest}
+              />
+            }
+          />
         </div>
       </div>
 
@@ -368,6 +479,7 @@ export function AdminView() {
           mode={sheet.mode}
           provider={family}
           editingKey={sheet.key}
+          entry={sheet.entry}
           saving={savingSheet === sheet}
           error={sheetError}
           onClose={() => {

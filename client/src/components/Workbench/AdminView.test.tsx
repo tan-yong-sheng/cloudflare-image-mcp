@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect, type ReactNode } from "react";
@@ -7,6 +7,7 @@ import { AdminKeyProvider } from "../../app/admin-key";
 import { AuthProvider, useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { AdminView } from "./AdminView";
+import { ModelFilterCard } from "./ModelFilterCard";
 
 /**
  * The workbench.
@@ -68,7 +69,9 @@ function jsonResponse(ok: boolean, body: unknown, status = 200): Response {
 
 type Route = { path: string; body: unknown; method: string };
 
-function stubApi(overrides: (route: Route) => Response | null = () => null) {
+function stubApi(
+  overrides: (route: Route) => Response | Promise<Response> | null = () => null
+) {
   const calls: Route[] = [];
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -139,17 +142,60 @@ async function unlock(user: ReturnType<typeof userEvent.setup>) {
   );
 }
 
+/**
+ * The model registry fixture the filter-chip and live-test suites share:
+ * 2 free + 2 paid, 2 image-edit capable, and one duplicate-name pair
+ * ("Flux Schnell" / "flux schnell") served over two different transports.
+ */
+const MODELS = [
+  {
+    id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    name: "Stable Diffusion XL",
+    taskTypes: ["text-to-image"],
+    inferenceProvider: "cloudflare-rest",
+    costClass: "free",
+    available: true,
+  },
+  {
+    id: "@cf/black-forest-labs/flux-1-schnell",
+    name: "Flux Schnell",
+    taskTypes: ["text-to-image", "image-to-image"],
+    inferenceProvider: "cloudflare-rest",
+    costClass: "paid",
+    available: true,
+  },
+  {
+    id: "agnes-image-2.5-flash",
+    name: "Agnes Flash",
+    taskTypes: ["text-to-image"],
+    inferenceProvider: "openai-compat",
+    costClass: "paid",
+    available: true,
+  },
+  {
+    id: "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+    name: "flux schnell",
+    taskTypes: ["image-to-image"],
+    inferenceProvider: "openai-compat",
+    costClass: "free",
+    available: true,
+  },
+];
+
+// One shared setup for every describe in this file: a clean hash and
+// storage per test, and unstubbed globals afterwards. Vitest runs the
+// top-level hooks for all tests in the file.
+beforeEach(() => {
+  window.sessionStorage.clear();
+  window.localStorage.clear();
+  window.location.hash = "#admin";
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("the provider credentials workbench", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.location.hash = "#admin";
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("keeps the panel behind the gate until the management key is entered", async () => {
     const calls = stubApi();
     renderWorkbench();
@@ -1013,5 +1059,1126 @@ describe("the provider credentials workbench", () => {
     expect(document.getElementById("adminPanel")?.className).toContain(
       "hidden"
     );
+  });
+});
+
+describe("the operations rail", () => {
+  it("renders the third column with its three cards once unlocked", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The workbench row is three columns: the family rail, the key
+    // table, and the operations rail. jsdom has no layout, so the
+    // columns are asserted by DOM structure, not by computed width.
+    const row = document.querySelector("#adminPanel > div");
+    expect(row?.children).toHaveLength(3);
+    const rail = document.getElementById("adminOpsRail");
+    expect(rail).not.toBeNull();
+    expect(rail?.textContent).toContain("Model filters");
+    expect(rail?.textContent).toContain("Live test");
+    expect(rail?.textContent).toContain("Liveness history");
+    expect(document.getElementById("adminOpsCardFilters")).not.toBeNull();
+    expect(document.getElementById("adminOpsCardTest")).not.toBeNull();
+    expect(document.getElementById("adminOpsCardHistory")).not.toBeNull();
+  });
+
+  it("collapses the operations rail behind the top-bar toggle", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // Below the md breakpoint the rail is hidden until the top-bar
+    // toggle opens it; visibility itself is CSS-driven, so the rail
+    // stays in the DOM and the toggle only flips the class and the
+    // expanded state.
+    const toggle = screen.getByRole("button", {
+      name: /Toggle operations rail/i,
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "hidden"
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById("adminOpsRail")?.className).not.toContain(
+      "hidden"
+    );
+    // At md and above the rail is visible regardless of the toggle.
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "md:flex"
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("keeps the operations toggle behind the gate", async () => {
+    stubApi();
+    renderWorkbench();
+
+    // The rail lives inside the gated panel, so its toggle is gated
+    // with it: nothing operations-related is offered before unlock.
+    expect(document.getElementById("adminOpsToggle")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("keeps the key drawer on top of the open operations rail", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // With the rail expanded, the add drawer still overlays everything:
+    // it keeps its z-50 stacking and the rail stays mounted under it
+    // rather than being displaced by the overlay.
+    await user.click(
+      screen.getByRole("button", { name: /Toggle operations rail/i })
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+
+    expect(document.getElementById("adminSheet")?.className).toContain("z-50");
+    expect(document.getElementById("adminOpsRail")?.className).not.toContain(
+      "hidden"
+    );
+  });
+});
+
+describe("the model filter chips in the operations rail", () => {
+  function stubModels(models: unknown) {
+    return stubApi((route) =>
+      route.path === "/api/internal/models" ? jsonResponse(true, models) : null
+    );
+  }
+
+  async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+    await unlock(user);
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsModelCount")).toBeInTheDocument()
+    );
+  }
+
+  // The Working chip's lit path takes its data from Card 2, which no
+  // ticket in flight populates yet — so the prop contract is exercised
+  // against the card directly, the way #153 will thread it through the
+  // rail's filters slot.
+  function renderFilterCard(workingModels?: Set<string>) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ModelFilterCard providers={[]} workingModels={workingModels} />
+      </QueryClientProvider>
+    );
+  }
+
+  it("lists every model with a shown/total count until a chip is toggled", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    expect(document.getElementById("adminOpsCardFilters")).not.toBeNull();
+    expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Stable Diffusion XL")).toBeInTheDocument();
+    expect(screen.getByText("Flux Schnell")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+  });
+
+  it("toggles the Free chip and narrows the list to free models", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    const free = screen.getByRole("button", { name: "Free" });
+    expect(free.getAttribute("aria-pressed")).toBe("false");
+    await user.click(free);
+    expect(free.getAttribute("aria-pressed")).toBe("true");
+
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Stable Diffusion XL")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Flux Schnell")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash")).not.toBeInTheDocument();
+  });
+
+  it("toggles the Image-edit chip and narrows the list to image-edit capable models", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    const imageEdit = screen.getByRole("button", { name: "Image-edit" });
+    expect(imageEdit.getAttribute("aria-pressed")).toBe("false");
+    await user.click(imageEdit);
+    expect(imageEdit.getAttribute("aria-pressed")).toBe("true");
+
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Flux Schnell")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Stable Diffusion XL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash")).not.toBeInTheDocument();
+  });
+
+  it("narrows the list to the intersection when both chips are on", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    await user.click(screen.getByRole("button", { name: "Free" }));
+    await user.click(screen.getByRole("button", { name: "Image-edit" }));
+
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Stable Diffusion XL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Flux Schnell")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash")).not.toBeInTheDocument();
+  });
+
+  it("restores the full list when a chip is toggled back off", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    const free = screen.getByRole("button", { name: "Free" });
+    await user.click(free);
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+
+    await user.click(free);
+    expect(free.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
+
+  it("marks a model that several provider families serve in duplicate", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // "Flux Schnell" (cloudflare-rest) and "flux schnell" (openai-compat)
+    // normalize to one name across two transports; the indicator names
+    // the families behind it, resolved through the health payload.
+    const duplicates = document.getElementById("adminOpsDuplicates");
+    expect(duplicates).not.toBeNull();
+    expect(duplicates?.textContent).toContain("Flux Schnell");
+    expect(duplicates?.textContent).toContain("Cloudflare Workers AI");
+    expect(duplicates?.textContent).toContain("Agnes");
+  });
+
+  it("stays quiet when no model name is duplicated", async () => {
+    stubModels([MODELS[0], MODELS[2]]);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // With today's registry the empty case is the common one: no
+    // duplicate may render nothing at all, not an empty shell.
+    expect(screen.getByText("2 of 2 models")).toBeInTheDocument();
+    expect(document.getElementById("adminOpsDuplicates")).toBeNull();
+  });
+
+  it("reads a missing costClass as not free instead of crashing", async () => {
+    const unclassified = {
+      id: "agnes-image-2.1-flash",
+      name: "Agnes Flash 2.1",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "openai-compat",
+      available: true,
+    };
+    stubModels([MODELS[0], unclassified]);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    await user.click(screen.getByRole("button", { name: "Free" }));
+
+    expect(screen.getByText("1 of 2 models")).toBeInTheDocument();
+    expect(screen.getByText("Stable Diffusion XL")).toBeInTheDocument();
+    expect(screen.queryByText("Agnes Flash 2.1")).not.toBeInTheDocument();
+  });
+
+  it("keeps models without a servable transport in the catalog list", async () => {
+    const unservable = { ...MODELS[2], available: false };
+    stubModels([MODELS[0], unservable]);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // The card is about the catalog: an unavailable entry is still
+    // listed, the request path refuses it elsewhere.
+    expect(screen.getByText("2 of 2 models")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
+
+  it("keeps the Working chip greyed and inert before a live test has run", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openFilters(user);
+
+    // The Working chip is #153's anchor: it exists from the start, but
+    // with no test-run data behind it stays in the greyed pre-run state
+    // and activating it must not narrow anything.
+    const working = screen.getByRole("button", { name: "Working" });
+    expect(document.getElementById("adminOpsChipWorking")).toBe(working);
+    expect(working).toBeDisabled();
+    expect(working.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(working);
+    expect(screen.getByText("4 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("Agnes Flash")).toBeInTheDocument();
+  });
+
+  it("keeps the Working chip greyed while the working set is empty", async () => {
+    stubModels(MODELS);
+    renderFilterCard(new Set());
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsModelCount")).toBeInTheDocument()
+    );
+
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
+  });
+
+  it("lights the Working chip once a test run supplies working models", async () => {
+    stubModels(MODELS);
+    const user = userEvent.setup();
+    renderFilterCard(
+      new Set(["@cf/runwayml/stable-diffusion-v1-5-inpainting"])
+    );
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsModelCount")).toBeInTheDocument()
+    );
+
+    const working = screen.getByRole("button", { name: "Working" });
+    expect(working).toBeEnabled();
+    await user.click(working);
+    expect(working.getAttribute("aria-pressed")).toBe("true");
+
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+    expect(screen.getByText("flux schnell")).toBeInTheDocument();
+    expect(screen.queryByText("Stable Diffusion XL")).not.toBeInTheDocument();
+
+    // A non-empty working set joins the other chips as an independent
+    // AND-composable filter, not an exclusive mode.
+    await user.click(screen.getByRole("button", { name: "Free" }));
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+  });
+});
+
+describe("the live test card in the operations rail", () => {
+  function stubTestApi(
+    models: unknown = MODELS,
+    overrides: (route: Route) => Response | Promise<Response> | null = () =>
+      null
+  ) {
+    return stubApi((route) => {
+      if (route.path === "/api/internal/models") {
+        return jsonResponse(true, models);
+      }
+      return overrides(route);
+    });
+  }
+
+  async function openCard(user: ReturnType<typeof userEvent.setup>) {
+    await unlock(user);
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestRun")).toBeInTheDocument()
+    );
+  }
+
+  function testCall(calls: Route[]) {
+    return calls.find((call) => call.path === "/api/admin/keys/test");
+  }
+
+  it("renders the two scope selections, one live selector, and the quota warning", async () => {
+    const calls = stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // No probe may fire on mount: a run is operator-triggered only.
+    expect(calls.some((call) => call.path === "/api/admin/keys/test")).toBe(
+      false
+    );
+
+    // Exactly two scopes exist — the two the endpoint permits. There is
+    // no third mode, so no UI path can offer all-keys by all-models.
+    const keyScope = screen.getByRole("button", {
+      name: "1 key → all models",
+    });
+    const modelScope = screen.getByRole("button", {
+      name: "all keys → 1 model",
+    });
+    expect(document.getElementById("adminOpsScopeKey")).toBe(keyScope);
+    expect(document.getElementById("adminOpsScopeModel")).toBe(modelScope);
+    expect(keyScope.getAttribute("aria-pressed")).toBe("true");
+    expect(modelScope.getAttribute("aria-pressed")).toBe("false");
+
+    // The scope-irrelevant selector is taken out of action, not removed:
+    // the operator always sees both sides they may pick from.
+    expect(screen.getByLabelText(/Key to test/i)).toBeEnabled();
+    expect(screen.getByLabelText(/Model to test/i)).toBeDisabled();
+
+    const warning = document.getElementById("adminOpsTestWarning");
+    expect(warning?.textContent).toContain("never");
+    expect(warning?.textContent).toContain("quota");
+  });
+
+  it("keeps the run trigger disabled until one concrete side is selected", async () => {
+    stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // A run needs one concrete selection — a key or a model. The other
+    // side is always the wildcard, so an unselected trigger is the
+    // by-construction guard against a body the server would refuse.
+    const run = document.getElementById("adminOpsTestRun");
+    expect(run).not.toBeNull();
+    expect(run).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    expect(run).toBeEnabled();
+
+    await user.click(
+      screen.getByRole("button", { name: "all keys → 1 model" })
+    );
+    expect(run).toBeDisabled();
+
+    await user.selectOptions(
+      screen.getByLabelText(/Model to test/i),
+      MODELS[1].id
+    );
+    expect(run).toBeEnabled();
+  });
+
+  it("offers only enabled keys in the single-key dropdown", async () => {
+    stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // The health payload carries a parked key (key-2, enabled: false).
+    // The probe store lists enabled keys only, so the dropdown must not
+    // offer it; re-enabling makes it testable again.
+    const dropdown = screen.getByLabelText(/Key to test/i);
+    expect(
+      within(dropdown).getByRole("option", { name: /key-1/ })
+    ).toBeInTheDocument();
+    expect(
+      within(dropdown).queryByRole("option", { name: /key-2/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it("sends one key against every model in scope 1", async () => {
+    const calls = stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() => expect(testCall(calls)).toBeDefined());
+    const call = testCall(calls)!;
+    expect(call.method).toBe("POST");
+    // The exact wire body: the concrete key on one side, the wildcard on
+    // the other. The double wildcard is not constructible from this card.
+    expect(call.body).toEqual({ keyIds: [1], modelIds: ["*"] });
+  });
+
+  it("sends every key against one model in scope 2", async () => {
+    const calls = stubTestApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "all keys → 1 model" })
+    );
+    // Switching scope swaps which selector is live.
+    expect(screen.getByLabelText(/Key to test/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Model to test/i)).toBeEnabled();
+
+    await user.selectOptions(
+      screen.getByLabelText(/Model to test/i),
+      MODELS[1].id
+    );
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() => expect(testCall(calls)).toBeDefined());
+    expect(testCall(calls)?.method).toBe("POST");
+    expect(testCall(calls)?.body).toEqual({
+      keyIds: ["*"],
+      modelIds: ["@cf/black-forest-labs/flux-1-schnell"],
+    });
+  });
+
+  it("shows a loading state while the run is in flight", async () => {
+    let resolveRun: (response: Response) => void = () => {};
+    const calls = stubTestApi(MODELS, (route) => {
+      if (route.path !== "/api/admin/keys/test") return null;
+      return new Promise<Response>((resolve) => {
+        resolveRun = resolve;
+      });
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    const run = document.getElementById("adminOpsTestRun");
+    await waitFor(() => expect(run?.textContent).toBe("Testing…"));
+    expect(run).toBeDisabled();
+    expect(run?.getAttribute("aria-busy")).toBe("true");
+    expect(testCall(calls)?.body).toEqual({ keyIds: [1], modelIds: ["*"] });
+
+    resolveRun(
+      jsonResponse(true, {
+        results: [{ keyId: 1, modelId: MODELS[0].id, ok: true, ms: 42 }],
+      })
+    );
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestResults")).not.toBeNull()
+    );
+    expect(run?.textContent).toBe("Run test");
+  });
+
+  it("surfaces a failed run's error message and records no results", async () => {
+    const calls = stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(
+            false,
+            {
+              error: {
+                message: "Both wildcards are refused.",
+                code: "invalid_request",
+              },
+            },
+            400
+          )
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestError")?.textContent
+      ).toContain("Both wildcards are refused.")
+    );
+    // A refused run leaves no strip behind: there are no results to show.
+    expect(document.getElementById("adminOpsTestResults")).toBeNull();
+    expect(testCall(calls)?.body).toEqual({ keyIds: [1], modelIds: ["*"] });
+  });
+
+  it("ends the session when the live test is refused with 401", async () => {
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(false, { error: { message: "Unauthorized." } }, 401)
+        : null
+    );
+    const user = userEvent.setup();
+    const { session } = renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    // The live test rides the same gates as every other admin mutation:
+    // a refused bearer key ends the whole session, management key and all.
+    await waitFor(() =>
+      expect(session.endedReason).toBe(SESSION_EXPIRED_MESSAGE)
+    );
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("caps the strip at the four most relevant rows, failures first", async () => {
+    // Six pairings for one key: four passes with different latencies and
+    // two failures. Only four rows may show — both failures, then the
+    // fastest passes — and the showing line must account for the rest.
+    const five = {
+      id: "@cf/extra/model-five",
+      name: "Model Five",
+      taskTypes: ["text-to-image"],
+      inferenceProvider: "cloudflare-rest",
+      costClass: "paid",
+      available: true,
+    };
+    const six = { ...five, id: "@cf/extra/model-six", name: "Model Six" };
+    const results = [
+      { keyId: 1, modelId: MODELS[0].id, ok: true, ms: 40 },
+      { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 },
+      {
+        keyId: 1,
+        modelId: MODELS[2].id,
+        ok: false,
+        ms: 0,
+        error:
+          "transport 'cloudflare-rest' does not serve 'agnes-image-2.5-flash'",
+      },
+      { keyId: 1, modelId: MODELS[3].id, ok: true, ms: 200 },
+      { keyId: 1, modelId: five.id, ok: true, ms: 95 },
+      {
+        keyId: 1,
+        modelId: six.id,
+        ok: false,
+        ms: 0,
+        error: "key 'key-1' has no active version",
+      },
+    ];
+    stubTestApi(
+      [MODELS[0], MODELS[1], MODELS[2], MODELS[3], five, six],
+      (route) =>
+        route.path === "/api/admin/keys/test"
+          ? jsonResponse(true, { results })
+          : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestShowing")?.textContent
+      ).toContain("showing 4 of 6 results")
+    );
+    const rows = document.querySelectorAll("#adminOpsTestResults li");
+    expect(rows).toHaveLength(4);
+    // The scope the run ran under is stated on the strip.
+    expect(
+      document.getElementById("adminOpsTestShowing")?.textContent
+    ).toContain("1 key → all models");
+    // Failures first, in the order the endpoint returned them, with the
+    // error text visible and the varying side (the model) named.
+    expect(rows[0].textContent).toContain("Agnes Flash");
+    expect(rows[0].textContent).toContain("does not serve");
+    expect(rows[1].textContent).toContain("Model Six");
+    expect(rows[1].textContent).toContain("no active version");
+    // Then the fastest passes, latency in milliseconds.
+    expect(rows[2].textContent).toContain("Flux Schnell");
+    expect(rows[2].textContent).toContain("12 ms");
+    expect(rows[3].textContent).toContain("Stable Diffusion XL");
+    expect(rows[3].textContent).toContain("40 ms");
+    // Nothing is silently missing: the slower passes are named as shown-out.
+    const strip = document.getElementById("adminOpsTestResults")?.textContent;
+    expect(strip).not.toContain("95 ms");
+    expect(strip).not.toContain("200 ms");
+    expect(strip).not.toContain("Model Five");
+  });
+
+  it("labels each row with the key it probed in scope 2", async () => {
+    // One model against every key: the varying side is the key, so each
+    // row names the key it probed, and the run's scope is stated.
+    const results = [
+      { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 30 },
+      {
+        keyId: 2,
+        modelId: MODELS[1].id,
+        ok: false,
+        ms: 0,
+        error: "key 'key-2' is parked",
+      },
+    ];
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(true, { results })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "all keys → 1 model" })
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/Model to test/i),
+      MODELS[1].id
+    );
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestShowing")?.textContent
+      ).toContain("showing 2 of 2 results")
+    );
+    const showing = document.getElementById("adminOpsTestShowing");
+    expect(showing?.textContent).toContain("all keys → 1 model");
+    const rows = document.querySelectorAll("#adminOpsTestResults li");
+    expect(rows).toHaveLength(2);
+    // Failures first even here, and every key renders its masked hint —
+    // never a token, which the client never receives.
+    expect(rows[0].textContent).toContain("key-2 (ag-****c3d4)");
+    expect(rows[0].textContent).toContain("is parked");
+    expect(rows[1].textContent).toContain("key-1 (sk-yt****fa12)");
+    expect(rows[1].textContent).toContain("30 ms");
+  });
+
+  it("lights the Working chip from the run's passing models", async () => {
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(true, {
+            results: [
+              {
+                keyId: 1,
+                modelId: MODELS[0].id,
+                ok: false,
+                ms: 0,
+                error: "boom",
+              },
+              { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 },
+              { keyId: 1, modelId: MODELS[2].id, ok: true, ms: 30 },
+            ],
+          })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    // Pre-run the chip is greyed and inert — the filter suite pins that;
+    // here it has a run behind it.
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestResults")?.textContent
+      ).toContain("12 ms")
+    );
+
+    // The run lit the chip with the passing models' ids. It stays an
+    // operator toggle: a completed run enables it, it does not press it.
+    const working = screen.getByRole("button", { name: "Working" });
+    expect(working).toBeEnabled();
+    expect(working.getAttribute("aria-pressed")).toBe("false");
+    await user.click(working);
+    expect(working.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("2 of 4 models")).toBeInTheDocument();
+    const list = document.getElementById("adminOpsModelList")?.textContent;
+    expect(list).toContain("Flux Schnell");
+    expect(list).toContain("Agnes Flash");
+    expect(list).not.toContain("Stable Diffusion XL");
+  });
+
+  it("replaces the working set with the most recent run", async () => {
+    // Two runs back to back: the first passes two models, the second one.
+    // The chip must filter to the latest run's passes, never the union.
+    const runs = [
+      jsonResponse(true, {
+        results: [
+          { keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 },
+          { keyId: 1, modelId: MODELS[2].id, ok: true, ms: 30 },
+        ],
+      }),
+      jsonResponse(true, {
+        results: [{ keyId: 1, modelId: MODELS[0].id, ok: true, ms: 5 }],
+      }),
+    ];
+    let run = 0;
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test" ? runs[run++] : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestResults")?.textContent
+      ).toContain("12 ms")
+    );
+
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(
+        document.getElementById("adminOpsTestResults")?.textContent
+      ).toContain("5 ms")
+    );
+
+    await user.click(screen.getByRole("button", { name: "Working" }));
+    // Only the newest run's pass is in the set: 1 of 4, not 3 of 4.
+    expect(screen.getByText("1 of 4 models")).toBeInTheDocument();
+    const list = document.getElementById("adminOpsModelList")?.textContent;
+    expect(list).toContain("Stable Diffusion XL");
+    expect(list).not.toContain("Flux Schnell");
+    expect(list).not.toContain("Agnes Flash");
+  });
+
+  it("drops the run when the panel is locked", async () => {
+    stubTestApi(MODELS, (route) =>
+      route.path === "/api/admin/keys/test"
+        ? jsonResponse(true, {
+            results: [{ keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 }],
+          })
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestResults")).not.toBeNull()
+    );
+    expect(screen.getByRole("button", { name: "Working" })).toBeEnabled();
+
+    // Locking ends the session: the probe results go with the rest of
+    // the payload, and a re-unlocked panel starts pre-run.
+    await user.click(
+      screen.getByRole("button", { name: /Lock provider credentials/i })
+    );
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Working" })).toBeDisabled()
+    );
+    expect(document.getElementById("adminOpsTestResults")).toBeNull();
+  });
+
+  it("ignores a run that answers after the panel was locked", async () => {
+    let resolveRun: (response: Response) => void = () => {};
+    stubTestApi(MODELS, (route) => {
+      if (route.path !== "/api/admin/keys/test") return null;
+      return new Promise<Response>((resolve) => {
+        resolveRun = resolve;
+      });
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+    await openCard(user);
+
+    await user.selectOptions(screen.getByLabelText(/Key to test/i), "1");
+    await user.click(screen.getByRole("button", { name: /Run test/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestRun")?.textContent).toBe(
+        "Testing…"
+      )
+    );
+
+    // The operator locks while the run is still in flight...
+    await user.click(
+      screen.getByRole("button", { name: /Lock provider credentials/i })
+    );
+    expect(document.getElementById("adminPanel")?.className).toContain(
+      "hidden"
+    );
+
+    // ...and the answer lands afterwards: it belongs to a session that
+    // is over, so it must not repopulate the results the lock dropped.
+    resolveRun(
+      jsonResponse(true, {
+        results: [{ keyId: 1, modelId: MODELS[1].id, ok: true, ms: 12 }],
+      })
+    );
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    await waitFor(() =>
+      expect(document.getElementById("adminOpsTestRun")?.textContent).toBe(
+        "Run test"
+      )
+    );
+    expect(document.getElementById("adminOpsTestResults")).toBeNull();
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
+  });
+});
+
+describe("bulk token onboarding in the add drawer", () => {
+  it("counts valid tokens as they are typed or pasted", async () => {
+    // The counter is what the operator trusts before submitting: it
+    // counts the tokens that will actually be provisioned, after the
+    // drawer trims each line, drops blank and too-short lines, and
+    // removes duplicates in the order they were entered.
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+
+    await user.type(
+      screen.getByLabelText(/API token/i),
+      "  tok-alpha-01 \n\ntok-beta-02\ntok-alpha-01\nshort\ntok-gamma-03"
+    );
+
+    expect(
+      document.getElementById("adminSheetTokenCount")?.textContent
+    ).toContain("3 valid tokens");
+  });
+
+  it("adds every unique token under the family with its own incremental label", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(
+      screen.getByLabelText(/API token/i),
+      "tok-alpha-01\ntok-beta-02\ntok-alpha-01"
+    );
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(
+        calls.filter((call) => call.path === "/api/admin/keys")
+      ).toHaveLength(2)
+    );
+    const adds = calls.filter((call) => call.path === "/api/admin/keys");
+    expect(adds[0]?.body).toMatchObject({
+      providerId: "cloudflare",
+      label: expect.stringMatching(/^key-\d+-1$/),
+      apiToken: "tok-alpha-01",
+      weight: 1,
+      enabled: true,
+    });
+    expect(adds[1]?.body).toMatchObject({
+      providerId: "cloudflare",
+      label: expect.stringMatching(/^key-\d+-2$/),
+      apiToken: "tok-beta-02",
+      weight: 1,
+      enabled: true,
+    });
+  });
+
+  it("stops the batch and keeps the drawer open when an add is refused", async () => {
+    // One refused add is a refused batch: the server's reason lands in
+    // the drawer's error area, the drawer stays open so it can be
+    // corrected, and the keys the server already took stay added.
+    let addsSeen = 0;
+    const calls = stubApi((route) => {
+      if (route.path === "/api/admin/keys" && route.method === "POST") {
+        addsSeen += 1;
+        if (addsSeen === 2) {
+          return jsonResponse(
+            false,
+            { error: { message: "label 'key-2' already exists" } },
+            409
+          );
+        }
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+    await user.type(
+      screen.getByLabelText(/API token/i),
+      "tok-alpha-01\ntok-beta-02\ntok-gamma-03"
+    );
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+
+    await waitFor(() =>
+      expect(document.getElementById("adminSheetError")?.textContent).toContain(
+        "label 'key-2' already exists"
+      )
+    );
+    expect(document.getElementById("adminSheetError")?.className).not.toMatch(
+      /hidden/
+    );
+    // The third token was never sent: the batch stopped at the refusal.
+    expect(
+      calls.filter((call) => call.path === "/api/admin/keys")
+    ).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Add key" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add key" })).toBeInTheDocument();
+  });
+
+  it("refuses to submit when no pasted line holds a valid token", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(
+      screen.getByRole("button", { name: /Add new provider key/i })
+    );
+    await user.type(screen.getByLabelText(/Cloudflare account ID/i), "acct-9");
+
+    const field = screen.getByLabelText(/API token/i);
+    await user.type(field, "   \n\n  ");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+    expect(
+      await screen.findByText(/API token is required/i)
+    ).toBeInTheDocument();
+
+    await user.type(field, "short");
+    await user.click(screen.getByRole("button", { name: "Add key" }));
+    expect(
+      await screen.findByText(/Token looks too short/i)
+    ).toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/admin/keys")).toBe(false);
+  });
+
+  it("keeps the single-line masked token input in edit mode", async () => {
+    // Edit replaces one stored version: a single-line field, masked
+    // until the operator asks, with no bulk counter.
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: /Edit key #1/i }));
+
+    const field = screen.getByLabelText(/API token/i) as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(field.type).toBe("password");
+    expect(
+      screen.getByRole("button", { name: /Show token/i })
+    ).toBeInTheDocument();
+    expect(document.getElementById("adminSheetTokenCount")).toBeNull();
+  });
+});
+
+describe("the inline rotate action on key rows", () => {
+  // Assembled at runtime: a stand-in replacement credential whose only
+  // property under test is that it clears the drawer's minimum length.
+  const ROTATE_TOKEN = ["tok", "rotate", "01"].join("-");
+
+  it("renders a rotate action before Edit on every key row", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The approved prototype's action order: rotate, then edit, then delete.
+    const rotate = screen.getByRole("button", { name: "Rotate key #1" });
+    const edit = screen.getByRole("button", { name: "Edit key #1" });
+    expect(
+      rotate.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    // The rotate action exists on the other family's rows too.
+    await user.click(screen.getByRole("button", { name: /Agnes/i }));
+    expect(
+      screen.getByRole("button", { name: "Rotate key #2" })
+    ).toBeInTheDocument();
+  });
+
+  it("opens the edit drawer with the token field focused", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+
+    expect(document.getElementById("adminSheet")).not.toBeNull();
+    expect(document.getElementById("adminSheetTitle")?.textContent).toContain(
+      "Edit Key #1"
+    );
+    await waitFor(() =>
+      expect(document.activeElement?.id).toBe("adminSheetToken")
+    );
+    // Rotation replaces one stored version, so the focused field is the
+    // single-line masked input, not the add-mode textarea.
+    const token = screen.getByLabelText(/API token/i) as HTMLInputElement;
+    expect(token.tagName).toBe("INPUT");
+    expect(token.type).toBe("password");
+  });
+
+  it("explains that saving supersedes and seals the active version", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+
+    const note = document.getElementById("adminSheetNote");
+    expect(note?.textContent).toContain("supersedes");
+    expect(note?.textContent).toContain("seal");
+    expect(note?.textContent).toContain("blank");
+  });
+
+  it("sends exactly one PATCH carrying the replacement token", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+    await user.type(screen.getByLabelText(/API token/i), ROTATE_TOKEN);
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) => call.path === "/api/admin/keys/1" && call.method === "PATCH"
+        )
+      ).toBe(true)
+    );
+    const updates = calls.filter((call) => call.path === "/api/admin/keys/1");
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.body).toMatchObject({ apiToken: ROTATE_TOKEN });
+  });
+
+  it("keeps the active version when the rotate drawer is saved blank", async () => {
+    const calls = stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+    await user.click(screen.getByRole("button", { name: "Rotate key #1" }));
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) => call.path === "/api/admin/keys/1" && call.method === "PATCH"
+        )
+      ).toBe(true)
+    );
+    const update = calls.find((call) => call.path === "/api/admin/keys/1");
+    expect(update?.body).not.toHaveProperty("apiToken");
   });
 });
