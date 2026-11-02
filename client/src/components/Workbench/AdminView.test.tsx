@@ -1048,4 +1048,53 @@ describe("the operations rail", () => {
     expect(document.getElementById("adminOpsCardTest")).not.toBeNull();
     expect(document.getElementById("adminOpsCardHistory")).not.toBeNull();
   });
+
+  it("collapses the operations rail behind the top-bar toggle", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // Below the md breakpoint the rail is hidden until the top-bar
+    // toggle opens it; visibility itself is CSS-driven, so the rail
+    // stays in the DOM and the toggle only flips the class and the
+    // expanded state.
+    const toggle = screen.getByRole("button", {
+      name: /Toggle operations rail/i,
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "hidden"
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById("adminOpsRail")?.className).not.toContain(
+      "hidden"
+    );
+    // At md and above the rail is visible regardless of the toggle.
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "md:flex"
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("adminOpsRail")?.className).toContain(
+      "hidden"
+    );
+  });
+
+  it("keeps the operations toggle behind the gate", async () => {
+    stubApi();
+    renderWorkbench();
+
+    // The rail lives inside the gated panel, so its toggle is gated
+    // with it: nothing operations-related is offered before unlock.
+    expect(document.getElementById("adminOpsToggle")?.className).toContain(
+      "hidden"
+    );
+  });
 });
