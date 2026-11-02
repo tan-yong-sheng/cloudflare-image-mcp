@@ -618,3 +618,28 @@ function callerAuditWriteByName(
     params: [ADMIN_ACTOR, action, name, name],
   };
 }
+
+/**
+ * The authentication lookup (#129): the row holding this verifier, or null.
+ *
+ * One indexed SELECT — `uq_caller_keys_hash` makes one secret one row, so
+ * the lookup never scans. The caller (middleware/auth.ts) computes the
+ * verifier for the presented bearer first; the store only ever sees the
+ * hash, never the secret. A matched-but-disabled row comes back like any
+ * row: what to do with it is the auth path's decision, and it rejects the
+ * same way it rejects an unknown key, so no branch leaks key existence.
+ */
+export async function getCallerKeyByVerifier(
+  db: {
+    prepare(sql: string): {
+      bind(...params: unknown[]): { first<T>(): Promise<T | null> };
+    };
+  },
+  secretHash: string
+): Promise<{ name: string; enabled: boolean } | null> {
+  const row = await db
+    .prepare("SELECT name, enabled FROM caller_keys WHERE secret_hash = ?")
+    .bind(secretHash)
+    .first<{ name: string; enabled: number }>();
+  return row ? { name: row.name, enabled: Number(row.enabled) === 1 } : null;
+}

@@ -6,6 +6,11 @@
  */
 
 import type { Env } from "../types.js";
+import {
+  callerKeyVerifier,
+  deriveCallerPepper,
+} from "../services/caller-crypto.js";
+import { getCallerKeyByVerifier } from "../services/caller-store.js";
 
 export interface AuthResult {
   authenticated: boolean;
@@ -14,10 +19,32 @@ export interface AuthResult {
 }
 
 /**
- * Extract and validate API key from request
+ * Extract and validate API key from request.
+ *
+ * The bearer authenticates through either credential source (#129, the
+ * approved OR transition): any `env.API_KEYS` value, or any ENABLED D1
+ * caller key. The env array is checked first — the cheap, allocation-free
+ * path every existing deployment rides — and only a bearer the env
+ * rejects pays the verifier computation and the one indexed D1 lookup.
+ * So a request costs at most one lookup, never a scan.
+ *
+ * Existence is not leaked: an unknown key and a disabled D1 key both end
+ * in the same `Invalid API key` rejection after the same shape of work.
+ * A disabled key whose plaintext also sits in `API_KEYS` still
+ * authenticates through the env OR-path — that is exactly the legacy
+ * mirror whose warning #128 surfaces on disable.
+ *
+ * D1 trouble degrades to the pre-#129 behavior (env-only), never to an
+ * open gate and never to a hard 500 on the hot path.
  */
-export function authenticateRequest(request: Request, env: Env): AuthResult {
-  // Skip auth if no API keys are configured (backward compatibility)
+export async function authenticateRequest(
+  request: Request,
+  env: Env
+): Promise<AuthResult> {
+  // Skip auth if no API keys are configured (backward compatibility).
+  // Unchanged by #129: a deployment without API_KEYS keeps its open
+  // posture, and the D1 path below is an ADDITIONAL source, not a new
+  // gate. Retiring the bypass is the env-deprecation follow-up's marker.
   if (!env.API_KEYS) {
     return { authenticated: true };
   }
@@ -42,20 +69,46 @@ export function authenticateRequest(request: Request, env: Env): AuthResult {
     };
   }
 
-  // Validate token against configured keys
+  // Validate token against configured keys (the legacy mirror)
   const validKeys = env.API_KEYS.split(",")
     .map((k: string) => k.trim())
     .filter(Boolean);
-  if (!validKeys.includes(token)) {
+  if (validKeys.includes(token)) {
     return {
-      authenticated: false,
-      error: "Invalid API key",
+      authenticated: true,
+      apiKey: token,
     };
   }
 
+  // D1 caller keys (#129): the verifier for the presented bearer, then one
+  // indexed lookup. Only reached when the env path said no, so the common
+  // env-key request pays no HMAC and no query.
+  if (env.PROVIDER_DB && env.PROVIDER_DATA_KEY) {
+    try {
+      const pepper = await deriveCallerPepper(env.PROVIDER_DATA_KEY);
+      const row = await getCallerKeyByVerifier(
+        env.PROVIDER_DB,
+        await callerKeyVerifier(pepper, token)
+      );
+      if (row?.enabled) {
+        return {
+          authenticated: true,
+          apiKey: token,
+        };
+      }
+      // A matched-but-disabled row falls through to the same rejection an
+      // unknown key gets — unless the plaintext also lives in env, which
+      // the mirror check above already handled.
+    } catch {
+      // D1 or crypto trouble: degrade to env-only auth (pre-#129
+      // behavior). The env check above already said no, so the request
+      // rejects exactly as it would have before this feature.
+    }
+  }
+
   return {
-    authenticated: true,
-    apiKey: token,
+    authenticated: false,
+    error: "Invalid API key",
   };
 }
 

@@ -6,6 +6,12 @@
 // (Bearer scheme, public paths, Unauthorized envelope).
 
 import { describe, expect, test } from "vitest";
+import type { DatabaseSync } from "node:sqlite";
+import { freshDb } from "../test-utils/migration-fixtures.js";
+import {
+  callerKeyVerifier,
+  deriveCallerPepper,
+} from "../services/caller-crypto.js";
 import {
   authenticateRequest,
   buildBearerChallenge,
@@ -26,27 +32,27 @@ function authedRequest(token?: string): Request {
 }
 
 describe("authenticateRequest", () => {
-  test("open-by-default when no API keys configured", () => {
-    const result = authenticateRequest(authedRequest(), openEnv);
+  test("open-by-default when no API keys configured", async () => {
+    const result = await authenticateRequest(authedRequest(), openEnv);
     expect(result).toEqual({ authenticated: true });
   });
 
-  test("valid key authenticates", () => {
-    const result = authenticateRequest(
+  test("valid key authenticates", async () => {
+    const result = await authenticateRequest(
       authedRequest("Bearer key-two"),
       authedEnv
     );
     expect(result).toEqual({ authenticated: true, apiKey: "key-two" });
   });
 
-  test("missing header is rejected", () => {
-    const result = authenticateRequest(authedRequest(), authedEnv);
+  test("missing header is rejected", async () => {
+    const result = await authenticateRequest(authedRequest(), authedEnv);
     expect(result.authenticated).toBe(false);
     expect(result.error).toBe("Missing Authorization header");
   });
 
-  test("non-bearer scheme is rejected", () => {
-    const result = authenticateRequest(
+  test("non-bearer scheme is rejected", async () => {
+    const result = await authenticateRequest(
       authedRequest("Basic key-one"),
       authedEnv
     );
@@ -54,25 +60,181 @@ describe("authenticateRequest", () => {
     expect(result.error).toContain("Bearer <api-key>");
   });
 
-  test("scheme match is case-insensitive", () => {
-    const result = authenticateRequest(
+  test("scheme match is case-insensitive", async () => {
+    const result = await authenticateRequest(
       authedRequest("bearer key-one"),
       authedEnv
     );
     expect(result.authenticated).toBe(true);
   });
 
-  test("surrounding whitespace is tolerated", () => {
-    const result = authenticateRequest(
+  test("surrounding whitespace is tolerated", async () => {
+    const result = await authenticateRequest(
       authedRequest("  Bearer   key-one  "),
       authedEnv
     );
     expect(result.authenticated).toBe(true);
   });
 
-  test("unknown key is rejected", () => {
-    const result = authenticateRequest(authedRequest("Bearer nope"), authedEnv);
+  test("unknown key is rejected", async () => {
+    const result = await authenticateRequest(
+      authedRequest("Bearer nope"),
+      authedEnv
+    );
     expect(result).toEqual({ authenticated: false, error: "Invalid API key" });
+  });
+});
+
+// ============================================================================
+// D1 caller-key auth (#129) - the OR transition, against the real migrations
+// ============================================================================
+// The presented bearer authenticates through env.API_KEYS (the legacy
+// mirror) or through an ENABLED D1 caller key. What these tests pin: an
+// enabled key opens the gate, a disabled one is rejected exactly like an
+// unknown key, a disabled key mirrored in env still opens it (that is the
+// resurrection #128 warns about), and D1 trouble degrades to env-only —
+// never to an open gate.
+
+const AUTH_DATA_KEY = "auth-test-data-key";
+const AUTH_PEPPER = await deriveCallerPepper(AUTH_DATA_KEY);
+
+/** D1-shaped read adapter over node:sqlite. */
+function authD1(db: DatabaseSync) {
+  return {
+    prepare: (sql: string) => {
+      const stmt = {
+        first: async <T>() => (db.prepare(sql).get() ?? null) as T | null,
+        all: async () => ({ results: [] }),
+        run: async () => ({ meta: { changes: 0 } }),
+      };
+      return {
+        ...stmt,
+        bind: (...params: (string | number | null)[]) => ({
+          first: async <T>() =>
+            (db.prepare(sql).get(...params) ?? null) as T | null,
+          all: async () => ({ results: [] }),
+          run: async () => ({ meta: { changes: 0 } }),
+        }),
+      };
+    },
+    commit: async () => ({ keyId: null }),
+  };
+}
+
+describe("D1 caller-key auth (#129)", () => {
+  test("an enabled D1 key authenticates", async () => {
+    const db = freshDb();
+    const secret = "d1-key-secret-0001";
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) VALUES (?, ?, 'sk-mgmt-', 'a1b2', 1)"
+    ).run("CI", await callerKeyVerifier(AUTH_PEPPER, secret));
+    const env = {
+      API_KEYS: "env-key",
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: authD1(db),
+    } as unknown as Env;
+
+    const result = await authenticateRequest(
+      authedRequest(`Bearer ${secret}`),
+      env
+    );
+    expect(result).toEqual({ authenticated: true, apiKey: secret });
+  });
+
+  test("a disabled D1 key is rejected exactly like an unknown key", async () => {
+    const db = freshDb();
+    const secret = "d1-key-secret-0002";
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) VALUES (?, ?, 'sk-mgmt-', 'a1b2', 0)"
+    ).run("parked", await callerKeyVerifier(AUTH_PEPPER, secret));
+    const env = {
+      API_KEYS: "env-key",
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: authD1(db),
+    } as unknown as Env;
+
+    const disabled = await authenticateRequest(
+      authedRequest(`Bearer ${secret}`),
+      env
+    );
+    const unknown = await authenticateRequest(
+      authedRequest("Bearer not-a-key"),
+      env
+    );
+    // Same answer, byte for byte: no branch leaks key existence.
+    expect(disabled).toEqual(unknown);
+    expect(disabled).toEqual({
+      authenticated: false,
+      error: "Invalid API key",
+    });
+  });
+
+  test("a disabled key mirrored in env still authenticates (transition OR)", async () => {
+    const db = freshDb();
+    const secret = "env-mirrored-secret-1";
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) VALUES (?, ?, 'sk-mgmt-', 'a1b2', 0)"
+    ).run("mirrored", await callerKeyVerifier(AUTH_PEPPER, secret));
+    const env = {
+      API_KEYS: secret,
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: authD1(db),
+    } as unknown as Env;
+
+    // Disabling the row did not revoke the credential while it lives in
+    // the deploy env — the resurrection #128's warning exists for.
+    const result = await authenticateRequest(
+      authedRequest(`Bearer ${secret}`),
+      env
+    );
+    expect(result).toEqual({ authenticated: true, apiKey: secret });
+  });
+
+  test("an env key authenticates without touching D1", async () => {
+    const db = freshDb();
+    const env = {
+      API_KEYS: "env-key",
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: authD1(db),
+    } as unknown as Env;
+
+    const result = await authenticateRequest(
+      authedRequest("Bearer env-key"),
+      env
+    );
+    expect(result).toEqual({ authenticated: true, apiKey: "env-key" });
+  });
+
+  test("D1 trouble degrades to env-only auth, not to an open gate", async () => {
+    const env = {
+      API_KEYS: "env-key",
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: {
+        prepare: () => {
+          throw new Error("d1 down");
+        },
+      },
+    } as unknown as Env;
+
+    const envKey = await authenticateRequest(
+      authedRequest("Bearer env-key"),
+      env
+    );
+    expect(envKey).toEqual({ authenticated: true, apiKey: "env-key" });
+    const unknown = await authenticateRequest(
+      authedRequest("Bearer nope"),
+      env
+    );
+    expect(unknown).toEqual({ authenticated: false, error: "Invalid API key" });
+  });
+
+  test("without a data key the D1 path is skipped and env still works", async () => {
+    const env = { API_KEYS: "env-key" } as unknown as Env;
+    const result = await authenticateRequest(
+      authedRequest("Bearer env-key"),
+      env
+    );
+    expect(result).toEqual({ authenticated: true, apiKey: "env-key" });
   });
 });
 
