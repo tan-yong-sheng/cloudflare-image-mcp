@@ -50,6 +50,28 @@ async function hasEnabledCallerKeys(env: Env): Promise<boolean> {
   }
 }
 
+/** The usable values in the comma-separated API_KEYS secret. */
+function configuredEnvKeys(env: Env): string[] {
+  return (env.API_KEYS ?? "")
+    .split(",")
+    .map((key: string) => key.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Whether the request gate is active — i.e. some credential source has an
+ * entry.
+ *
+ * Exported because `/health` used to report `!!env.API_KEYS`, which became a
+ * lie the moment D1 keys could gate on their own: on a deployment that
+ * retired API_KEYS after creating a key (the end state ADR-005 blesses),
+ * `/v1` and `/mcp` rejected anonymous callers while health said
+ * `authEnabled: false`. One condition, one place (review F4).
+ */
+export async function isAuthGateActive(env: Env): Promise<boolean> {
+  return configuredEnvKeys(env).length > 0 || (await hasEnabledCallerKeys(env));
+}
+
 /**
  * Extract and validate API key from request.
  *
@@ -79,11 +101,8 @@ export async function authenticateRequest(
   // to anyone the moment the operator retired the env var (review H1).
   // A deployment with neither source keeps the documented open posture,
   // so binding PROVIDER_DB alone never locks a Worker out.
-  const configuredKeys = (env.API_KEYS ?? "")
-    .split(",")
-    .map((k: string) => k.trim())
-    .filter(Boolean);
-  if (configuredKeys.length === 0 && !(await hasEnabledCallerKeys(env))) {
+  const configuredKeys = configuredEnvKeys(env);
+  if (!(await isAuthGateActive(env))) {
     return { authenticated: true };
   }
 

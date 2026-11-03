@@ -47,6 +47,8 @@ export function ApiKeysPage() {
     kind: "created" | "rotated";
     name: string;
     secret: string;
+    /** Set when rotation could not revoke the old secret. */
+    warning?: string;
   } | null>(null);
   const [rotating, setRotating] = useState<AdminCallerKey | null>(null);
   const [deleting, setDeleting] = useState<AdminCallerKey | null>(null);
@@ -250,7 +252,12 @@ export function ApiKeysPage() {
               keys={callerKeys.data?.keys ?? []}
               loading={callerKeys.isPending}
               failed={callerKeys.isError}
-              onRotate={(key) => setRotating(key)}
+              onRotate={(key) => {
+                // One dialog at a time: both instances hardcode the same DOM
+                // ids, so a second open would duplicate them (review F5).
+                setDeleting(null);
+                setRotating(key);
+              }}
               onToggle={(key, _enabled) => {
                 setPanelError(null);
                 toggleKey.mutate(
@@ -277,7 +284,10 @@ export function ApiKeysPage() {
                   throw cause;
                 }
               }}
-              onDelete={(key) => setDeleting(key)}
+              onDelete={(key) => {
+                setRotating(null);
+                setDeleting(key);
+              }}
               pendingIds={[
                 rotating?.id,
                 deleting?.id,
@@ -325,7 +335,7 @@ export function ApiKeysPage() {
             ? {
                 title: `Rotate “${rotating.name}”?`,
                 message:
-                  "Clients using this key will need the new key. The old secret stops working the moment the rotation lands.",
+                  "Clients using this key will need the new key. The old secret stops working when the rotation lands — unless that same secret is also set in API_KEYS, in which case it keeps working and you are told so afterwards.",
               }
             : null
         }
@@ -342,6 +352,7 @@ export function ApiKeysPage() {
               kind: "rotated",
               name: result.key.name,
               secret: result.secret,
+              ...(result.warning ? { warning: result.warning } : {}),
             });
           } catch (cause) {
             setPanelError(

@@ -14,6 +14,7 @@ import {
 } from "../services/caller-crypto.js";
 import {
   authenticateRequest,
+  isAuthGateActive,
   buildBearerChallenge,
   buildProtectedResourceMetadata,
   createUnauthorizedResponse,
@@ -386,5 +387,37 @@ describe("H1: D1 keys gate access when API_KEYS is unset", () => {
       env
     );
     expect(result.authenticated).toBe(false);
+  });
+});
+
+describe("review F4: /health asks the gate, not the env var", () => {
+  test("env keys activate the gate", async () => {
+    expect(await isAuthGateActive({ API_KEYS: "k" } as Env)).toBe(true);
+  });
+
+  test("no credential source leaves it open", async () => {
+    expect(await isAuthGateActive({} as Env)).toBe(false);
+  });
+
+  test("an enabled D1 key activates it with no API_KEYS", async () => {
+    const db = freshDb();
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) " +
+        "VALUES ('CI', 'h', 'p', 'a1b2', 1)"
+    ).run();
+    const env = { PROVIDER_DB: authD1(db) } as unknown as Env;
+    // `!!env.API_KEYS` reported false here while /v1 rejected anonymous
+    // callers — the lie this test pins shut.
+    expect(await isAuthGateActive(env)).toBe(true);
+  });
+
+  test("a parked D1 key does not activate it", async () => {
+    const db = freshDb();
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) " +
+        "VALUES ('CI', 'h', 'p', 'a1b2', 0)"
+    ).run();
+    const env = { PROVIDER_DB: authD1(db) } as unknown as Env;
+    expect(await isAuthGateActive(env)).toBe(false);
   });
 });

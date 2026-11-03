@@ -985,3 +985,171 @@ describe("review fixes: dialog and switch affordances (M4, M6)", () => {
     expect(document.getElementById("callerKeyConfirmBackdrop")).not.toBeNull();
   });
 });
+
+describe("review F5: the confirm dialog is actually a dialog", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubQuietApi() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      })
+    );
+  }
+
+  it("Escape closes the dialog", async () => {
+    stubQuietApi();
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    expect(document.getElementById("callerKeyConfirmBackdrop")).not.toBeNull();
+
+    // Before the fix the handler sat on the backdrop — a sibling of the
+    // trigger — so a keydown from the focused button never reached it and
+    // Escape did nothing.
+    await user.keyboard("{Escape}");
+    expect(document.getElementById("callerKeyConfirmBackdrop")).toBeNull();
+  });
+
+  it("moves focus into the dialog when it opens", async () => {
+    stubQuietApi();
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    await user.click(
+      document.getElementById("adminCallerKeyDelete-1") as HTMLElement
+    );
+    expect(document.activeElement).toBe(
+      document.getElementById("callerKeyConfirmCancel")
+    );
+  });
+
+  it("keeps Tab inside the dialog", async () => {
+    stubQuietApi();
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+
+    const cancel = document.getElementById("callerKeyConfirmCancel")!;
+    cancel.focus();
+    cancel.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey: true,
+        bubbles: true,
+      })
+    );
+    expect(document.activeElement).toBe(
+      document.getElementById("callerKeyConfirmOk")
+    );
+  });
+
+  it("Escape does not dismiss a request that is already in flight", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (init?.method === "POST" && path.includes("/rotate")) {
+          return new Promise<Response>(() => {});
+        }
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      })
+    );
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    await user.click(
+      document.getElementById("callerKeyConfirmOk") as HTMLElement
+    );
+    await user.keyboard("{Escape}");
+    expect(document.getElementById("callerKeyConfirmBackdrop")).not.toBeNull();
+  });
+});
+
+describe("review F2: the rotate banner admits a surviving old secret", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the warning when rotation could not revoke the old secret", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (init?.method === "POST" && path.includes("/rotate")) {
+          return jsonResponse({
+            key: {
+              id: 1,
+              name: "CI",
+              prefix: "ck_",
+              suffix: "cd34",
+              enabled: true,
+              created_at: 1,
+            },
+            secret: "{{SECRET_rotated}}",
+            warning:
+              "This key's old secret is also an API_KEYS value, so it still authenticates.",
+          });
+        }
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      })
+    );
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    await user.click(
+      document.getElementById("callerKeyConfirmOk") as HTMLElement
+    );
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("callerKeyRotationWarning")?.textContent
+      ).toContain("still authenticates")
+    );
+    // The banner must not keep claiming the old one is dead.
+    expect(document.getElementById("callerKeyCreated")?.textContent).toContain(
+      "the old one still works"
+    );
+  });
+});

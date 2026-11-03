@@ -38,6 +38,25 @@ export const GENERATED_CALLER_PREFIX = "sk-mgmt-";
 
 /** Operator secrets are 8–256 printable ASCII characters with no spaces. */
 const MIN_OPERATOR_SECRET_LENGTH = 8;
+
+/**
+ * The shortest secret that keeps a four-character hint without publishing a
+ * meaningful share of it.
+ *
+ * A blind `slice(-4)` would put half of a minimum-length (8-character)
+ * operator secret in `suffix`, which is stored in the clear and rendered in
+ * the key list — the opposite of what 0006 and `maskCallerKey` document
+ * ("empty when the secret is too short for a hint to be safe, so the masked
+ * value shows nothing rather than half the secret"). Sixteen characters is
+ * where a four-character hint is a hint and not a leak: generated secrets
+ * are far longer, so only short operator secrets lose their hint.
+ */
+const MIN_SUFFIX_SECRET_LENGTH = 16;
+
+/** The hint's last four characters, or empty when the secret is too short. */
+function hintSuffix(secret: string): string {
+  return secret.length >= MIN_SUFFIX_SECRET_LENGTH ? secret.slice(-4) : "";
+}
 const MAX_OPERATOR_SECRET_LENGTH = 256;
 
 /** Key names are 1–120 characters. */
@@ -130,6 +149,12 @@ export interface CreatedCallerKey {
    * served again; a lost secret is rotated, not revealed.
    */
   secret: string;
+  /**
+   * A consequence the caller must know about. Rotation sets it when the OLD
+   * secret is also an API_KEYS value: the env path still accepts it, so the
+   * new verifier revoked nothing (review F2).
+   */
+  warning?: string;
 }
 
 export interface CreateCallerKeyInput {
@@ -176,7 +201,7 @@ export async function createCallerKey(
   // The columns are length-agnostic, so a move to last-6 for generated
   // keys is a one-line change here.
   const prefix = brought ? "" : GENERATED_CALLER_PREFIX;
-  const suffix = secret.slice(-4);
+  const suffix = hintSuffix(secret);
   const insert: AdminWrite = {
     sql:
       "INSERT INTO caller_keys " +
@@ -261,12 +286,30 @@ export async function createCallerKey(
 export async function rotateCallerKey(
   db: AdminD1,
   keyId: number,
-  verifier: (secret: string) => Promise<string>
+  verifier: (secret: string) => Promise<string>,
+  /**
+   * Does this key's OLD secret also live in the deploy's API_KEYS?
+   *
+   * Rotation replaces the row's verifier, but `authenticateRequest` checks
+   * `API_KEYS` before the D1 lookup, so an old plaintext that is also an env
+   * value keeps authenticating through the OR-path and nothing was revoked.
+   * Disable and delete already run this check and warn; rotate owns the same
+   * danger — it is the path an operator uses to kill a leaked credential —
+   * so it needs the same warning rather than a 200 that implies revocation.
+   */
+  envMirror?: (secretHash: string) => Promise<boolean>
 ): Promise<CreatedCallerKey> {
   const row = await db
-    .prepare("SELECT name, enabled, created_at FROM caller_keys WHERE id = ?")
+    .prepare(
+      "SELECT name, enabled, created_at, secret_hash FROM caller_keys WHERE id = ?"
+    )
     .bind(keyId)
-    .first<{ name: string; enabled: number; created_at: number }>();
+    .first<{
+      name: string;
+      enabled: number;
+      created_at: number;
+      secret_hash: string;
+    }>();
   if (!row) {
     throw new AdminStoreError(404, `unknown caller key ${keyId}`);
   }
@@ -274,7 +317,7 @@ export async function rotateCallerKey(
   const hash = await verifier(secret);
   const now = Math.floor(Date.now() / 1000);
   const prefix = GENERATED_CALLER_PREFIX;
-  const suffix = secret.slice(-4);
+  const suffix = hintSuffix(secret);
   const update: AdminWrite = {
     sql:
       "UPDATE caller_keys " +
@@ -294,6 +337,10 @@ export async function rotateCallerKey(
   if (commit.changes === 0) {
     throw new AdminStoreError(404, `unknown caller key ${keyId}`);
   }
+  const warning =
+    (await envMirror?.(row.secret_hash)) === true
+      ? ENV_MIRROR_WARNING
+      : undefined;
   return {
     key: {
       id: keyId,
@@ -304,6 +351,7 @@ export async function rotateCallerKey(
       created_at: Number(row.created_at),
     },
     secret,
+    ...(warning === undefined ? {} : { warning }),
   };
 }
 
@@ -338,7 +386,9 @@ export interface CallerKeyMutationResult {
 export async function toggleCallerKey(
   db: AdminD1,
   keyId: number,
-  envMirror?: (secretHash: string) => Promise<boolean>
+  envMirror?: (secretHash: string) => Promise<boolean>,
+  /** Whether the deploy still carries a usable API_KEYS value (review F3). */
+  envKeysConfigured = false
 ): Promise<CallerKeyMutationResult> {
   const row = await db
     .prepare(
@@ -375,6 +425,16 @@ export async function toggleCallerKey(
   // and a warning on enable would be noise.
   if (!enabled && (await envMirror?.(row.secret_hash)) === true) {
     warnings.push(ENV_MIRROR_WARNING);
+  }
+  // Disabling the last enabled key lands the same open gate a delete does,
+  // so it earns the same warning instead of silence (review F3).
+  if (!enabled) {
+    const enabledLeft = await db
+      .prepare("SELECT COUNT(*) AS n FROM caller_keys WHERE enabled = 1")
+      .first<{ n: number }>();
+    if ((enabledLeft?.n ?? 0) === 0) {
+      warnings.push(envKeysConfigured ? ENV_ONLY_WARNING : LOCKOUT_WARNING);
+    }
   }
   return {
     key: {
@@ -624,9 +684,17 @@ export const ENV_MIRROR_WARNING =
 export const ENV_ONLY_WARNING =
   "No enabled caller keys left — callers using D1 keys cannot authenticate; callers holding API_KEYS values still can.";
 
-/** The warning a delete carries when no enabled key is left behind. */
+/**
+ * The warning a mutation carries when it removes the last enabled key and
+ * the deploy has no usable API_KEYS.
+ *
+ * This used to read "now reject every caller", which is the inverse of what
+ * happens: with no credential anywhere, `authenticateRequest` keeps ADR-005
+ * decision 2's open posture, so the API accepts unauthenticated callers. The
+ * old text announced the safe outcome during the unsafe one.
+ */
 export const LOCKOUT_WARNING =
-  "No enabled keys left — /v1 and /mcp now reject every caller until you add a key or the deploy carries API_KEYS again.";
+  "No enabled keys left and API_KEYS is not configured — /v1 and /mcp now accept unauthenticated callers. Add a key or configure API_KEYS to close the gate.";
 
 /**
  * The caller-key audit row, written in the SAME batch as the mutation it

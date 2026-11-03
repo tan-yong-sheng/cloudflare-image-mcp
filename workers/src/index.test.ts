@@ -11,6 +11,7 @@ import worker from "./index.js";
 import { ADMIN_HEALTH_PATH, ADMIN_KEYS_PATH } from "./endpoints/admin.js";
 import { MAX_WEIGHT } from "./services/admin-store.js";
 import type { Env } from "./types.js";
+import { freshDb } from "./test-utils/migration-fixtures.js";
 
 function env(): Env {
   return {
@@ -228,5 +229,46 @@ describe("image proxy (CORS)", () => {
     expect(hit.status).toBe(200);
     expect(hit.headers.get("access-control-allow-origin")).toBe("*");
     expect(hit.headers.get("content-type")).toBe("image/png");
+  });
+});
+
+describe("review F4: /health reports the gate it enforces", () => {
+  /** A D1 shim exposing just the indexed existence check /health makes. */
+  function d1WithCallerKey(enabled: number) {
+    const db = freshDb();
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) " +
+        "VALUES ('CI', 'h', 'p', 'a1b2', ?)"
+    ).run(enabled);
+    return {
+      prepare: (sql: string) => {
+        const run = async <T>() => (db.prepare(sql).get() ?? null) as T | null;
+        return {
+          first: run,
+          all: async () => ({ results: [] }),
+          run: async () => ({ meta: { changes: 0 } }),
+          bind: (...params: (string | number | null)[]) => ({
+            first: async <T>() =>
+              (db.prepare(sql).get(...params) ?? null) as T | null,
+          }),
+        };
+      },
+    };
+  }
+
+  test("a D1 key gates the API even with no API_KEYS configured", async () => {
+    const healthEnv = {
+      ...env(),
+      PROVIDER_DB: d1WithCallerKey(1),
+    } as unknown as Env;
+    const response = await worker.fetch(get("/health"), healthEnv);
+    const body = (await response.json()) as { authEnabled: boolean };
+    expect(body.authEnabled).toBe(true);
+  });
+
+  test("no credential anywhere reports the open posture", async () => {
+    const response = await worker.fetch(get("/health"), env());
+    const body = (await response.json()) as { authEnabled: boolean };
+    expect(body.authEnabled).toBe(false);
   });
 });

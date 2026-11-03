@@ -1180,7 +1180,8 @@ describe("caller-key create (#126)", () => {
       secret: string;
     };
     expect(body.key.prefix).toBe("");
-    expect(body.key.suffix).toBe("et-1");
+    // Below the hint threshold (11 characters), so no suffix is published.
+    expect(body.key.suffix).toBe("");
     // What arrived is what was verified: the callback input is the
     // operator's secret, byte for byte.
     expect(writes[0].params[0]).toBe("brought");

@@ -308,7 +308,7 @@ export async function handleAdmin(
   deps?: AdminDeps
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
-  if (!env.API_KEYS) {
+  if (!hasConfiguredEnvKeys(env)) {
     // Fail closed, and say why: the presented management key is not the
     // problem, so "Invalid admin key" would send the operator hunting for a
     // key that cannot work here. Its own code lets the workbench show this
@@ -717,8 +717,11 @@ async function handleRotateCallerKey(
   }
   const pepper = await deriveCallerPepper(dataKey);
   try {
-    const rotated = await rotateCallerKey(store, keyId, (secret) =>
-      callerKeyVerifier(pepper, secret)
+    const rotated = await rotateCallerKey(
+      store,
+      keyId,
+      (secret) => callerKeyVerifier(pepper, secret),
+      callerEnvMirror(env, pepper)
     );
     return json(rotated);
   } catch (error) {
@@ -786,7 +789,8 @@ async function handleToggleCallerKey(
     const result = await toggleCallerKey(
       store,
       keyId,
-      callerEnvMirror(env, pepper)
+      callerEnvMirror(env, pepper),
+      hasConfiguredEnvKeys(env)
     );
     return json(result);
   } catch (error) {
