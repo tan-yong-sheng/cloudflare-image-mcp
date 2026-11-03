@@ -35,6 +35,13 @@ export interface AdminD1 {
  */
 export interface AdminCommitResult {
   keyId: number | null;
+  /**
+   * Rows the FIRST write changed, when the engine reports it (D1 and the
+   * local harness do). A mutation whose first write is an UPDATE uses this
+   * to distinguish "row gone between the read and the commit" (0) from an
+   * engine that does not report counts (undefined — trust the read).
+   */
+  changes?: number;
 }
 
 /** A bound write the store hands to the engine for atomic commit. */
@@ -348,7 +355,9 @@ function transportNeedsAccountId(transport: string): boolean {
   return transport === "cloudflare-rest";
 }
 
-function bumpWrite(): AdminWrite {
+/** The config_versions bump that signals a change to every pool cache.
+ * Shared with the caller-key store: both admin surfaces write config. */
+export function bumpWrite(): AdminWrite {
   return write(
     "UPDATE config_versions SET version = version + 1, " +
       "updated_at = unixepoch() WHERE id = 1"

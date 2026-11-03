@@ -37,8 +37,11 @@ import {
 } from "../services/caller-crypto.js";
 import {
   createCallerKey,
+  deleteCallerKey,
   listCallerKeys,
+  renameCallerKey,
   rotateCallerKey,
+  toggleCallerKey,
 } from "../services/caller-store.js";
 import { getProviderPools } from "../services/pool-cache.js";
 import {
@@ -357,6 +360,28 @@ export async function handleAdmin(
       if (id === null) return errorJson(400, "key id is not a safe integer");
       return await handleRotateCallerKey(env, active, id);
     }
+    const callerToggle = path.match(
+      /^\/api\/admin\/caller-keys\/(\d+)\/toggle$/
+    );
+    if (request.method === "POST" && callerToggle) {
+      const id = parseKeyId(callerToggle[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleToggleCallerKey(env, active, id);
+    }
+    const callerRename = path.match(
+      /^\/api\/admin\/caller-keys\/(\d+)\/rename$/
+    );
+    if (request.method === "POST" && callerRename) {
+      const id = parseKeyId(callerRename[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleRenameCallerKey(request, env, active, id);
+    }
+    const callerDelete = path.match(/^\/api\/admin\/caller-keys\/(\d+)$/);
+    if (request.method === "DELETE" && callerDelete) {
+      const id = parseKeyId(callerDelete[1]);
+      if (id === null) return errorJson(400, "key id is not a safe integer");
+      return await handleDeleteCallerKey(env, active, id);
+    }
     if (request.method === "POST" && path === ADMIN_KEYS_PATH) {
       return await handleAddKey(request, env, active);
     }
@@ -402,14 +427,20 @@ export function commitWithD1(
   return async (writes: readonly AdminWrite[]): Promise<AdminCommitResult> => {
     const results = (await db.batch(
       writes.map((w) => db.prepare(w.sql).bind(...w.params))
-    )) as readonly { meta?: { last_row_id?: number } }[];
+    )) as readonly { meta?: { last_row_id?: number; changes?: number } }[];
     // D1 reports the inserted row id on the first write's result; hand it
     // back so add keys resolve inside the commit, never via a later read.
     const keyId =
       typeof results[0]?.meta?.last_row_id === "number"
         ? results[0].meta.last_row_id
         : null;
-    return { keyId };
+    // And the first write's changed-row count, so an UPDATE-led commit can
+    // tell "row gone between read and commit" from a reporting engine.
+    const changes =
+      typeof results[0]?.meta?.changes === "number"
+        ? results[0].meta.changes
+        : undefined;
+    return { keyId, changes };
   };
 }
 
@@ -690,6 +721,126 @@ async function handleRotateCallerKey(
       callerKeyVerifier(pepper, secret)
     );
     return json(rotated);
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+/**
+ * The resurrection-check predicate (#128): does this row's verifier match
+ * any API_KEYS env value? Each env value is HMAC'd with the same pepper
+ * and compared to the stored hash — so the check is exact, never a guess
+ * from the masked hint. During the #129 transition window a matching env
+ * value keeps the credential alive no matter what this table says, which
+ * is why disable/delete surface a warning instead of silent success.
+ */
+function callerEnvMirror(
+  env: Env,
+  pepper: Uint8Array
+): (secretHash: string) => Promise<boolean> {
+  const envKeys = (env.API_KEYS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  return async (secretHash) => {
+    for (const value of envKeys) {
+      if ((await callerKeyVerifier(pepper, value)) === secretHash) {
+        return true;
+      }
+    }
+    return false;
+  };
+}
+
+/**
+ * POST /api/admin/caller-keys/:id/toggle — flip enabled (#128).
+ *
+ * A disabled key stops authenticating but stays listed. When the key is
+ * being disabled and its verifier also lives in env.API_KEYS, the
+ * response carries a warning: the credential survives through the legacy
+ * mirror until the deploy itself drops it.
+ */
+async function handleToggleCallerKey(
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (!dataKey) {
+    return internalError("no sealing key configured");
+  }
+  const pepper = await deriveCallerPepper(dataKey);
+  try {
+    const result = await toggleCallerKey(
+      store,
+      keyId,
+      callerEnvMirror(env, pepper)
+    );
+    return json(result);
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+/**
+ * POST /api/admin/caller-keys/:id/rename — change the display name (#128).
+ *
+ * Body `{ name }`: 1–120 characters, unique across keys. Only the name
+ * moves; the verifier and the enabled flag are untouched, so the
+ * credential keeps working and no mirror warning applies.
+ */
+async function handleRenameCallerKey(
+  request: Request,
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await requestJson(request);
+  } catch (error) {
+    return storeError(error);
+  }
+  if (body["name"] !== undefined && typeof body["name"] !== "string") {
+    return badRequest("name must be a string");
+  }
+  try {
+    const result = await renameCallerKey(
+      store,
+      keyId,
+      body["name"] as string | undefined
+    );
+    return json(result);
+  } catch (error) {
+    return storeError(error);
+  }
+}
+
+/**
+ * DELETE /api/admin/caller-keys/:id — hard delete (#128).
+ *
+ * No undo: the row is gone, the audit trail stays. The response warns
+ * when the credential survives through the env mirror, and when no
+ * enabled key is left behind — an operator with zero keys has locked
+ * every caller out until a key is added or the deploy carries API_KEYS.
+ */
+async function handleDeleteCallerKey(
+  env: Env,
+  store: AdminD1,
+  keyId: number
+): Promise<Response> {
+  const dataKey = env.PROVIDER_DATA_KEY;
+  if (!dataKey) {
+    return internalError("no sealing key configured");
+  }
+  const pepper = await deriveCallerPepper(dataKey);
+  try {
+    const result = await deleteCallerKey(
+      store,
+      keyId,
+      callerEnvMirror(env, pepper)
+    );
+    return json(result);
   } catch (error) {
     return storeError(error);
   }

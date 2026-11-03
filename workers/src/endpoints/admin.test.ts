@@ -1129,9 +1129,12 @@ describe("caller-key create (#126)", () => {
       enabled: true,
       created_at: expect.any(Number),
     });
-    // The row got the keyed verifier, not the plaintext.
-    expect(writes).toHaveLength(1);
+    // The row got the keyed verifier, not the plaintext. The batch is
+    // the key row, the config bump, and the audit row (#128).
+    expect(writes).toHaveLength(3);
     expect(writes[0].sql).toContain("INSERT INTO caller_keys");
+    expect(writes[1].sql).toContain("UPDATE config_versions");
+    expect(writes[2].sql).toContain("INSERT INTO admin_audit");
     const hash = writes[0].params[1];
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
     expect(hash).not.toBe(body.secret);
@@ -1304,7 +1307,10 @@ describe("caller-key rotate (#127)", () => {
           };
           return { ...stmt, bind: () => ({ ...stmt }) };
         },
-        commit: async () => ({ keyId: null }),
+        commit: async () => ({
+          keyId: null,
+          changes: options.changes ?? (options.row ? 1 : 0),
+        }),
       },
     };
   }
@@ -1412,5 +1418,219 @@ describe("caller-key rotate (#127)", () => {
       { adminStore: store }
     );
     expect(response?.status).toBe(500);
+  });
+});
+
+describe("caller-key mutations (#128)", () => {
+  // Toggle, rename, delete: the row mutations behind the same two gates.
+  // The tests pin routing and status codes here; the store-level tests
+  // pin the audit, the bump, and the env-mirror warning against the real
+  // migrations.
+
+  function mutatingStore(
+    options: {
+      row?: Record<string, unknown>;
+      changes?: number;
+      commitError?: Error;
+    } = {}
+  ) {
+    return {
+      store: {
+        prepare: (sql: string) => {
+          const stmt = {
+            first: async <T>() =>
+              (sql.includes("COUNT(*)")
+                ? { n: options.row ? 1 : 0 }
+                : (options.row ?? null)) as T | null,
+            all: async () => ({ results: [] }),
+            run: async () => ({
+              meta: { changes: options.changes ?? (options.row ? 1 : 0) },
+            }),
+          };
+          return { ...stmt, bind: () => ({ ...stmt }) };
+        },
+        commit: async () => {
+          if (options.commitError) throw options.commitError;
+          return { keyId: null, changes: options.changes ?? 1 };
+        },
+      },
+    };
+  }
+
+  const ROW = {
+    name: "CI",
+    enabled: 1,
+    secret_hash: "a".repeat(64),
+    prefix: "sk-mgmt-",
+    suffix: "a1b2",
+    created_at: 1_700_000_000,
+  };
+
+  test("toggle needs both gates", async () => {
+    const noBearer = await worker.fetch(
+      new Request("https://worker.test/api/admin/caller-keys/1/toggle", {
+        method: "POST",
+        headers: { "X-Admin-Key": "admin-key" },
+      }),
+      env()
+    );
+    expect(noBearer.status).toBe(401);
+    const { store } = mutatingStore({ row: ROW });
+    const wrongAdmin = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/1/toggle", {
+        method: "POST",
+        headers: bearer("user-key", { "X-Admin-Key": "wrong" }),
+      }),
+      "/api/admin/caller-keys/1/toggle",
+      env(),
+      { adminStore: store }
+    );
+    expect(wrongAdmin?.status).toBe(403);
+  });
+
+  test("toggle answers 200 with the flipped key", async () => {
+    const { store } = mutatingStore({ row: ROW });
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/1/toggle", {
+        method: "POST",
+        headers: bearer("user-key", { "X-Admin-Key": "admin-key" }),
+      }),
+      "/api/admin/caller-keys/1/toggle",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(200);
+    expect(response!.headers.get("Cache-Control")).toBe("no-store");
+    const body = (await response!.json()) as {
+      key: Record<string, unknown>;
+      warning?: string;
+    };
+    expect(body.key).toEqual({
+      id: 1,
+      name: "CI",
+      prefix: ROW.prefix,
+      suffix: ROW.suffix,
+      enabled: false,
+      created_at: ROW.created_at,
+      updated_at: expect.any(Number),
+    });
+    expect(body.warning).toBeUndefined();
+  });
+
+  test("toggle on an unknown id is a 404", async () => {
+    const { store } = mutatingStore();
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/999/toggle", {
+        method: "POST",
+        headers: bearer("user-key", { "X-Admin-Key": "admin-key" }),
+      }),
+      "/api/admin/caller-keys/999/toggle",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(404);
+  });
+
+  test("rename answers 200 with the new name", async () => {
+    const { store } = mutatingStore({ row: ROW });
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/1/rename", {
+        method: "POST",
+        headers: bearer("user-key", {
+          "X-Admin-Key": "admin-key",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ name: "deploy-ci" }),
+      }),
+      "/api/admin/caller-keys/1/rename",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response!.json()) as { key: { name: string } };
+    expect(body.key.name).toBe("deploy-ci");
+  });
+
+  test("rename with a non-string name is a 400", async () => {
+    const { store } = mutatingStore({ row: ROW });
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/1/rename", {
+        method: "POST",
+        headers: bearer("user-key", {
+          "X-Admin-Key": "admin-key",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ name: 42 }),
+      }),
+      "/api/admin/caller-keys/1/rename",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(400);
+  });
+
+  test("rename to an existing name is a 409", async () => {
+    const { store } = mutatingStore({
+      row: ROW,
+      commitError: new Error("UNIQUE constraint failed: caller_keys.name"),
+    });
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/1/rename", {
+        method: "POST",
+        headers: bearer("user-key", {
+          "X-Admin-Key": "admin-key",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ name: "taken" }),
+      }),
+      "/api/admin/caller-keys/1/rename",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(409);
+  });
+
+  test("delete answers 200 with the deletion and needs the bearer gate", async () => {
+    const noBearer = await worker.fetch(
+      new Request("https://worker.test/api/admin/caller-keys/1", {
+        method: "DELETE",
+        headers: { "X-Admin-Key": "admin-key" },
+      }),
+      env()
+    );
+    expect(noBearer.status).toBe(401);
+
+    const { store } = mutatingStore({ row: ROW });
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/1", {
+        method: "DELETE",
+        headers: bearer("user-key", { "X-Admin-Key": "admin-key" }),
+      }),
+      "/api/admin/caller-keys/1",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(200);
+    expect(response!.headers.get("Cache-Control")).toBe("no-store");
+    const body = (await response!.json()) as {
+      deleted: boolean;
+      id: number;
+      warning?: string;
+    };
+    expect(body).toEqual({ deleted: true, id: 1 });
+  });
+
+  test("delete on an unknown id is a 404", async () => {
+    const { store } = mutatingStore();
+    const response = await handleAdmin(
+      new Request("https://worker.test/api/admin/caller-keys/999", {
+        method: "DELETE",
+        headers: bearer("user-key", { "X-Admin-Key": "admin-key" }),
+      }),
+      "/api/admin/caller-keys/999",
+      env(),
+      { adminStore: store }
+    );
+    expect(response?.status).toBe(404);
   });
 });

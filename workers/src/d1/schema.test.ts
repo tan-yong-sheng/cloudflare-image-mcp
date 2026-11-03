@@ -65,12 +65,17 @@ describe("provider schema migrations (R1a)", () => {
 
   test("0002 adds the admin audit table (R2)", () => {
     expect(userTables(freshDb())).toContain("admin_audit");
+    // 0007 widens the table for caller-key rows: caller_key_id joins the
+    // columns, the action CHECK admits the caller_key_* actions, and
+    // provider_id becomes nullable for them. The provider columns keep
+    // their 0003/0004 semantics.
     expect(columnsOf(freshDb(), "admin_audit")).toEqual([
       "id",
       "actor",
       "action",
       "provider_id",
       "key_id",
+      "caller_key_id",
       "key_label",
       "created_at",
     ]);
