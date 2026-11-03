@@ -305,3 +305,86 @@ describe("unauthorized response contract", () => {
     });
   });
 });
+
+// ============================================================================
+// Review fix H1 - the unset-API_KEYS bypass must not swallow D1 keys
+// ============================================================================
+// Before the fix, `!env.API_KEYS` returned authenticated before the D1 path
+// ran, so retiring the env var left `/v1` and `/mcp` open to anyone while
+// the admin UI still displayed enabled caller keys.
+
+describe("H1: D1 keys gate access when API_KEYS is unset", () => {
+  const SECRET = "{{SECRET_h1proofkey9}}";
+
+  async function envWithKey(enabled: number) {
+    const db = freshDb();
+    db.prepare(
+      "INSERT INTO caller_keys (name, secret_hash, prefix, suffix, enabled) " +
+        "VALUES ('CI', ?, 'p', 'a1b2', ?)"
+    ).run(await callerKeyVerifier(AUTH_PEPPER, SECRET), enabled);
+    return {
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: authD1(db),
+    } as unknown as Env;
+  }
+
+  test("an anonymous request is rejected once a D1 key is enabled", async () => {
+    const result = await authenticateRequest(
+      authedRequest(),
+      await envWithKey(1)
+    );
+    expect(result.authenticated).toBe(false);
+    expect(result.error).toBe("Missing Authorization header");
+  });
+
+  test("the enabled D1 key still authenticates", async () => {
+    const result = await authenticateRequest(
+      authedRequest(`Bearer ${SECRET}`),
+      await envWithKey(1)
+    );
+    expect(result).toEqual({ authenticated: true, apiKey: SECRET });
+  });
+
+  test("an unknown bearer is rejected", async () => {
+    const result = await authenticateRequest(
+      authedRequest("Bearer nope"),
+      await envWithKey(1)
+    );
+    expect(result).toEqual({ authenticated: false, error: "Invalid API key" });
+  });
+
+  test("a disabled key does not activate the gate", async () => {
+    // Only ENABLED keys make D1 the credential source, so a table holding
+    // a parked key keeps the documented open posture.
+    const result = await authenticateRequest(
+      authedRequest(),
+      await envWithKey(0)
+    );
+    expect(result).toEqual({ authenticated: true });
+  });
+
+  test("binding PROVIDER_DB with no keys keeps the open posture", async () => {
+    const env = {
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: authD1(freshDb()),
+    } as unknown as Env;
+    const result = await authenticateRequest(authedRequest(), env);
+    expect(result).toEqual({ authenticated: true });
+  });
+
+  test("a D1 failure with no env keys fails closed", async () => {
+    const env = {
+      PROVIDER_DATA_KEY: AUTH_DATA_KEY,
+      PROVIDER_DB: {
+        prepare: () => {
+          throw new Error("d1 down");
+        },
+      },
+    } as unknown as Env;
+    const result = await authenticateRequest(
+      authedRequest(`Bearer ${SECRET}`),
+      env
+    );
+    expect(result.authenticated).toBe(false);
+  });
+});

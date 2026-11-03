@@ -288,8 +288,8 @@ export async function rotateCallerKey(
   // instead of violating the foreign key.
   const commit = await db.commit([
     update,
-    bumpWrite(),
     callerAuditWrite("caller_key_rotate", keyId, row.name),
+    bumpWrite(),
   ]);
   if (commit.changes === 0) {
     throw new AdminStoreError(404, `unknown caller key ${keyId}`);
@@ -364,8 +364,8 @@ export async function toggleCallerKey(
       sql: "UPDATE caller_keys SET enabled = ?, updated_at = ? WHERE id = ?",
       params: [enabled ? 1 : 0, now, keyId],
     },
-    bumpWrite(),
     callerAuditWrite("caller_key_toggle", keyId, row.name),
+    bumpWrite(),
   ]);
   if (commit.changes === 0) {
     throw new AdminStoreError(404, `unknown caller key ${keyId}`);
@@ -432,8 +432,8 @@ export async function renameCallerKey(
         sql: "UPDATE caller_keys SET name = ?, updated_at = ? WHERE id = ?",
         params: [name, now, keyId],
       },
-      bumpWrite(),
       callerAuditWrite("caller_key_rename", keyId, name),
+      bumpWrite(),
     ]);
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -472,7 +472,14 @@ export async function renameCallerKey(
 export async function deleteCallerKey(
   db: AdminD1,
   keyId: number,
-  envMirror?: (secretHash: string) => Promise<boolean>
+  envMirror?: (secretHash: string) => Promise<boolean>,
+  /**
+   * Whether the deploy still carries API_KEYS values (review M7). With them
+   * present, deleting the last D1 key does NOT lock callers out — env-key
+   * holders keep authenticating — so the warning has to say which callers
+   * are actually affected instead of claiming a total lockout.
+   */
+  envKeysConfigured = false
 ): Promise<{ deleted: true; id: number; warning?: string }> {
   const row = await db
     .prepare("SELECT name, enabled, secret_hash FROM caller_keys WHERE id = ?")
@@ -514,7 +521,7 @@ export async function deleteCallerKey(
     .prepare("SELECT COUNT(*) AS n FROM caller_keys WHERE enabled = 1")
     .first<{ n: number }>();
   if ((enabledLeft?.n ?? 0) === 0) {
-    warnings.push(LOCKOUT_WARNING);
+    warnings.push(envKeysConfigured ? ENV_ONLY_WARNING : LOCKOUT_WARNING);
   }
   return {
     deleted: true,
@@ -524,9 +531,19 @@ export async function deleteCallerKey(
 }
 
 /**
- * Resolve the create name: blank or absent defaults to "Key N" (N is one
- * past the current row count — a race that lands two defaults together
- * fails the UNIQUE constraint and surfaces as a 409, never a silent dup).
+ * Resolve the create name: blank or absent defaults to "Key N".
+ *
+ * N is one past the highest numeric "Key N" already stored — NOT the row
+ * count (review M1). A count-based default collides with an
+ * operator-chosen name: with a single key called "Key 2", the count is 1
+ * and the default computes "Key 2" again, so an unnamed create answers a
+ * 409 for a name the operator never asked for. Including operator-chosen
+ * numeric defaults in the maximum makes the candidate unused by
+ * construction.
+ *
+ * Two concurrent blank creates can still compute the same N; the UNIQUE
+ * constraint turns that into a 409 rather than a silent duplicate, which
+ * is the pre-existing posture for that race.
  */
 async function resolveCallerKeyName(
   db: AdminD1,
@@ -534,10 +551,15 @@ async function resolveCallerKeyName(
 ): Promise<string> {
   const name = (raw ?? "").trim();
   if (name.length === 0) {
-    const row = await db
-      .prepare("SELECT COUNT(*) AS n FROM caller_keys")
-      .first<{ n: number }>();
-    return `Key ${(row?.n ?? 0) + 1}`;
+    const rows = await db
+      .prepare("SELECT name FROM caller_keys")
+      .all<{ name: string }>();
+    let highest = 0;
+    for (const row of rows.results ?? []) {
+      const match = /^Key (\d+)$/.exec(String(row.name));
+      if (match) highest = Math.max(highest, Number(match[1]));
+    }
+    return `Key ${highest + 1}`;
   }
   if (name.length > MAX_NAME_LENGTH) {
     throw new AdminStoreError(400, "name must be 1-120 characters");
@@ -574,6 +596,13 @@ function validateOperatorSecret(secret: string): void {
 export const ENV_MIRROR_WARNING =
   "still live via API_KEYS — remove it from the deploy to revoke it";
 
+/**
+ * The warning a delete carries when no enabled D1 key is left behind but
+ * the deploy still carries API_KEYS values: only D1 callers lose access.
+ */
+export const ENV_ONLY_WARNING =
+  "No enabled caller keys left — callers using D1 keys cannot authenticate; callers holding API_KEYS values still can.";
+
 /** The warning a delete carries when no enabled key is left behind. */
 export const LOCKOUT_WARNING =
   "No enabled keys left — /v1 and /mcp now reject every caller until you add a key or the deploy carries API_KEYS again.";
@@ -588,6 +617,18 @@ export const LOCKOUT_WARNING =
  * parameter: a row deleted concurrently yields NULL, which satisfies the
  * foreign key, instead of violating it.
  */
+/**
+ * The caller-key audit row for a mutation whose FIRST batch write is the
+ * row change (review M5).
+ *
+ * The insert is guarded by `changes() > 0`: that SQL function reports the
+ * rows changed by the preceding statement on the same connection, so when
+ * the leading UPDATE/DELETE matched nothing (the row was deleted between
+ * the read and the commit) no audit row is written. Without the guard the
+ * batch still commits the audit and the config bump and then answers 404 —
+ * recording a mutation that never happened. The mutation still throws 404
+ * off `commit.changes`; this only keeps the trail honest.
+ */
 function callerAuditWrite(
   action:
     | "caller_key_rotate"
@@ -600,7 +641,8 @@ function callerAuditWrite(
   return {
     sql:
       "INSERT INTO admin_audit (actor, action, provider_id, caller_key_id, key_label) " +
-      "VALUES (?, ?, NULL, (SELECT id FROM caller_keys WHERE id = ?), ?)",
+      "SELECT ?, ?, NULL, (SELECT id FROM caller_keys WHERE id = ?), ? " +
+      "WHERE changes() > 0",
     params: [ADMIN_ACTOR, action, keyId, label],
   };
 }

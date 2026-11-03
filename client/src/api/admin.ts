@@ -208,6 +208,11 @@ export function useCreateCallerKey(
       dropCallerKeySecretMutations(queryClient);
     },
     onError: (error: AdminApiError) => {
+      // The variables hold the operator-typed secret. A FAILED create used
+      // to leave them in the mutation cache until GC (review M3), which
+      // contradicts the page's "component state only" claim — so the
+      // secret-bearing entries go on failure as well, not only on success.
+      dropCallerKeySecretMutations(queryClient);
       if (error.status === 401) onRefused?.(error);
     },
   });

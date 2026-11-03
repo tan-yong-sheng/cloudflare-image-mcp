@@ -369,6 +369,62 @@ textarea:focus {
 .row-muted {
   color: var(--text-light);
 }
+/*
+ * The caller-key enable/disable switch (#128, review M6).
+ *
+ * A <button role="switch"> carrying only ARIA rendered as an empty,
+ * styleless hit area — the operator saw the Enabled/Disabled chip but no
+ * control to click. This gives it the same track/thumb shape and tokens
+ * as the .tswitch checkbox above, so the two switches read as one control.
+ */
+.ck-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--secondary);
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ck-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--background);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: left 0.15s ease;
+}
+
+.ck-switch[aria-checked="true"] {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.ck-switch[aria-checked="true"]::after {
+  left: 18px;
+}
+
+.ck-switch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.ck-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .tswitch {
   position: relative;
   display: inline-block;

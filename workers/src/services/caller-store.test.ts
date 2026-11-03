@@ -708,3 +708,141 @@ describe("caller-key mutations (#128) against the real migrations", () => {
     });
   });
 });
+
+// ============================================================================
+// Review-round fixes (M1, M5, M7) - regression tests
+// ============================================================================
+// Each test pins the exact failure the review reproduced, so the defect
+// cannot come back silently.
+
+/** One enabled key with id 1, so a racing commit has something to lose. */
+function seedOneKey(db: DatabaseSync): void {
+  db.prepare(
+    "INSERT INTO caller_keys (id, name, secret_hash, prefix, suffix, enabled) " +
+      "VALUES (1, 'CI', 'h', 'p', 'a1b2', 1)"
+  ).run();
+}
+
+/** A store whose first write hits a row that vanished after the read. */
+function vanishingD1(db: DatabaseSync): AdminD1 {
+  const base = writableD1(db);
+  return {
+    prepare: base.prepare,
+    commit: async (writes) => {
+      // The race: another request deletes the key between read and commit.
+      db.prepare("DELETE FROM caller_keys WHERE id = 1").run();
+      return base.commit(writes);
+    },
+  };
+}
+
+function auditCount(db: DatabaseSync, action: string): number {
+  return Number(
+    (
+      db
+        .prepare("SELECT COUNT(*) AS n FROM admin_audit WHERE action = ?")
+        .get(action) as { n: number }
+    ).n
+  );
+}
+
+describe("review fixes: default name (M1)", () => {
+  test("a key already called 'Key 2' does not make the next blank create collide", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    await createCallerKey(store, testVerifier(), { name: "Key 2" });
+
+    // Before the fix this computed the row count (1) and picked "Key 2"
+    // again, so an unnamed create answered 409.
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 3");
+  });
+
+  test("the default still starts at Key 1 on an empty table", async () => {
+    const db = freshDb();
+    const created = await createCallerKey(writableD1(db), testVerifier(), {});
+    expect(created.key.name).toBe("Key 1");
+  });
+
+  test("a non-numeric custom name does not affect the default", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    await createCallerKey(store, testVerifier(), { name: "Laptop" });
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 1");
+  });
+});
+
+describe("review fixes: ghost mutations write no audit row (M5)", () => {
+  test("rotate on a vanished row answers 404 and records nothing", async () => {
+    const db = freshDb();
+    seedOneKey(db);
+    const failure = await rotateCallerKey(
+      vanishingD1(db),
+      1,
+      testVerifier()
+    ).catch((error: unknown) => error);
+    expect((failure as AdminStoreError).status).toBe(404);
+    expect(auditCount(db, "caller_key_rotate")).toBe(0);
+  });
+
+  test("toggle on a vanished row answers 404 and records nothing", async () => {
+    const db = freshDb();
+    seedOneKey(db);
+    const failure = await toggleCallerKey(vanishingD1(db), 1).catch(
+      (error: unknown) => error
+    );
+    expect((failure as AdminStoreError).status).toBe(404);
+    expect(auditCount(db, "caller_key_toggle")).toBe(0);
+  });
+
+  test("rename on a vanished row answers 404 and records nothing", async () => {
+    const db = freshDb();
+    seedOneKey(db);
+    const failure = await renameCallerKey(vanishingD1(db), 1, "renamed").catch(
+      (error: unknown) => error
+    );
+    expect((failure as AdminStoreError).status).toBe(404);
+    expect(auditCount(db, "caller_key_rename")).toBe(0);
+  });
+
+  test("a normal mutation still records its audit row", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    await toggleCallerKey(store, created.key.id);
+    expect(auditCount(db, "caller_key_toggle")).toBe(1);
+  });
+});
+
+describe("review fixes: lockout warning matches the deploy (M7)", () => {
+  test("with API_KEYS configured the warning names the surviving callers", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+
+    const result = await deleteCallerKey(
+      store,
+      created.key.id,
+      undefined,
+      true
+    );
+    expect(result.warning).toContain("API_KEYS values still can");
+    expect(result.warning).not.toContain("reject every caller");
+  });
+
+  test("without API_KEYS the warning is the full lockout", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+
+    const result = await deleteCallerKey(store, created.key.id);
+    expect(result.warning).toContain("reject every caller");
+  });
+});

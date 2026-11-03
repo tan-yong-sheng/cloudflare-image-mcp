@@ -36,7 +36,13 @@ export function ConfirmDialog({
       onKeyDown={(event) => {
         if (event.key === "Escape" && !busy) onCancel();
       }}
-      onClick={onCancel}
+      onClick={() => {
+        // A request already left the dialog: dismissing it here would hide
+        // the only surface that reports the answer, and (for rotate) free
+        // the row to be acted on again while its secret is being replaced
+        // (review M4). Escape and Cancel are guarded the same way.
+        if (!busy) onCancel();
+      }}
     >
       <div
         role="dialog"

@@ -805,3 +805,183 @@ describe("caller-key row mutations (#128)", () => {
     expect(screen.queryByText(/Delete “Laptop”\?/)).toBeNull();
   });
 });
+
+describe("review fixes: session teardown (M2)", () => {
+  // The secret-bearing state used to survive a lock: the form stayed
+  // mounted inside the hidden panel, and the 401/403 paths locked without
+  // clearing the banner. These pin the teardown.
+
+  function stubQuietApi() {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === "string" ? input : input.toString();
+      if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+      if (path === "/api/admin/health") return jsonResponse(HEALTH);
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+  }
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("the typed secret does not survive a lock and unlock", async () => {
+    stubQuietApi();
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    const field = screen.getByLabelText(/Your own secret/i) as HTMLInputElement;
+    await user.type(field, "typed-before-lock-123456");
+    expect(field.value).toBe("typed-before-lock-123456");
+
+    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+
+    const after = screen.getByLabelText(/Your own secret/i) as HTMLInputElement;
+    // The form is remounted from empty: nothing the previous session typed
+    // is left for the next person at this browser.
+    expect(after.value).toBe("");
+  });
+
+  it("the add-key form is not mounted while locked", async () => {
+    stubQuietApi();
+    const user = userEvent.setup();
+    renderApiKeysPage();
+
+    await unlock(user);
+    expect(document.getElementById("callerKeyCreateSection")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    expect(document.getElementById("callerKeyCreateSection")).toBeNull();
+  });
+});
+
+describe("review fixes: failed create leaves no secret behind (M3)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("the mutation cache holds no create entry after a failure", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (init?.method === "POST" && path === "/api/admin/caller-keys") {
+          return jsonResponse(
+            { error: { message: "duplicate name", type: "x", code: null } },
+            409
+          );
+        }
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const { client } = renderApiKeysPage();
+
+    await unlock(user);
+    await user.type(screen.getByLabelText(/Name/), "CI");
+    await user.type(
+      screen.getByLabelText(/Your own secret/),
+      "typed-secret-abcdef"
+    );
+    await user.click(screen.getByRole("button", { name: /Add key/i }));
+
+    await waitFor(() =>
+      expect(
+        document.getElementById("callerKeyAddError")?.textContent
+      ).toContain("duplicate name")
+    );
+    // The failed request's variables carried the typed secret; the cache
+    // must not keep them.
+    const entries = client
+      .getMutationCache()
+      .findAll({ mutationKey: ["admin", "mutation", "create-caller-key"] });
+    expect(entries).toEqual([]);
+  });
+});
+
+describe("review fixes: dialog and switch affordances (M4, M6)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.setItem("api_key", "bearer-key");
+    window.location.hash = "#admin/api-keys";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("the switch renders as a styled control, not an empty button", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      })
+    );
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    const switchEl = document.getElementById("adminCallerKeySwitch-1");
+    expect(switchEl).not.toBeNull();
+    // M6: without a class the button had no track, no thumb and no focus
+    // ring — an invisible hit area.
+    expect(switchEl?.className).toContain("ck-switch");
+    expect(switchEl?.getAttribute("role")).toBe("switch");
+    expect(switchEl?.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("the backdrop cannot dismiss a dialog while its request is in flight", async () => {
+    // Rotate never resolves: the dialog must stay put while busy.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = typeof input === "string" ? input : input.toString();
+        if (init?.method === "POST" && path.includes("/rotate")) {
+          return new Promise<Response>(() => {});
+        }
+        if (path === "/api/admin/caller-keys") return jsonResponse(CALLER_KEYS);
+        if (path === "/api/admin/health") return jsonResponse(HEALTH);
+        return jsonResponse({});
+      })
+    );
+    const user = userEvent.setup();
+    renderApiKeysPage();
+    await unlock(user);
+
+    await user.click(
+      document.getElementById("adminCallerKeyRotate-1") as HTMLElement
+    );
+    await user.click(
+      document.getElementById("callerKeyConfirmOk") as HTMLElement
+    );
+
+    // Busy: a backdrop click must not close the dialog.
+    const backdrop = document.getElementById("callerKeyConfirmBackdrop");
+    expect(backdrop).not.toBeNull();
+    await user.click(backdrop as HTMLElement);
+    expect(document.getElementById("callerKeyConfirmBackdrop")).not.toBeNull();
+  });
+});

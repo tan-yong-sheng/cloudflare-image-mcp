@@ -838,7 +838,8 @@ async function handleDeleteCallerKey(
     const result = await deleteCallerKey(
       store,
       keyId,
-      callerEnvMirror(env, pepper)
+      callerEnvMirror(env, pepper),
+      Boolean(env.API_KEYS)
     );
     return json(result);
   } catch (error) {

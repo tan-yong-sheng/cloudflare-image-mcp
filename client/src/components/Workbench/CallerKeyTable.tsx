@@ -119,6 +119,7 @@ export function CallerKeyTable({
                     aria-label={
                       (key.enabled ? "Disable " : "Enable ") + key.name
                     }
+                    className="ck-switch"
                     disabled={pendingIds.includes(key.id)}
                     onClick={() => onToggle(key, !key.enabled)}
                   />
