@@ -727,6 +727,18 @@ async function handleRotateCallerKey(
 }
 
 /**
+ * Whether the deploy carries at least one usable API_KEYS value.
+ *
+ * Parsed exactly the way `authenticateRequest` parses it — split, trim,
+ * drop empties — so `API_KEYS=","` or whitespace counts as "not
+ * configured". A raw truthiness check would claim env callers still work
+ * when nothing can authenticate (review round 2).
+ */
+export function hasConfiguredEnvKeys(env: Env): boolean {
+  return (env.API_KEYS ?? "").split(",").some((key) => key.trim().length > 0);
+}
+
+/**
  * The resurrection-check predicate (#128): does this row's verifier match
  * any API_KEYS env value? Each env value is HMAC'd with the same pepper
  * and compared to the stored hash — so the check is exact, never a guess
@@ -839,7 +851,7 @@ async function handleDeleteCallerKey(
       store,
       keyId,
       callerEnvMirror(env, pepper),
-      Boolean(env.API_KEYS)
+      hasConfiguredEnvKeys(env)
     );
     return json(result);
   } catch (error) {

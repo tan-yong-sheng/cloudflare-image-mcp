@@ -53,6 +53,10 @@ export function ApiKeysPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const clearSecretState = useCallback(() => {
+    // Synchronous invalidation first: the state updates below are applied
+    // on the next render, and a request that resolves before then must
+    // already see the session as over.
+    unlockedRef.current = false;
     setCreated(null);
     setRotating(null);
     setDeleting(null);
@@ -84,8 +88,15 @@ export function ApiKeysPage() {
   // continuation that may outlive the render it started in (review M2:
   // a create/rotate that resolves after a lock must not put the plaintext
   // back into state).
+  // Read by async continuations that may outlive the render they started
+  // in. Teardown sets it false SYNCHRONOUSLY: `lock()` only schedules a
+  // state update, so a promise resolving in that window would otherwise
+  // pass the guard and put the plaintext back after the teardown
+  // (review round 2).
   const unlockedRef = useRef(false);
-  unlockedRef.current = adminKey !== null;
+  useEffect(() => {
+    unlockedRef.current = adminKey !== null;
+  }, [adminKey]);
 
   // A notice fades on its own, the way the workbench's notice does.
   useEffect(() => {

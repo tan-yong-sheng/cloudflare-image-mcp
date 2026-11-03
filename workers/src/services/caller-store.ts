@@ -554,12 +554,18 @@ async function resolveCallerKeyName(
     const rows = await db
       .prepare("SELECT name FROM caller_keys")
       .all<{ name: string }>();
-    let highest = 0;
+    // BigInt, not Number: a numeric suffix can run to the 120-character
+    // name limit, and a float would round `highest + 1` back onto an
+    // existing name and answer 409 forever (review round 2).
+    let highest = BigInt(0);
     for (const row of rows.results ?? []) {
       const match = /^Key (\d+)$/.exec(String(row.name));
-      if (match) highest = Math.max(highest, Number(match[1]));
+      if (match) {
+        const value = BigInt(match[1]);
+        if (value > highest) highest = value;
+      }
     }
-    return `Key ${highest + 1}`;
+    return `Key ${highest + BigInt(1)}`;
   }
   if (name.length > MAX_NAME_LENGTH) {
     throw new AdminStoreError(400, "name must be 1-120 characters");

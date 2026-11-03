@@ -846,3 +846,17 @@ describe("review fixes: lockout warning matches the deploy (M7)", () => {
     expect(result.warning).toContain("reject every caller");
   });
 });
+
+describe("review round 2: default suffix beyond float precision", () => {
+  test("a huge numeric name does not make the next default collide", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    // A suffix past Number.MAX_SAFE_INTEGER: Number() would round it and
+    // `highest + 1` could land back on the same name, 409-ing forever.
+    await createCallerKey(store, testVerifier(), {
+      name: "Key 99999999999999999999",
+    });
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 100000000000000000000");
+  });
+});

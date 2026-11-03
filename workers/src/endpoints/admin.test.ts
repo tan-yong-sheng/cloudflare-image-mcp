@@ -10,7 +10,7 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 import worker from "../index.js";
-import { handleAdmin } from "./admin.js";
+import { handleAdmin, hasConfiguredEnvKeys } from "./admin.js";
 import type { AdminD1, AdminWrite } from "../services/admin-store.js";
 import { resetPoolCache } from "../services/pool-cache.js";
 import { sealToken } from "../services/provider-crypto.js";
@@ -1632,5 +1632,19 @@ describe("caller-key mutations (#128)", () => {
       { adminStore: store }
     );
     expect(response?.status).toBe(404);
+  });
+});
+
+describe("review round 2 fixes", () => {
+  test("an API_KEYS value that configures nothing does not count as configured", () => {
+    // Authenticate trims, splits and drops empties. A raw truthiness check
+    // treated "," or "  " as configured, so deleting the last D1 key
+    // promised env callers could still connect — they could not.
+    expect(hasConfiguredEnvKeys({ API_KEYS: "real-key" } as Env)).toBe(true);
+    expect(hasConfiguredEnvKeys({ API_KEYS: "a,b" } as Env)).toBe(true);
+    expect(hasConfiguredEnvKeys({ API_KEYS: "," } as Env)).toBe(false);
+    expect(hasConfiguredEnvKeys({ API_KEYS: "   " } as Env)).toBe(false);
+    expect(hasConfiguredEnvKeys({ API_KEYS: "" } as Env)).toBe(false);
+    expect(hasConfiguredEnvKeys({} as Env)).toBe(false);
   });
 });
