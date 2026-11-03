@@ -81,7 +81,7 @@ export function firstProviderBody(mock: {
 }
 
 /** Minimal in-memory R2Bucket: put/get round-trip, delete/list for cleanup. */
-function fakeBucket(): R2Bucket {
+export function fakeBucket(): R2Bucket {
   const store = new Map<
     string,
     { body: ArrayBuffer; httpMetadata?: any; customMetadata?: any }
@@ -143,9 +143,8 @@ function fakeBucket(): R2Bucket {
 export function fakeEnv(): Env {
   return {
     IMAGE_BUCKET: fakeBucket(),
-    CLOUDFLARE_API_TOKEN: "test-token", // Deprecated (ADR-001)
-    CLOUDFLARE_ACCOUNT_ID: "test-account", // Deprecated (ADR-001)
     IMAGE_EXPIRY_HOURS: "24",
+    PROVIDER_DATA_KEY: "test-data-key",
   };
 }
 

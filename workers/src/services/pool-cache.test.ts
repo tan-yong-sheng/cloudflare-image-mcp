@@ -22,8 +22,9 @@ import type { ProviderPoolEntry } from "./provider-pools.js";
 import { loadProviderPools } from "./pool-loader.js";
 import type { PoolRow } from "./pool-loader.js";
 import type { Env } from "../types.js";
+import { fakeEnv } from "../test-utils/fixtures.js";
 
-const ENV = { CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_API_TOKEN: "t" } as Env;
+const ENV = fakeEnv();
 
 /** The labels of the one provider the cache fakes carry. */
 function labelsOf(pools: ProviderPools): string[] {
