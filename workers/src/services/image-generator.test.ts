@@ -157,6 +157,7 @@ describe("listModels delegation (C3)", () => {
     const allModels = generator.listModels();
     const servableModels = generator.listModels({ servableOnly: true });
     expect(servableModels).toHaveLength(allModels.length);
+    expect(allModels.length).toBeGreaterThan(0);
 
     // Empty pool: no servable models
     const emptyPools = new ProviderPools([]);
