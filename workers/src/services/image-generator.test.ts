@@ -13,6 +13,7 @@ import {
 } from "./image-generator.js";
 import { ProviderPool, type PoolKey } from "./provider-pool.js";
 import { ProviderPools, type ProviderPoolEntry } from "./provider-pools.js";
+import { isModelServable, listServableModels } from "./provider-pools.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import {
   RestAITransport,
@@ -20,6 +21,7 @@ import {
   type ImageStore,
 } from "./generation-adapters.js";
 import type { Env, ModelConfig } from "../types.js";
+import { listModels as listRegistryModels } from "../config/models.js";
 
 const TEXT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const IMG2IMG_MODEL = "@cf/lykon/dreamshaper-8-lcm";
@@ -102,6 +104,19 @@ function setup() {
     IMAGE_BUCKET: {},
   } as unknown as Env;
   const generator = new ImageGeneratorService(env, { transport, store });
+  return { generator, transport, store };
+}
+
+function setupWithPools(pools: ProviderPools) {
+  const transport = new MemoryTransport();
+  const store = new MemoryStore();
+  const env = {
+    CLOUDFLARE_ACCOUNT_ID: "account",
+    CLOUDFLARE_API_TOKEN: "token",
+    IMAGE_EXPIRY_HOURS: "24",
+    IMAGE_BUCKET: {},
+  } as unknown as Env;
+  const generator = new ImageGeneratorService(env, { transport, store, pools });
   return { generator, transport, store };
 }
 
@@ -199,7 +214,7 @@ describe("runOnce text-to-image", () => {
     expect(result.base64Data).toBe(HELLO_B64);
   });
 
-  test("unknown model returns an error envelope", async () => {
+  test("unknown model returns an error envelope (ADR-004 / #159: 404 model_not_found)", async () => {
     const { generator, transport, store } = setup();
 
     const result = await generator.runOnce(
@@ -210,9 +225,64 @@ describe("runOnce text-to-image", () => {
       success: false,
       error: "Unknown model: @cf/nope/missing",
       validationError: true,
+      errorCode: "model_not_found",
     });
     expect(transport.calls).toHaveLength(0);
     expect(store.uploads).toHaveLength(0);
+  });
+
+  test("model with no servable credential returns 503 provider_unavailable (ADR-004 / #159)", async () => {
+    // Build a pools object where TEXT_MODEL's transport (cloudflare-rest) has no entries
+    const emptyPool = new ProviderPool([], { source: "d1" });
+    const pools = new ProviderPools([
+      {
+        providerId: "test-provider",
+        transport: "cloudflare-rest", // TEXT_MODEL uses this transport
+        pool: emptyPool,
+      },
+    ]);
+    const { generator, transport, store } = setupWithPools(pools);
+
+    const result = await generator.runOnce(textRequest());
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe("provider_unavailable");
+    expect(result.error).toContain("no servable credential");
+    expect(result.servableModels).toBeDefined();
+    expect(transport.calls).toHaveLength(0);
+    expect(store.uploads).toHaveLength(0);
+  });
+
+  test("upstream transport failure returns no errorCode (maps to 502) (ADR-004 / #159)", async () => {
+    const { generator, transport } = setup();
+    transport.enqueueError("Cloudflare AI API error (500): boom");
+
+    const result = await generator.runOnce(textRequest());
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Cloudflare AI API error (500): boom");
+    expect(result.errorCode).toBeUndefined(); // No errorCode = operational 502
+  });
+
+  test("provider_unavailable includes servable models list (ADR-004 / #159)", async () => {
+    // Build a pools object where cloudflare-rest has no entries
+    const emptyPool = new ProviderPool([], { source: "d1" });
+    const pools = new ProviderPools([
+      {
+        providerId: "test-provider",
+        transport: "cloudflare-rest",
+        pool: emptyPool,
+      },
+    ]);
+    const { generator } = setupWithPools(pools);
+
+    const result = await generator.runOnce(textRequest());
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe("provider_unavailable");
+    expect(result.servableModels).toBeDefined();
+    // Since no pools are servable, listServableModels should return empty
+    expect(result.servableModels).toEqual([]);
   });
 
   test("empty transport result returns a no-image error", async () => {
@@ -224,18 +294,6 @@ describe("runOnce text-to-image", () => {
     expect(result).toEqual({
       success: false,
       error: "No image in model response",
-    });
-  });
-
-  test("transport failures surface as error envelopes", async () => {
-    const { generator, transport } = setup();
-    transport.enqueueError("Cloudflare AI API error (500): boom");
-
-    const result = await generator.runOnce(textRequest());
-
-    expect(result).toEqual({
-      success: false,
-      error: "Cloudflare AI API error (500): boom",
     });
   });
 
@@ -663,6 +721,7 @@ describe("database-only credential wiring (ADR-001)", () => {
     // Production-shaped fix: with no servable credentials the service used
     // to build a real transport with zero accounts, and its bare
     // `throw lastError` produced { error: "null" } in the API envelope.
+    // ADR-004 / #159: now surfaces "has no servable credential" with errorCode.
     const svc = new ImageGeneratorService(minimalEnv, {
       store: new MemoryStore(),
       pools: poolsOf(new ProviderPool([], { source: "d1" })),
@@ -672,9 +731,8 @@ describe("database-only credential wiring (ADR-001)", () => {
 
     expect(result.success).toBe(false);
     expect(String(result.error)).not.toBe("null");
-    expect(String(result.error)).toContain(
-      "No AI provider credentials configured"
-    );
+    expect(String(result.error)).toContain("no servable credential");
+    expect(result.errorCode).toBe("provider_unavailable");
   });
 
   // AC5-response fix (#72): "zero-secret-character assertions on logs AND

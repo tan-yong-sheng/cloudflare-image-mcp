@@ -115,7 +115,7 @@ describe("POST /v1/images/generations contract", () => {
       })
     );
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502); // ADR-004: operational failures map to 502
     const body = (await res.json()) as any;
     expect(body.error.message).toBeTruthy();
     expect(body.data).toHaveLength(1);
@@ -157,7 +157,7 @@ describe("POST /v1/images/generations contract", () => {
       })
     );
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502); // ADR-004: operational failures map to 502
     const body = (await res.json()) as any;
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toHaveProperty("b64_json");
@@ -189,7 +189,7 @@ describe("POST /v1/images/generations contract", () => {
       })
     );
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502); // ADR-004: operational failures map to 502
     const body = (await res.json()) as any;
     expect(body.error.message).toBeTruthy();
     expect(body).not.toHaveProperty("data");
@@ -237,10 +237,10 @@ describe("POST /v1/images/generations contract", () => {
       })
     );
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(404); // ADR-004: unknown model maps to 404 model_not_found
     const body = (await res.json()) as any;
     expect(body.error.type).toBe("invalid_request_error");
-    expect(body.error.code).toBeNull();
+    expect(body.error.code).toBe("model_not_found");
     expect(String(body.error.message)).toMatch(/unknown model/i);
   });
 
@@ -557,7 +557,7 @@ describe("GET /v1/models contract", () => {
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
       })
     );
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(404); // ADR-004: unknown model maps to 404 model_not_found
     const body = (await res.json()) as any;
     expect(body.error.message).toMatch(/unknown model/i);
   });

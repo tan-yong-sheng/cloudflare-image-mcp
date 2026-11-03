@@ -10,7 +10,11 @@
 import type { Env, ModelConfig, ParsedParams } from "../types.js";
 import { ParamParser } from "./param-parser.js";
 import { R2StorageService } from "./r2-storage.js";
-import type { ProviderPools } from "./provider-pools.js";
+import {
+  ProviderPools,
+  isModelServable,
+  listServableModels,
+} from "./provider-pools.js";
 import { overlayRegistry } from "../config/exposure-overlay.js";
 import type { ExposureOverlay } from "../config/exposure-overlay.js";
 import type { AITransport, ImageStore } from "./generation-adapters.js";
@@ -50,6 +54,10 @@ export interface SingleResult {
   error?: string;
   /** True when the failure is invalid caller input (maps to 400). */
   validationError?: boolean;
+  /** Error code for typed failures (ADR-004 / #159). */
+  errorCode?: string;
+  /** When errorCode is provider_unavailable, the servable models list. */
+  servableModels?: string[];
 }
 
 export interface BatchResult {
@@ -58,6 +66,10 @@ export interface BatchResult {
   error?: string;
   /** True when the failure is invalid caller input (maps to 400). */
   validationError?: boolean;
+  /** Error code for typed failures (ADR-004 / #159). */
+  errorCode?: string;
+  /** When errorCode is provider_unavailable, the servable models list. */
+  servableModels?: string[];
 }
 
 /**
@@ -89,6 +101,7 @@ export class ImageGeneratorService {
   private transport: AITransport;
   private store: ImageStore;
   private models: Map<string, ModelConfig>;
+  private pools?: ProviderPools;
 
   private async extractImageResult(
     result: unknown
@@ -178,6 +191,7 @@ export class ImageGeneratorService {
     // line here fires per request: the loader reports the store state once
     // per snapshot load, the dispatcher names the transport when a request
     // finds no credential, and readiness is queryable per provider.
+    this.pools = deps?.pools;
     this.transport = deps?.transport ?? dispatch(deps?.pools);
   }
 
@@ -203,10 +217,26 @@ export class ImageGeneratorService {
 
     const model = this.getModelConfig(modelId);
     if (!model) {
+      // Model not in registry (ADR-004 / #159: 404 model_not_found)
       return {
         success: false,
         validationError: true,
         error: `Unknown model: ${modelId}`,
+        errorCode: "model_not_found",
+      };
+    }
+
+    // Model exists but check if servable (ADR-004 / #159: 503 provider_unavailable)
+    if (this.pools && !isModelServable(model, this.pools)) {
+      const servableModels = listServableModels(
+        listRegistryModels(),
+        this.pools
+      );
+      return {
+        success: false,
+        error: `Model ${modelId} has no servable credential`,
+        errorCode: "provider_unavailable",
+        servableModels: servableModels.map((m) => m.id),
       };
     }
 
@@ -239,6 +269,7 @@ export class ImageGeneratorService {
       if (error instanceof ValidationError) {
         return { success: false, validationError: true, error: message };
       }
+      // Upstream provider failure (ADR-004 / #159: 502) - no errorCode
       return { success: false, error: message };
     }
   }
@@ -312,6 +343,10 @@ export class ImageGeneratorService {
           images: results,
           error: result.error,
           ...(result.validationError ? { validationError: true } : {}),
+          ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+          ...(result.servableModels
+            ? { servableModels: result.servableModels }
+            : {}),
         };
       }
     }
