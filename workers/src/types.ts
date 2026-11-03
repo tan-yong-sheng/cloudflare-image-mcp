@@ -112,8 +112,6 @@ export interface AIAccount {
 export interface Env {
   IMAGE_BUCKET: R2Bucket;
   PROVIDER_DB?: D1Database; // D1 provider store binding (R1a); credentials managed via admin UI (ADR-001)
-  CLOUDFLARE_API_TOKEN: string; // Deprecated: was fallback credential (ADR-001)
-  CLOUDFLARE_ACCOUNT_ID: string; // Deprecated: was fallback account (ADR-001)
   IMAGE_EXPIRY_HOURS: string;
   API_KEYS?: string; // Comma-separated list of valid API keys
   PROVIDER_DATA_KEY?: string; // AES-GCM data key sealing provider tokens in D1; Worker secret

@@ -98,16 +98,13 @@ describe("migrations run before deploy (R1a)", () => {
   });
 
   test("deprecated credential vars stay out of the Worker's secrets", () => {
-    // ADR-001 made inference credentials database-only. These three names
-    // still exist as GitHub secrets (the CF pair drives wrangler itself,
-    // AI_ACCOUNTS is the one-shot import source) but the Worker reads none
-    // of them, so shipping them widened blast radius for nothing.
-    // Asserting on the bulk payload rather than the whole file is the point:
-    // a whole-file check passes even while the payload still carries them.
-    // Both objects are in scope — a name added to `required` reaches the
-    // Worker just as surely as one in `optional`. Only real `KEY:` assignment
-    // lines count: the step's own comment names these variables to explain
-    // their absence, and a substring search over raw text would trip on it.
+    // ADR-001 made inference credentials database-only. The legacy
+    // environment variable fallbacks (CLOUDFLARE_API_TOKEN,
+    // CLOUDFLARE_ACCOUNT_ID, AI_ACCOUNTS) have been removed from the
+    // Worker's Env interface and are no longer read. The CI still uses
+    // CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN for wrangler itself,
+    // and AI_ACCOUNTS as a one-shot import source, but these never reach
+    // the Worker at runtime.
     const from = WORKFLOW.indexOf("const required = {");
     const to = WORKFLOW.indexOf("npx wrangler secret bulk");
     expect(from).toBeGreaterThan(-1);

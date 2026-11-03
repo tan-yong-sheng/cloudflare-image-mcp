@@ -201,8 +201,8 @@ For existing deployments using environment variables:
 
 After implementation:
 
-- [ ] `pool-loader.ts` reads only from database
-- [ ] Environment variables `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `AI_ACCOUNTS` have no effect
+- [x] `pool-loader.ts` reads only from database
+- [x] Environment variables `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `AI_ACCOUNTS` have no effect (removed from Env interface)
 - [ ] When database is empty, generation returns "no servable credential"
 - [ ] Warning banner appears on generator page when DB has 0 keys
 - [ ] Admin UI successfully adds keys that immediately work

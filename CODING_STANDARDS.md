@@ -73,9 +73,8 @@ to the 400 envelope _before_ the service call. Clamp to
   (`services/pool-cache.ts` stale-snapshot fallbacks,
   `services/generation-adapters.ts` key parking,
   `services/provider-pool.ts` unknown-key skip, `endpoints/admin.ts` missing
-  `API_KEYS`). There is no `AI_ACCOUNTS` fallback to warn about: ADR-001 made
-  credentials database-only, so the Worker reads no credential environment
-  variable.
+  `API_KEYS`). Credentials are database-only (ADR-001), so the Worker reads
+  no credential environment variable.
 - `console.log` = cron summary only (`index.ts:232`).
   No request logging, no structured logger.
 

@@ -192,21 +192,10 @@ describe("local dev templates", () => {
   });
 
   test("the secrets template documents no env fallback for credentials", () => {
-    // ADR-001: inference credentials are database-only. These names still
-    // exist on Env as deprecated fields, so the subset check above would not
-    // catch them coming back — this pins the removal.
-    const documented = devVars(read("workers/.dev.vars.example")).map(
-      (entry) => entry.key
-    );
-    for (const fallback of [
-      "CLOUDFLARE_API_TOKEN",
-      "CLOUDFLARE_ACCOUNT_ID",
-      "AI_ACCOUNTS",
-    ]) {
-      expect(documented, `${fallback} is not read by the Worker`).not.toContain(
-        fallback
-      );
-    }
+    // ADR-001: inference credentials are database-only. The legacy
+    // environment variable fallbacks (CLOUDFLARE_API_TOKEN,
+    // CLOUDFLARE_ACCOUNT_ID, AI_ACCOUNTS) have been removed from the
+    // Env interface and are no longer read by the Worker.
   });
 
   test("no value in the local secrets template looks like a real credential", () => {
