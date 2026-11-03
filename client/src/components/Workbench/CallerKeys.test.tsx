@@ -7,7 +7,7 @@ import { AdminKeyProvider } from "../../app/admin-key";
 import { AuthProvider } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { CALLER_KEYS_QUERY_FAMILY } from "../../api/admin";
-import { ApiKeysPage } from "./ApiKeysPage";
+import { AdminShell } from "./AdminShell";
 
 /**
  * The API-keys page.
@@ -105,7 +105,7 @@ function renderApiKeysPage() {
       </ThemeProvider>
     </QueryClientProvider>
   );
-  const utils = render(<ApiKeysPage />, { wrapper });
+  const utils = render(<AdminShell route="admin-api-keys" />, { wrapper });
   return { ...utils, client };
 }
 
@@ -249,7 +249,9 @@ describe("the API-keys page", () => {
 
     await unlock(user);
 
-    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Lock the administrative area/i })
+    );
 
     // A locked panel must leave nothing behind to read: neither the
     // active session's list nor the placeholder the locked session left.

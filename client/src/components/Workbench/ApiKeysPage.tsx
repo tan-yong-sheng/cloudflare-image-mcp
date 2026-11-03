@@ -33,7 +33,7 @@ import { UnlockGate } from "./UnlockGate";
  * It is behind the same management-key gate as the workbench, and the
  * unlock is shared: arriving here from the workbench keeps the session,
  * opening it cold asks for the key. Nothing behind the gate is requested
- * before it is in hand.
+ * before it is in hand. The gate itself belongs to `AdminShell`.
  */
 export function ApiKeysPage() {
   const session = useAdminSession();
@@ -110,7 +110,6 @@ export function ApiKeysPage() {
   useEffect(() => {
     if (!callerKeys.isError) {
       handledError.current = null;
-      setPanelError(null);
       return;
     }
     if (handledError.current === callerKeys.error) return;
@@ -150,65 +149,31 @@ export function ApiKeysPage() {
 
   return (
     <main
-      id="apiKeysView"
-      className="container mx-auto px-4 py-4 max-w-6xl"
-      role="main"
-      aria-labelledby="apiKeysTitle"
+      className="mx-auto max-w-5xl px-4 py-8"
+      role="region"
+      aria-label="API keys management"
     >
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-700">
-        <div className="flex items-center space-x-3">
-          <button
-            id="apiKeysBackBtn"
-            type="button"
-            className="btn btn-secondary p-2 h-10 flex items-center justify-center rounded"
-            aria-label="Back to the provider workbench"
-            onClick={() => {
-              window.location.hash = "#admin";
-            }}
-          >
-            <i className="fa-solid fa-arrow-left mr-2" />
-            Workbench
-          </button>
-          <h1 id="apiKeysTitle" className="text-xl font-bold">
-            API keys
-          </h1>
+      <header className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">API Keys</h1>
+          <p className="mt-1 text-sm text-gray-400">
+            Keys your clients use to call this Worker
+          </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <button
-            id="apiKeysLock"
-            type="button"
-            className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
-              unlocked ? "" : " hidden"
-            }`}
-            aria-label="Lock API keys"
-            onClick={handleLock}
-          >
-            <i className="fa-solid fa-lock mr-2" />
-            Lock
-          </button>
-          <ThemeToggleButton id="themeToggleApiKeys" />
-          <LogoutButton id="logoutButtonApiKeys" />
+        <div className="flex items-center gap-2">
+          <ThemeToggleButton />
+          <LogoutButton />
         </div>
-      </div>
+      </header>
 
-      <p id="apiKeysIntro" className="text-sm opacity-70 mb-4 max-w-3xl">
-        The keys your clients send in{" "}
-        <span className="font-mono">Authorization: Bearer</span> to call this
-        Worker&apos;s <span className="font-mono">/v1</span> and{" "}
-        <span className="font-mono">/mcp</span> endpoints. They are not provider
-        credentials: a provider key authenticates the Worker to Cloudflare and
-        lives on the workbench.
-      </p>
-
-      <p
-        id="apiKeysError"
-        className={`text-sm p-3 mb-4 rounded bg-red-900/30 text-red-300 border border-red-700${
-          panelError ? "" : " hidden"
-        }`}
-        role="alert"
-      >
-        {panelError}
-      </p>
+      {panelError ? (
+        <div
+          role="alert"
+          className="mb-4 rounded bg-red-900/30 p-3 text-sm text-red-300 border border-red-700"
+        >
+          {panelError}
+        </div>
+      ) : null}
 
       <div
         id="apiKeysPanel"
@@ -305,7 +270,7 @@ export function ApiKeysPage() {
         open={
           deleting
             ? {
-                title: `Delete “${deleting.name}”?`,
+                title: `Delete "${deleting.name}"?`,
                 message:
                   "This cannot be undone. Clients using this key will lose access. The audit trail stays; the key does not come back.",
               }
@@ -333,7 +298,7 @@ export function ApiKeysPage() {
         open={
           rotating
             ? {
-                title: `Rotate “${rotating.name}”?`,
+                title: `Rotate "${rotating.name}"?`,
                 message:
                   "Clients using this key will need the new key. The old secret stops working when the rotation lands — unless that same secret is also set in API_KEYS, in which case it keeps working and you are told so afterwards.",
               }
