@@ -533,17 +533,18 @@ export async function deleteCallerKey(
 /**
  * Resolve the create name: blank or absent defaults to "Key N".
  *
- * N is one past the highest numeric "Key N" already stored — NOT the row
- * count (review M1). A count-based default collides with an
- * operator-chosen name: with a single key called "Key 2", the count is 1
- * and the default computes "Key 2" again, so an unnamed create answers a
- * 409 for a name the operator never asked for. Including operator-chosen
- * numeric defaults in the maximum makes the candidate unused by
- * construction.
+ * Allocation is deliberately arithmetic-light, because two review rounds
+ * found edge cases in the previous "highest + 1" version: a count-based
+ * default collided with an operator-chosen "Key 2", a float suffix lost
+ * precision past Number.MAX_SAFE_INTEGER, and a 120-character suffix grew
+ * past the name limit on increment. So the candidate is never trusted to
+ * fit: a preferred suffix keeps the numbering stable, and when it would
+ * exceed the limit the allocator falls back to the smallest unused "Key N",
+ * which always fits. Nothing here can overflow, round, or outgrow the
+ * contract.
  *
- * Two concurrent blank creates can still compute the same N; the UNIQUE
- * constraint turns that into a 409 rather than a silent duplicate, which
- * is the pre-existing posture for that race.
+ * Two concurrent blank creates can still compute the same name; the UNIQUE
+ * constraint turns that into a 409 rather than a silent duplicate.
  */
 async function resolveCallerKeyName(
   db: AdminD1,
@@ -551,26 +552,40 @@ async function resolveCallerKeyName(
 ): Promise<string> {
   const name = (raw ?? "").trim();
   if (name.length === 0) {
-    const rows = await db
-      .prepare("SELECT name FROM caller_keys")
-      .all<{ name: string }>();
-    // BigInt, not Number: a numeric suffix can run to the 120-character
-    // name limit, and a float would round `highest + 1` back onto an
-    // existing name and answer 409 forever (review round 2).
-    let highest = BigInt(0);
-    for (const row of rows.results ?? []) {
-      const match = /^Key (\d+)$/.exec(String(row.name));
-      if (match) {
-        const value = BigInt(match[1]);
-        if (value > highest) highest = value;
-      }
-    }
-    return `Key ${highest + BigInt(1)}`;
+    return nextDefaultName(db);
   }
   if (name.length > MAX_NAME_LENGTH) {
     throw new AdminStoreError(400, "name must be 1-120 characters");
   }
   return name;
+}
+
+/** The next unused default name: highest+1 when it fits, else the first gap. */
+async function nextDefaultName(db: AdminD1): Promise<string> {
+  const rows = await db
+    .prepare("SELECT name FROM caller_keys")
+    .all<{ name: string }>();
+  const taken = new Set((rows.results ?? []).map((row) => String(row.name)));
+  // Continue after the highest numeric suffix, so a numbered series reads
+  // in order rather than filling historical holes.
+  let highest = BigInt(0);
+  for (const existing of taken) {
+    const match = /^Key (\d+)$/.exec(existing);
+    if (!match) continue;
+    const value = BigInt(match[1]);
+    if (value > highest) highest = value;
+  }
+  const preferred = `Key ${highest + BigInt(1)}`;
+  if (preferred.length <= MAX_NAME_LENGTH && !taken.has(preferred)) {
+    return preferred;
+  }
+  // The preferred name is over the limit (a suffix near the 120-character
+  // ceiling) or somehow already present: take the smallest unused suffix.
+  // This always terminates and always fits.
+  for (let suffix = BigInt(1); ; suffix += BigInt(1)) {
+    const candidate = `Key ${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
 }
 
 /** The operator-supplied-secret rules, in the order an operator can act on. */

@@ -860,3 +860,27 @@ describe("review round 2: default suffix beyond float precision", () => {
     expect(created.key.name).toBe("Key 100000000000000000000");
   });
 });
+
+describe("review round 3: default name cannot exceed the contract", () => {
+  test("a 120-character numeric name rolls over to a fitting default", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    // "Key " + 116 nines is exactly the 120-character limit; incrementing
+    // it produced a 121-character default that bypassed the API contract.
+    const longest = "Key " + "9".repeat(116);
+    expect(longest.length).toBe(120);
+    await createCallerKey(store, testVerifier(), { name: longest });
+
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name.length).toBeLessThanOrEqual(120);
+    expect(created.key.name).not.toBe(longest);
+  });
+
+  test("the default skips a name that is already taken", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    await createCallerKey(store, testVerifier(), { name: "Key 1" });
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 2");
+  });
+});
