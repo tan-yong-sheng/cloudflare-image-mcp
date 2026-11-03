@@ -112,3 +112,32 @@ export class ProviderPools {
     return unopenable === rows;
   }
 }
+
+/** Minimum model facts the availability rule needs. */
+export interface ModelTransportRef {
+  /** Transport key (`models.json` inferenceProvider). */
+  inferenceProvider: string;
+}
+
+/**
+ * True when the request path can serve this model right now: its transport
+ * resolves a pool. Resolved by transport, not by the model's author — the
+ * same predicate routing uses via `forTransport`.
+ */
+export function isModelServable(
+  model: ModelTransportRef,
+  pools: ProviderPools
+): boolean {
+  return pools.forTransport(model.inferenceProvider) !== undefined;
+}
+
+/**
+ * The models a discovery or 503 surface may offer, in the caller's order.
+ * Membership is `isModelServable`; shape is otherwise unchanged.
+ */
+export function listServableModels<T extends ModelTransportRef>(
+  models: readonly T[],
+  pools: ProviderPools
+): T[] {
+  return models.filter((model) => isModelServable(model, pools));
+}

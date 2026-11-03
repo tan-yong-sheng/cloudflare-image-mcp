@@ -11,6 +11,7 @@ import { handleAdmin } from "./endpoints/admin.js";
 import { serveClientAsset, isClientAssetPath } from "./endpoints/spa.js";
 import { handleMcpRequest, type McpMode } from "./endpoints/mcp-sdk-server.js";
 import { getProviderPools, getExposureOverlay } from "./services/pool-cache.js";
+import { isModelServable } from "./services/provider-pools.js";
 import { overlayRegistry } from "./config/exposure-overlay.js";
 import { listModels, MODEL_CONFIGS } from "./config/models.js";
 import {
@@ -250,7 +251,7 @@ export default {
           overlayRegistry(MODEL_CONFIGS, await getExposureOverlay(env))
         ).map((model) => ({
           ...model,
-          available: pools.forTransport(model.inferenceProvider) !== undefined,
+          available: isModelServable(model, pools),
         }));
         return new Response(JSON.stringify(models), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

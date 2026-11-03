@@ -7,7 +7,11 @@
 // so the UI warning can never disagree with what generation picks.
 
 import { describe, expect, test } from "vitest";
-import { ProviderPools } from "./provider-pools.js";
+import {
+  ProviderPools,
+  isModelServable,
+  listServableModels,
+} from "./provider-pools.js";
 import { ProviderPool } from "./provider-pool.js";
 
 function poolFor(...labels: string[]): ProviderPool {
@@ -171,5 +175,62 @@ describe("provider pools", () => {
 
     // No rows at all is an empty store, not a broken key.
     expect(new ProviderPools([]).openedNoRow()).toBe(false);
+  });
+});
+
+describe("model availability rule", () => {
+  // The same forTransport predicate the request path uses, projected onto
+  // models. Later discovery and 503 surfaces call these helpers so they
+  // cannot disagree with /api/internal/models about what is servable.
+  const models = [
+    {
+      id: "flux",
+      provider: "black-forest-labs",
+      inferenceProvider: "cloudflare-rest",
+    },
+    {
+      id: "agnes",
+      provider: "agnes",
+      inferenceProvider: "openai-compat",
+    },
+  ];
+
+  test("resolves availability by transport, not by the model's author", () => {
+    const pools = new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool: poolFor("k1"),
+      },
+    ]);
+
+    expect(isModelServable(models[0], pools)).toBe(true);
+    expect(isModelServable(models[1], pools)).toBe(false);
+    // Author name must not matter: joining on provider would wrongly treat
+    // the Agnes-authored model as unservable when openai-compat is ready,
+    // and would also false-positive if an author string matched a pool id.
+    const authorLooksLikePool = {
+      id: "also-cf",
+      provider: "cloudflare",
+      inferenceProvider: "openai-compat",
+    };
+    expect(isModelServable(authorLooksLikePool, pools)).toBe(false);
+  });
+
+  test("lists the servable subset in input order", () => {
+    const pools = new ProviderPools([
+      {
+        providerId: "cloudflare",
+        transport: "cloudflare-rest",
+        pool: poolFor("k1"),
+      },
+    ]);
+
+    expect(listServableModels(models, pools).map((m) => m.id)).toEqual([
+      "flux",
+    ]);
+    expect(
+      listServableModels(models, new ProviderPools([])).map((m) => m.id)
+    ).toEqual([]);
   });
 });
