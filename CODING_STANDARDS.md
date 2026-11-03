@@ -108,7 +108,11 @@ version string in runtime code; bump with `workers/package.json`);
 secrets only via `wrangler secret put`, never committed;
 never commit generated `wrangler.toml`; JSON-RPC errors always HTTP 200;
 never let `throw` cross an endpoint boundary (map via
-`errorResponse`/catch); responses built as
+`errorResponse`/catch); validation symmetry — a value the server
+generates and a value a caller supplies both go through the same
+validator, so a generated default cannot breach a limit the supplied
+path enforces (a generated name past its length cap, a generated secret
+outside its format); responses built as
 `new Response(JSON.stringify(…), { status, headers:
 { …corsHeaders, 'Content-Type':'application/json' } })`.
 Judgement: new endpoint vs service-method extension; prompt-embedded vs
