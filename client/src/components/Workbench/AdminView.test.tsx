@@ -269,6 +269,30 @@ describe("the provider credentials workbench", () => {
     expect(screen.getByRole("button", { name: /Edit key #1/i })).toBeEnabled();
   });
 
+  it("parks a disabled key by muting the row, not by fading it", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderWorkbench();
+
+    await unlock(user);
+
+    // The rows carry their key id as the stable anchor: both identity
+    // columns are masked, so neither can find a row.
+    const active = document.querySelector('[data-key-id="1"]');
+    expect(active?.className ?? "").not.toContain("row-muted");
+    expect((active as HTMLElement).style.opacity).toBe("");
+
+    await user.click(screen.getByRole("button", { name: /Agnes/i }));
+
+    const parked = document.querySelector('[data-key-id="2"]');
+    // Muted at full opacity. Fading the row composited the text twice and put
+    // it under the AA bar: 3.69:1 for the name cell, 2.54:1 for a status chip,
+    // in the light theme. The muted token reaches 7.18:1 light / 9.88:1 dark.
+    expect(parked?.className ?? "").toContain("row-muted");
+    // No inline opacity on any row: that is the mechanism the defect came from.
+    expect((parked as HTMLElement).style.opacity).toBe("");
+  });
+
   it("refuses to save a cloudflare-rest key without an account id", async () => {
     const calls = stubApi();
     const user = userEvent.setup();
