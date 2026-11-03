@@ -149,9 +149,6 @@ describe("pool loader (F1)", () => {
       PROVIDER_DATA_KEY: "data-key",
       CLOUDFLARE_ACCOUNT_ID: "ignored-account",
       CLOUDFLARE_API_TOKEN: "ignored-token",
-      AI_ACCOUNTS: JSON.stringify([
-        { account_id: "ignored", api_token: "ignored" },
-      ]),
     } as any;
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

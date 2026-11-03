@@ -75,7 +75,7 @@ findings are gone). Raw output: `/tmp/ocr-r2-pass2.txt`.
 Triage: **real hazard, rejected as out of scope for a bounded in-branch fix.**
 
 - The behaviour is the pre-existing optional-secret contract, shared by
-  `API_KEYS`, `AI_ACCOUNTS`, `PROVIDER_DATA_KEY`, and `TZ` — the branch adds
+  `API_KEYS`, `PROVIDER_DATA_KEY`, and `TZ` — the branch adds
   one line to that map, so it is not introduced by the admin API slice the
   objective scopes (`workers/src/endpoints/admin.ts`, `.../admin-store.ts`,
   `.../types.ts`). Changing omission semantics for one key (or all) is a
