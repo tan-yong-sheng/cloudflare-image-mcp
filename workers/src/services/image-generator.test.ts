@@ -153,11 +153,12 @@ describe("listModels delegation (C3)", () => {
 
   test("servableOnly filters to models with servable credentials", () => {
     const { generator } = setupWithPools(fakePools());
-    // All models are servable in the default test pool
+    // fakePools() only provides cloudflare-rest credentials
+    // Cloudflare models (10) are servable; Agnes models (3) are not
     const allModels = generator.listModels();
     const servableModels = generator.listModels({ servableOnly: true });
-    expect(servableModels).toHaveLength(allModels.length);
-    expect(allModels.length).toBeGreaterThan(0);
+    expect(servableModels.length).toBe(10); // Cloudflare models only
+    expect(allModels.length).toBe(13); // Cloudflare + Agnes models
 
     // Empty pool: no servable models
     const emptyPools = new ProviderPools([]);
