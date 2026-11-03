@@ -41,6 +41,13 @@ jobs:
             workers/package-lock.json
             client/package-lock.json
 
+      - name: Agent doc pointers
+        # Agent docs are context pointers: a path that does not exist makes
+        # the agent conclude the material is absent rather than mis-filed,
+        # which is how docs/adr/ hid the ADRs after they moved. Needs no
+        # dependencies, so it runs before the installs and fails fast.
+        run: node scripts/check-agent-doc-paths.mjs
+
       - name: Install dependencies
         working-directory: workers
         run: npm ci

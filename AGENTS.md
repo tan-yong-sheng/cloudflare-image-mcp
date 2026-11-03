@@ -69,8 +69,13 @@ the frontend dropdown and MCP model discovery both read from this configuration.
 
 - `main` is protected — branch + PR for all changes.
 - Conventions: read `CODING_STANDARDS.md` when editing `workers/src`.
+- A path you name in an agent doc must exist — check with
+  `node scripts/check-agent-doc-paths.mjs` (CI runs it). A broken pointer
+  reads as "the material is absent", not "mis-filed".
 - Workflow/scripts/model-add: `CONTRIB.md`. Deploy secrets: `.github/workflows/deploy-workers.yml`.
 - Agent context: read `docs/agents/domain.md` + `docs/agents/issue-tracker.md` when the task touches domain terms or issue tracking.
+- Review reports: `docs/reviews/` — one file per pass, so a review outlives the
+  chat it happened in.
 - Handoff oracles: when recording a count-based oracle (test counts, tier
   `--list` numbers), record the derivation — what is included and what
   would move it — not just the number.
