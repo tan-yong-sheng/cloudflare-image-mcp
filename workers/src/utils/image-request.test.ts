@@ -16,7 +16,6 @@ import {
 } from "./image-request.js";
 
 const EDIT_CONFIG: CollectConfig = {
-  defaultModel: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
   params: ["size", "steps", "seed", "guidance", "negative_prompt", "strength"],
   imageKeys: ["image", "image_b64"],
   maskKeys: ["mask", "mask_b64"],
@@ -25,13 +24,11 @@ const EDIT_CONFIG: CollectConfig = {
 };
 
 const VARIATION_CONFIG: CollectConfig = {
-  defaultModel: "@cf/black-forest-labs/flux-2-klein-4b",
   params: ["size", "steps", "seed", "strength"],
   defaults: { strength: 0.7 },
 };
 
 const GENERATION_CONFIG: CollectConfig = {
-  defaultModel: "@cf/black-forest-labs/flux-1-schnell",
   params: ["size", "steps", "num_steps", "seed", "guidance", "negative_prompt"],
   imageKeys: [],
   includePrompt: true,
@@ -78,6 +75,7 @@ describe("collectInputImages from JSON", () => {
   test("wraps a single JSON image string into an array with defaults", async () => {
     const request = jsonRequest("/v1/images/variations", {
       image: "aGVsbG8=",
+      model: "@cf/black-forest-labs/flux-2-klein-4b",
     });
 
     await expect(
@@ -91,6 +89,24 @@ describe("collectInputImages from JSON", () => {
       returnBase64: false,
       explicitParams: { strength: 0.7 },
     });
+  });
+
+  test("omitted, empty, and whitespace-only model throw model_required", async () => {
+    for (const body of [
+      { prompt: "a cyberpunk cat" },
+      { prompt: "a cyberpunk cat", model: "" },
+      { prompt: "a cyberpunk cat", model: "   " },
+      { prompt: "a cyberpunk cat", model: null },
+    ]) {
+      const request = jsonRequest("/v1/images/generations", body);
+      await expect(
+        collectInputImages(request, GENERATION_CONFIG)
+      ).rejects.toMatchObject({
+        name: "CollectionError",
+        message: expect.stringMatching(/model/i),
+        code: "model_required",
+      });
+    }
   });
 
   test("gathers generation input: prompt, CF params, no images", async () => {
@@ -119,6 +135,7 @@ describe("collectInputImages from JSON", () => {
     const request = jsonRequest("/v1/images/edits", {
       image_b64: "aGVsbG8=",
       prompt: "p",
+      model: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
     });
 
     const collected = await collectInputImages(request, EDIT_CONFIG);
@@ -131,6 +148,7 @@ describe("collectInputImages from JSON", () => {
     // client sends that name, so it must survive collection.
     const request = jsonRequest("/v1/images/generations", {
       prompt: "a cyberpunk cat",
+      model: "@cf/black-forest-labs/flux-1-schnell",
       num_steps: 7,
     });
 
@@ -181,6 +199,7 @@ describe("collectInputImages from multipart", () => {
   test("collects num_steps from a multipart form as an integer", async () => {
     const formData = new FormData();
     formData.append("prompt", "a cyberpunk cat");
+    formData.append("model", "@cf/black-forest-labs/flux-1-schnell");
     formData.append("num_steps", "7");
     const request = new Request("https://worker.test/v1/images/generations", {
       method: "POST",
@@ -194,6 +213,7 @@ describe("collectInputImages from multipart", () => {
   test("rejects a num_steps form field that is not an integer", async () => {
     const formData = new FormData();
     formData.append("prompt", "a cyberpunk cat");
+    formData.append("model", "@cf/black-forest-labs/flux-1-schnell");
     formData.append("num_steps", "7junk");
     const request = new Request("https://worker.test/v1/images/generations", {
       method: "POST",
@@ -205,7 +225,7 @@ describe("collectInputImages from multipart", () => {
     ).rejects.toThrow("Invalid num_steps");
   });
 
-  test("ignores empty entries and falls back to model/n defaults", async () => {
+  test("ignores empty image entries and rejects a missing model", async () => {
     const formData = new FormData();
     formData.append("image", pngFile("", "empty.png"));
     formData.append("prompt", "p");
@@ -214,19 +234,37 @@ describe("collectInputImages from multipart", () => {
       body: formData,
     });
 
-    const collected = await collectInputImages(request, EDIT_CONFIG);
-    expect(collected.imageDataArr).toEqual([]);
-    expect(collected.modelId).toBe(
-      "@cf/stabilityai/stable-diffusion-xl-base-1.0"
-    );
-    expect(collected.n).toBe(1);
-    expect(collected.returnBase64).toBe(false);
-    expect(collected.explicitParams).toEqual({});
+    await expect(
+      collectInputImages(request, EDIT_CONFIG)
+    ).rejects.toMatchObject({
+      name: "CollectionError",
+      message: expect.stringMatching(/model/i),
+      code: "model_required",
+    });
+  });
+
+  test("whitespace-only multipart model is rejected as model_required", async () => {
+    const formData = new FormData();
+    formData.append("image", pngFile("Hello"));
+    formData.append("prompt", "p");
+    formData.append("model", "   ");
+    const request = new Request("https://worker.test/v1/images/edits", {
+      method: "POST",
+      body: formData,
+    });
+
+    await expect(
+      collectInputImages(request, EDIT_CONFIG)
+    ).rejects.toMatchObject({
+      name: "CollectionError",
+      code: "model_required",
+    });
   });
 
   test("variations config skips prompt and mask gathering", async () => {
     const formData = new FormData();
     formData.append("image", pngFile("Hello"));
+    formData.append("model", "@cf/black-forest-labs/flux-2-klein-4b");
     formData.append("prompt", "ignored");
     formData.append("mask", pngFile("Mask", "mask.png"));
     const request = new Request("https://worker.test/v1/images/variations", {
@@ -247,6 +285,7 @@ describe("count and body validation", () => {
     const formData = new FormData();
     formData.append("image", pngFile("Hello"));
     formData.append("prompt", "p");
+    formData.append("model", "@cf/stabilityai/stable-diffusion-xl-base-1.0");
     formData.append("seed", "0");
     formData.append("guidance", "0");
     const request = new Request("https://worker.test/v1/images/edits", {
@@ -261,6 +300,7 @@ describe("count and body validation", () => {
   test("non-numeric n throws instead of producing an empty success", async () => {
     const request = jsonRequest("/v1/images/generations", {
       prompt: "p",
+      model: "@cf/black-forest-labs/flux-1-schnell",
       n: "abc",
     });
 
@@ -273,6 +313,7 @@ describe("count and body validation", () => {
     for (const n of [2.5, 0, -1, "1.5", "2x", "abc"]) {
       const request = jsonRequest("/v1/images/generations", {
         prompt: "p",
+        model: "@cf/black-forest-labs/flux-1-schnell",
         n,
       });
       await expect(
@@ -291,6 +332,7 @@ describe("count and body validation", () => {
       const formData = new FormData();
       formData.append("image", pngFile("Hello"));
       formData.append("prompt", "p");
+      formData.append("model", "@cf/stabilityai/stable-diffusion-xl-base-1.0");
       formData.append(key, value);
       const request = new Request("https://worker.test/v1/images/edits", {
         method: "POST",
@@ -307,6 +349,7 @@ describe("count and body validation", () => {
       const formData = new FormData();
       formData.append("image", pngFile("Hello"));
       formData.append("prompt", "p");
+      formData.append("model", "@cf/stabilityai/stable-diffusion-xl-base-1.0");
       formData.append(key, "   ");
       const request = new Request("https://worker.test/v1/images/edits", {
         method: "POST",
@@ -322,6 +365,7 @@ describe("count and body validation", () => {
     const request = jsonRequest("/v1/images/edits", {
       image: ["aGVsbG8=", 42],
       prompt: "p",
+      model: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
     });
 
     await expect(collectInputImages(request, EDIT_CONFIG)).rejects.toThrow(

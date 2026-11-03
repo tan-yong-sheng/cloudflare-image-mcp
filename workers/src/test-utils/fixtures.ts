@@ -81,7 +81,7 @@ export function firstProviderBody(mock: {
 }
 
 /** Minimal in-memory R2Bucket: put/get round-trip, delete/list for cleanup. */
-function fakeBucket(): R2Bucket {
+export function fakeBucket(): R2Bucket {
   const store = new Map<
     string,
     { body: ArrayBuffer; httpMetadata?: any; customMetadata?: any }

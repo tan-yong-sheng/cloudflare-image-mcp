@@ -23,7 +23,7 @@ function stubContext(): ToolsContext {
   const generator = {
     getModelConfig: (id: string): ModelConfig | null =>
       MODEL_CONFIGS[id] ?? null,
-    listModels: () =>
+    listModels: (options?: { servableOnly?: boolean }) =>
       Object.values(MODEL_CONFIGS).map((config) => ({
         id: config.id,
         name: config.name,
@@ -216,6 +216,20 @@ describe("handleListModels", () => {
     };
     expect(output.models).toHaveLength(Object.keys(MODEL_CONFIGS).length);
     expect(output.next_step).toContain("describe_model");
+  });
+
+  test("servableOnly option is passed through to generator", async () => {
+    const ctx = stubContext();
+    // Stub listModels to track the call
+    const originalListModels = ctx.generator.listModels;
+    let passedOptions: { servableOnly?: boolean } | undefined;
+    ctx.generator.listModels = (options?: { servableOnly?: boolean }) => {
+      passedOptions = options;
+      return originalListModels(options);
+    };
+    await handleListModels(ctx);
+    // handleListModels should call with servableOnly: true
+    expect(passedOptions).toEqual({ servableOnly: true });
   });
 });
 

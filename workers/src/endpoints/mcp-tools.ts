@@ -340,7 +340,15 @@ export async function handleRunModel(
 
   const result = await executeRunRequest(ctx.generator, resolved.value);
   if (!result.success) {
-    return error(`Error: ${result.error}`);
+    // ADR-004 / #159: include error code and servable models
+    let errorMsg = `Error: ${result.error}`;
+    if (result.errorCode) {
+      errorMsg += ` (code: ${result.errorCode})`;
+    }
+    if (result.errorCode === "provider_unavailable" && result.servableModels) {
+      errorMsg += `\n\nServable models: ${result.servableModels.join(", ")}`;
+    }
+    return error(errorMsg);
   }
 
   return ok(
@@ -350,9 +358,10 @@ export async function handleRunModel(
 
 /**
  * Handle list_models tool call.
+ * ADR-004 / #160: returns servable subset only
  */
 export async function handleListModels(ctx: ToolsContext): Promise<ToolResult> {
-  const models = ctx.generator.listModels();
+  const models = ctx.generator.listModels({ servableOnly: true });
 
   const sortedModels = [...models].sort((a, b) => {
     const byProvider = a.provider.localeCompare(b.provider);

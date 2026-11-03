@@ -66,6 +66,16 @@ const STUB_MODEL = {
   available: true,
 };
 
+/** The playground's default model (matches client constant). */
+const PLAYGROUND_DEFAULT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
+/** A second synthetic model for testing default selection. */
+const STUB_MODEL_2 = {
+  ...STUB_MODEL,
+  id: "e2e-stub-model-2",
+  name: "E2E Stub 2",
+};
+
 function apiKey(): string {
   // A target without API_KEYS accepts any key, so the placeholder is
   // fine there; the login still has to succeed for the journey to run.
@@ -279,6 +289,42 @@ test.describe("Playground", () => {
     await expect(page.locator("#noKeysWarning")).toBeVisible();
     await expect(page.locator("#model")).toBeDisabled();
     await expect(page.locator("#submitButton")).toBeDisabled();
+  });
+
+  test("preselects the playground default when servable (#162)", async ({
+    page,
+  }) => {
+    // Stub the registry with the playground default model
+    await page.route("**/api/internal/models", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ ...STUB_MODEL, id: PLAYGROUND_DEFAULT_MODEL }]),
+      });
+    });
+    await signIn(page);
+
+    const picker = page.locator("#model");
+    await expect(picker).toBeEnabled({ timeout: 15000 });
+    expect(await picker.inputValue()).toBe(PLAYGROUND_DEFAULT_MODEL);
+  });
+
+  test("falls back to first servable when default is not servable (#162)", async ({
+    page,
+  }) => {
+    // Stub the registry without the playground default
+    await page.route("**/api/internal/models", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([STUB_MODEL]),
+      });
+    });
+    await signIn(page);
+
+    const picker = page.locator("#model");
+    await expect(picker).toBeEnabled({ timeout: 15000 });
+    expect(await picker.inputValue()).toBe(STUB_MODEL.id);
   });
 });
 

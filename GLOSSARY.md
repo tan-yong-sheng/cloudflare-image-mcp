@@ -51,3 +51,35 @@ The single seam owning caller-controls to Cloudflare-payload mapping:
 `ParamParser.buildPayload` returns the payload plus the list of
 caller-supplied keys the model drops. Payloads stay byte-identical to
 the legacy mapping; the dropped list is observability for UI and logs.
+
+## Provider credential
+
+The upstream secret the Worker presents to an image provider — a Cloudflare
+account token, or an Agnes key. Stored in D1 as a sealed envelope in
+`credential_versions` and opened per request with `PROVIDER_DATA_KEY`; it never
+reaches a client. Distinct from the caller key a client sends us, and from the
+management key that gates `/api/admin/*`.
+
+## Servable
+
+A provider credential is servable when its envelope opens with the current data
+key and its row is enabled, so the pool can hand it out. A model is servable when
+the provider serving it has at least one servable credential.
+
+_Avoid_: "configured". A provider row existing is not the same as a credential
+being servable, and collapsing the two is what made "No AI provider credentials
+configured" unreadable — the message named a transport while the real state was
+"no credential can be opened".
+
+## Parked
+
+A credential row that exists but cannot be served: its envelope will not open, or
+the operator disabled it. A parked row stays visible to the operator and is never
+picked for a request.
+
+## Default model
+
+A surface-owned preselection when the caller has not yet chosen a model. After
+ADR-004 / #158, `/v1/images/*` never falls back: omitting `model` is
+`model_required`. The only remaining default is the playground preselect
+(#162), which is client-owned and never consulted by the HTTP API.
