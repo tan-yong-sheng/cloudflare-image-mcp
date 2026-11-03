@@ -18,7 +18,8 @@ export { MODEL_CONFIGS };
 // enabled defaults true (absent = exposed); alias offers a short id;
 // excludedScopes is stored for R1/D1 overrides (no scope evaluation exists
 // yet). Later D1 exposure rows reuse these exact field names.
-export const DEFAULT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+// DEFAULT_MODEL was removed by #158 / ADR-004: image routes require an
+// explicit model; the playground preselect is owned by the client (#162).
 
 export function isModelExposed(config: ModelConfig): boolean {
   return config.exposure?.enabled ?? true;
