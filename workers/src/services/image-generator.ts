@@ -569,12 +569,13 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Get list of all available models
+   * Get list of available models
+   * ADR-004 / #160: when servableOnly=true, filter to models with servable credentials
    */
   // Projection of the config registry (C3): the registry owns model
   // knowledge (its listModels applies the exposure filter); this map
   // keeps the OpenAI/MCP caller shape byte-identical.
-  listModels(): Array<{
+  listModels(options?: { servableOnly?: boolean }): Array<{
     id: string;
     name: string;
     description: string;
@@ -583,17 +584,29 @@ export class ImageGeneratorService {
     taskTypes: string[];
     editCapabilities?: ModelConfig["editCapabilities"];
   }> {
-    return listRegistryModels(Object.fromEntries(this.models)).map(
-      (config) => ({
-        id: config.id,
-        name: config.name,
-        description: config.description,
-        provider: config.provider,
-        supportedSizes: config.supportedSizes,
-        taskTypes: config.taskTypes,
-        editCapabilities: config.editCapabilities,
-      })
-    );
+    const models = listRegistryModels(Object.fromEntries(this.models));
+    if (options?.servableOnly && this.pools) {
+      return models
+        .filter((config) => isModelServable(config, this.pools!))
+        .map((config) => ({
+          id: config.id,
+          name: config.name,
+          description: config.description,
+          provider: config.provider,
+          supportedSizes: config.supportedSizes,
+          taskTypes: config.taskTypes,
+          editCapabilities: config.editCapabilities,
+        }));
+    }
+    return models.map((config) => ({
+      id: config.id,
+      name: config.name,
+      description: config.description,
+      provider: config.provider,
+      supportedSizes: config.supportedSizes,
+      taskTypes: config.taskTypes,
+      editCapabilities: config.editCapabilities,
+    }));
   }
 
   /**

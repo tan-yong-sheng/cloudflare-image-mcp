@@ -358,9 +358,10 @@ export async function handleRunModel(
 
 /**
  * Handle list_models tool call.
+ * ADR-004 / #160: returns servable subset only
  */
 export async function handleListModels(ctx: ToolsContext): Promise<ToolResult> {
-  const models = ctx.generator.listModels();
+  const models = ctx.generator.listModels({ servableOnly: true });
 
   const sortedModels = [...models].sort((a, b) => {
     const byProvider = a.provider.localeCompare(b.provider);

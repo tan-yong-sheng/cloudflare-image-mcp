@@ -363,9 +363,10 @@ export class OpenAIEndpoint {
   /**
    * GET /v1/models
    * List available models
+   * ADR-004 / #160: public API returns servable subset only
    */
   private handleListModels(): Response {
-    const models = this.generator.listModels();
+    const models = this.generator.listModels({ servableOnly: true });
 
     return new Response(
       JSON.stringify({

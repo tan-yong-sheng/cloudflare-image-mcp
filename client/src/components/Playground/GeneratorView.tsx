@@ -22,6 +22,15 @@ import {
 /** The inference budget, matching the legacy page's abort timer. */
 const GENERATION_TIMEOUT_MS = 120_000;
 
+/**
+ * The playground's default model.
+ *
+ * This is an explicit choice for the playground only; it does not affect
+ * the HTTP API. If this model is not servable, the playground falls back to
+ * the first servable model instead.
+ */
+const PLAYGROUND_DEFAULT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
 /** The server said the bearer key is no longer accepted. */
 class SessionExpired extends Error {
   constructor() {
@@ -115,10 +124,14 @@ export function GeneratorView() {
   );
 
   // The operator's choice survives a refetch; it only moves if the model
-  // is gone from the list.
+  // is gone from the list. If the operator has no choice yet, we preselect
+  // the playground default if it is servable, otherwise the first servable
+  // model.
   const modelId = selectable.some((model) => model.id === chosenModelId)
     ? chosenModelId
-    : (selectable[0]?.id ?? "");
+    : selectable.some((model) => model.id === PLAYGROUND_DEFAULT_MODEL)
+      ? PLAYGROUND_DEFAULT_MODEL
+      : (selectable[0]?.id ?? "");
   const model = selectable.find((entry) => entry.id === modelId) ?? null;
   const controls = deriveModelControls(model, overrides);
 
@@ -321,7 +334,7 @@ export function GeneratorView() {
               unavailableReason={
                 !credentialsConfigured
                   ? "No API keys configured"
-                  : "No model available for the configured keys"
+                  : "No servable models for the configured credentials"
               }
               error={
                 models.isError

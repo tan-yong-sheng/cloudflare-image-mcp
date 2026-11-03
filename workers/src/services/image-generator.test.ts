@@ -22,6 +22,7 @@ import {
 } from "./generation-adapters.js";
 import type { Env, ModelConfig } from "../types.js";
 import { listModels as listRegistryModels } from "../config/models.js";
+import { fakePools } from "../test-utils/fixtures.js";
 
 const TEXT_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const IMG2IMG_MODEL = "@cf/lykon/dreamshaper-8-lcm";
@@ -148,6 +149,30 @@ describe("listModels delegation (C3)", () => {
         cfg.editCapabilities ?? null
       );
     }
+  });
+
+  test("servableOnly filters to models with servable credentials", () => {
+    const { generator } = setupWithPools(fakePools());
+    // All models are servable in the default test pool
+    const allModels = generator.listModels();
+    const servableModels = generator.listModels({ servableOnly: true });
+    expect(servableModels).toHaveLength(allModels.length);
+
+    // Empty pool: no servable models
+    const emptyPools = new ProviderPools([]);
+    const { transport, store } = setup();
+    const generatorWithEmptyPool = new ImageGeneratorService(
+      {
+        CLOUDFLARE_ACCOUNT_ID: "account",
+        CLOUDFLARE_API_TOKEN: "token",
+        IMAGE_EXPIRY_HOURS: "24",
+        IMAGE_BUCKET: {},
+      } as unknown as Env,
+      { transport, store, pools: emptyPools }
+    );
+    expect(
+      generatorWithEmptyPool.listModels({ servableOnly: true })
+    ).toHaveLength(0);
   });
 });
 

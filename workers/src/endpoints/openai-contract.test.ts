@@ -16,7 +16,9 @@ import {
   fakePools,
   firstProviderBody,
   stubInference,
+  fakeBucket,
 } from "../test-utils/fixtures.js";
+import { ProviderPools } from "../services/provider-pools.js";
 
 const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
 const SDXL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
@@ -522,6 +524,31 @@ describe("GET /v1/models contract", () => {
     expect(body.data.length).toBeGreaterThan(0);
     expect(body.data[0]).toHaveProperty("id");
     expect(body.data[0].object).toBe("model");
+  });
+
+  test("list returns servable subset only (ADR-004 / #160)", async () => {
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+    const res = await endpoint.handle(new Request(`${ORIGIN}/v1/models`));
+    const body = (await res.json()) as any;
+    // With servable pool, should return all servable models
+    expect(body.data.length).toBeGreaterThan(0);
+  });
+
+  test("list returns empty when no servable credentials", async () => {
+    // Use the fixtures approach to create empty pools
+    const emptyPools = new ProviderPools([]);
+    const endpoint = new OpenAIEndpoint(
+      {
+        IMAGE_BUCKET: fakeBucket(),
+        CLOUDFLARE_API_TOKEN: "test-token",
+        CLOUDFLARE_ACCOUNT_ID: "test-account",
+        IMAGE_EXPIRY_HOURS: "24",
+      },
+      { pools: emptyPools }
+    );
+    const res = await endpoint.handle(new Request(`${ORIGIN}/v1/models`));
+    const body = (await res.json()) as any;
+    expect(body.data).toHaveLength(0);
   });
 
   // #62: deprecated img2img model is delisted (provider 403/5018 +
