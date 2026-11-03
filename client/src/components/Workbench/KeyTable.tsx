@@ -38,6 +38,12 @@ function maskAccountId(accountId: string): string {
  *
  * `data-key-id` is the row's stable anchor: the account id and the hint are
  * both masked or absent, so neither can identify a row to a test or a tool.
+ *
+ * A parked key reads muted rather than faded. An opacity on the row
+ * composites the text below the AA bar (3.69:1 for the name cell in the
+ * light theme) while the muted colour token stays at 7.18:1 light and
+ * 9.88:1 dark; the version badge drops its own fade for the same reason
+ * (2.81:1 over a muted row).
  */
 export function KeyTable({
   family,
@@ -68,14 +74,16 @@ export function KeyTable({
       </div>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-muted border-b border-gray-800">
+          <tr className="text-left opacity-60 border-b border-gray-800">
             <th id="adminKeysHead" className="p-3 font-medium">
               Key
             </th>
             {hasAccount ? (
               <th className="p-3 font-medium">Account ID</th>
             ) : null}
-            <th className="p-3 font-medium text-right">Actions</th>
+            <th className="p-3 font-medium">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody id="adminKeys">
@@ -85,13 +93,19 @@ export function KeyTable({
               <tr
                 key={key.id}
                 data-key-id={key.id}
-                style={key.enabled ? undefined : { opacity: ".55" }}
+                className={key.enabled ? undefined : "row-muted"}
               >
                 <td className="p-3 font-mono text-sm">
                   {key.maskedKey || "—"}
                   {key.activeVersion !== null &&
                   key.activeVersion !== undefined ? (
-                    <span className="text-muted text-xs ml-2">
+                    // A parked row is already muted; fading the badge on top of
+                    // that would put the version under 4.5:1 in the light theme.
+                    <span
+                      className={
+                        key.enabled ? "opacity-60 text-xs ml-2" : "text-xs ml-2"
+                      }
+                    >
                       v{key.activeVersion}
                     </span>
                   ) : null}
@@ -104,8 +118,8 @@ export function KeyTable({
                     {key.accountId ? maskAccountId(key.accountId) : "—"}
                   </td>
                 ) : null}
-                <td className="p-3 whitespace-nowrap text-right">
-                  <span className="inline-flex items-center gap-3">
+                <td className="p-3 whitespace-nowrap">
+                  <span className="inline-flex gap-2 items-center">
                     <label
                       className="tswitch"
                       title={(key.enabled ? "Disable " : "Enable ") + key.label}
@@ -128,52 +142,44 @@ export function KeyTable({
                       </span>
                     </label>
 
-                    <span
-                      className="inline-block h-4 w-px"
-                      style={{ backgroundColor: "var(--border)" }}
-                      aria-hidden="true"
-                    />
-
-                    <span className="inline-flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm-icon text-xs"
-                        aria-label={"Edit key #" + key.id}
-                        title={"Edit key #" + key.id}
-                        disabled={pending}
-                        onClick={() => onEdit(key)}
-                      >
-                        <i className="fa-solid fa-pen" />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm-icon text-xs"
-                        aria-label={"Delete key #" + key.id}
-                        title={"Delete key #" + key.id}
-                        disabled={pending}
-                        onClick={() => {
-                          const who =
-                            key.maskedKey ||
-                            key.accountId ||
-                            key.label ||
-                            "#" + key.id;
-                          if (
-                            !window.confirm(
-                              "Delete key #" +
-                                key.id +
-                                " (" +
-                                who +
-                                ")? This cannot be undone."
-                            )
-                          ) {
-                            return;
-                          }
-                          onDelete(key);
-                        }}
-                      >
-                        <i className="fa-solid fa-trash" />
-                      </button>
-                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary text-xs py-1 px-2"
+                      aria-label={"Edit key #" + key.id}
+                      title={"Edit key #" + key.id}
+                      disabled={pending}
+                      onClick={() => onEdit(key)}
+                    >
+                      <i className="fa-solid fa-pen" />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger text-xs py-1 px-2"
+                      aria-label={"Delete key #" + key.id}
+                      title={"Delete key #" + key.id}
+                      disabled={pending}
+                      onClick={() => {
+                        const who =
+                          key.maskedKey ||
+                          key.accountId ||
+                          key.label ||
+                          "#" + key.id;
+                        if (
+                          !window.confirm(
+                            "Delete key #" +
+                              key.id +
+                              " (" +
+                              who +
+                              ")? This cannot be undone."
+                          )
+                        ) {
+                          return;
+                        }
+                        onDelete(key);
+                      }}
+                    >
+                      <i className="fa-solid fa-trash" />
+                    </button>
                   </span>
                 </td>
               </tr>
@@ -183,7 +189,7 @@ export function KeyTable({
       </table>
       <p
         id="adminEmpty"
-        className={`text-sm text-muted text-center py-10${
+        className={`text-sm opacity-60 text-center py-10${
           rows.length > 0 ? " hidden" : ""
         }`}
       >

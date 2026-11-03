@@ -1014,4 +1014,35 @@ describe("the provider credentials workbench", () => {
       "hidden"
     );
   });
+
+  it("parks a disabled key with the muted class instead of opacity", async () => {
+    // The contrast fix (#132) parked a disabled key with the muted colour
+    // token at full opacity instead of fading the row, because the
+    // opacity composite would put the text under the AA bar.
+    // The HEALTH fixture already includes a disabled key (key-2) in the Agnes provider.
+    stubApi((route) =>
+      route.path === "/api/admin/health" && route.method === "GET"
+        ? jsonResponse(true, HEALTH)
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    // Select the Agnes provider (key-2 belongs to Agnes)
+    await user.click(screen.getByRole("button", { name: /Agnes/i }));
+
+    // Wait for the key row to render
+    await waitFor(() => {
+      const row = document.querySelector('[data-key-id="2"]');
+      expect(row).not.toBeNull();
+    });
+
+    const row = document.querySelector('[data-key-id="2"]');
+    const checkbox = row?.querySelector(
+      'input[type="checkbox"]'
+    ) as HTMLInputElement;
+    expect(checkbox?.checked).toBe(false);
+    expect(row?.className).toContain("row-muted");
+  });
 });
