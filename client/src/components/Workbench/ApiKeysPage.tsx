@@ -40,6 +40,31 @@ export function ApiKeysPage() {
   const { adminKey, unlock, lock } = useAdminKey();
   const { logout } = useAuth();
 
+  // Every piece of one-shot secret material this page holds. Teardown
+  // clears all of it in one place so no session-ending path can forget a
+  // field (review M2: the 401 and 403 paths used to lock without clearing).
+  const [created, setCreated] = useState<{
+    kind: "created" | "rotated";
+    name: string;
+    secret: string;
+    /** Set when rotation could not revoke the old secret. */
+    warning?: string;
+  } | null>(null);
+  const [rotating, setRotating] = useState<AdminCallerKey | null>(null);
+  const [deleting, setDeleting] = useState<AdminCallerKey | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const clearSecretState = useCallback(() => {
+    // Synchronous invalidation first: the state updates below are applied
+    // on the next render, and a request that resolves before then must
+    // already see the session as over.
+    unlockedRef.current = false;
+    setCreated(null);
+    setRotating(null);
+    setDeleting(null);
+    setNotice(null);
+  }, []);
+
   // A refused read is a refused session whichever page hit it: the
   // bearer key is no longer accepted, so the session is over and the
   // management key must not outlive it. A refused gate (403) means the
@@ -48,7 +73,8 @@ export function ApiKeysPage() {
   const endRefusedSession = useCallback(() => {
     logout(SESSION_EXPIRED_MESSAGE);
     lock();
-  }, [lock, logout]);
+    clearSecretState();
+  }, [clearSecretState, lock, logout]);
 
   const callerKeys = useCallerKeys(session);
   const createKey = useCreateCallerKey(session, endRefusedSession);
@@ -59,23 +85,20 @@ export function ApiKeysPage() {
 
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
-  // The one-shot secret from the last create or rotate, held in component
-  // state so the operator can actually copy it. Locking tears it down
-  // with the session; nothing ever writes it to storage.
-  const [created, setCreated] = useState<{
-    kind: "created" | "rotated";
-    name: string;
-    secret: string;
-  } | null>(null);
-  // The row the rotate confirmation is open for. The request is only sent
-  // from the dialog's confirm button.
-  const [rotating, setRotating] = useState<AdminCallerKey | null>(null);
-  // The row the delete confirmation is open for — same rule.
-  const [deleting, setDeleting] = useState<AdminCallerKey | null>(null);
-  // The line that carries a mutation's warning: the answer that says the
-  // mutation did NOT do what it appears to do (#128).
-  const [notice, setNotice] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
+  // Whether the panel is unlocked right now, read from an async
+  // continuation that may outlive the render it started in (review M2:
+  // a create/rotate that resolves after a lock must not put the plaintext
+  // back into state).
+  // Read by async continuations that may outlive the render they started
+  // in. Teardown sets it false SYNCHRONOUSLY: `lock()` only schedules a
+  // state update, so a promise resolving in that window would otherwise
+  // pass the guard and put the plaintext back after the teardown
+  // (review round 2).
+  const unlockedRef = useRef(false);
+  useEffect(() => {
+    unlockedRef.current = adminKey !== null;
+  }, [adminKey]);
 
   // A notice fades on its own, the way the workbench's notice does.
   useEffect(() => {
@@ -100,11 +123,18 @@ export function ApiKeysPage() {
     }
     if (refusal?.status === 403) {
       lock();
+      clearSecretState();
       setGateError(gateErrorFor(refusal));
       return;
     }
     setPanelError(failure instanceof Error ? failure.message : String(failure));
-  }, [callerKeys.isError, callerKeys.error, endRefusedSession, lock]);
+  }, [
+    callerKeys.isError,
+    callerKeys.error,
+    clearSecretState,
+    endRefusedSession,
+    lock,
+  ]);
 
   const unlocked = adminKey !== null;
 
@@ -115,10 +145,7 @@ export function ApiKeysPage() {
     lock();
     setGateError(null);
     setPanelError(null);
-    setCreated(null);
-    setRotating(null);
-    setDeleting(null);
-    setNotice(null);
+    clearSecretState();
   };
 
   return (
@@ -187,68 +214,91 @@ export function ApiKeysPage() {
         id="apiKeysPanel"
         className={`space-y-4${unlocked ? "" : " hidden"}`}
       >
-        <CallerKeyCreate
-          busy={createKey.isPending}
-          created={created}
-          onDismiss={() => setCreated(null)}
-          onSubmit={async (values) => {
-            const result = await createKey.mutateAsync(values);
-            setCreated({
-              kind: "created",
-              name: result.key.name,
-              secret: result.secret,
-            });
-          }}
-        />
-        {notice ? (
-          <p
-            id="apiKeysNotice"
-            role="status"
-            className="text-sm p-3 rounded bg-amber-900/30 text-amber-300 border border-amber-700"
-          >
-            {notice}
-          </p>
-        ) : null}
-        <CallerKeyTable
-          keys={callerKeys.data?.keys ?? []}
-          loading={callerKeys.isPending}
-          failed={callerKeys.isError}
-          onRotate={(key) => setRotating(key)}
-          onToggle={(key, _enabled) => {
-            setPanelError(null);
-            toggleKey.mutate(
-              { keyId: key.id },
-              {
-                onSuccess: (result) => {
-                  if (result.warning) setNotice(result.warning);
-                },
-                onError: (cause) =>
+        {/*
+          Mounted only while unlocked (review M2). The panel is hidden by
+          class when locked, and a hidden-but-mounted form kept the
+          operator's typed secret in its own state across the session
+          boundary — visible again to whoever unlocked next. Unmounting is
+          the teardown: the child's state cannot outlive the session.
+        */}
+        {unlocked ? (
+          <>
+            <CallerKeyCreate
+              busy={createKey.isPending}
+              created={created}
+              onDismiss={() => setCreated(null)}
+              onSubmit={async (values) => {
+                const result = await createKey.mutateAsync(values);
+                // The session may have ended while the request was open: a
+                // locked panel must not receive the plaintext (review M2).
+                if (!unlockedRef.current) return;
+                setCreated({
+                  kind: "created",
+                  name: result.key.name,
+                  secret: result.secret,
+                });
+              }}
+            />
+            {notice ? (
+              <p
+                id="apiKeysNotice"
+                role="status"
+                className="text-sm p-3 rounded bg-amber-900/30 text-amber-300 border border-amber-700"
+              >
+                {notice}
+              </p>
+            ) : null}
+            <CallerKeyTable
+              keys={callerKeys.data?.keys ?? []}
+              loading={callerKeys.isPending}
+              failed={callerKeys.isError}
+              onRotate={(key) => {
+                // One dialog at a time: both instances hardcode the same DOM
+                // ids, so a second open would duplicate them (review F5).
+                setDeleting(null);
+                setRotating(key);
+              }}
+              onToggle={(key, _enabled) => {
+                setPanelError(null);
+                toggleKey.mutate(
+                  { keyId: key.id },
+                  {
+                    onSuccess: (result) => {
+                      if (result.warning) setNotice(result.warning);
+                    },
+                    onError: (cause) =>
+                      setPanelError(
+                        cause instanceof Error ? cause.message : String(cause)
+                      ),
+                  }
+                );
+              }}
+              onRenameSubmit={async (key, name) => {
+                setPanelError(null);
+                try {
+                  await renameKey.mutateAsync({ keyId: key.id, name });
+                } catch (cause) {
                   setPanelError(
                     cause instanceof Error ? cause.message : String(cause)
-                  ),
-              }
-            );
-          }}
-          onRenameSubmit={async (key, name) => {
-            setPanelError(null);
-            try {
-              await renameKey.mutateAsync({ keyId: key.id, name });
-            } catch (cause) {
-              setPanelError(
-                cause instanceof Error ? cause.message : String(cause)
-              );
-              throw cause;
-            }
-          }}
-          onDelete={(key) => setDeleting(key)}
-          pendingIds={[
-            rotating?.id,
-            deleting?.id,
-            ...(toggleKey.isPending ? [toggleKey.variables?.keyId] : []),
-            ...(renameKey.isPending ? [renameKey.variables?.keyId] : []),
-            ...(deleteKey.isPending ? [deleteKey.variables?.keyId] : []),
-          ].filter((id): id is number => typeof id === "number")}
-        />
+                  );
+                  throw cause;
+                }
+              }}
+              onDelete={(key) => {
+                setRotating(null);
+                setDeleting(key);
+              }}
+              pendingIds={[
+                rotating?.id,
+                deleting?.id,
+                ...(rotateKey.isPending ? [rotateKey.variables?.keyId] : []),
+                ...(toggleKey.isPending ? [toggleKey.variables?.keyId] : []),
+                ...(renameKey.isPending ? [renameKey.variables?.keyId] : []),
+                ...(deleteKey.isPending ? [deleteKey.variables?.keyId] : []),
+              ].filter((id): id is number => typeof id === "number")}
+            />
+          </>
+        ) : null}
       </div>
 
       <ConfirmDialog
@@ -285,7 +335,7 @@ export function ApiKeysPage() {
             ? {
                 title: `Rotate “${rotating.name}”?`,
                 message:
-                  "Clients using this key will need the new key. The old secret stops working the moment the rotation lands.",
+                  "Clients using this key will need the new key. The old secret stops working when the rotation lands — unless that same secret is also set in API_KEYS, in which case it keeps working and you are told so afterwards.",
               }
             : null
         }
@@ -296,12 +346,14 @@ export function ApiKeysPage() {
           if (!rotating) return;
           try {
             const result = await rotateKey.mutateAsync({ keyId: rotating.id });
+            setRotating(null);
+            if (!unlockedRef.current) return;
             setCreated({
               kind: "rotated",
               name: result.key.name,
               secret: result.secret,
+              ...(result.warning ? { warning: result.warning } : {}),
             });
-            setRotating(null);
           } catch (cause) {
             setPanelError(
               cause instanceof Error ? cause.message : String(cause)

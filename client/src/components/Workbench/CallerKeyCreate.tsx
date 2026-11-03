@@ -18,6 +18,12 @@ export interface CallerKeyCreateProps {
     kind: "created" | "rotated";
     name: string;
     secret: string;
+    /**
+     * Set when the rotation could not revoke the old secret because that
+     * same secret is also an API_KEYS value. The banner must not keep
+     * claiming the old one is dead.
+     */
+    warning?: string;
   } | null;
   /** Hides the one-shot banner. The secret is gone from the client. */
   onDismiss: () => void;
@@ -104,8 +110,10 @@ export function CallerKeyCreate({
           <p className="text-sm font-medium text-green-300">
             {created.kind === "rotated" ? (
               <>
-                “{created.name}” rotated. Copy the new secret now — the old one
-                stopped working.
+                “{created.name}” rotated. Copy the new secret now —{" "}
+                {created.warning
+                  ? "but the old one still works, see below."
+                  : "the old one stopped working."}
               </>
             ) : (
               <>
@@ -114,6 +122,15 @@ export function CallerKeyCreate({
               </>
             )}
           </p>
+          {created.warning ? (
+            <p
+              id="callerKeyRotationWarning"
+              role="alert"
+              className="text-sm mt-2 p-2 rounded bg-amber-900/30 text-amber-300 border border-amber-700"
+            >
+              {created.warning}
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3 mt-2">
             <code id="callerKeySecret" className="font-mono text-sm break-all">
               {created.secret}

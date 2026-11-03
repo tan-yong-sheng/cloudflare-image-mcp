@@ -308,7 +308,7 @@ export async function handleAdmin(
   deps?: AdminDeps
 ): Promise<Response | null> {
   if (!path.startsWith("/api/admin/")) return null;
-  if (!env.API_KEYS) {
+  if (!hasConfiguredEnvKeys(env)) {
     // Fail closed, and say why: the presented management key is not the
     // problem, so "Invalid admin key" would send the operator hunting for a
     // key that cannot work here. Its own code lets the workbench show this
@@ -717,13 +717,28 @@ async function handleRotateCallerKey(
   }
   const pepper = await deriveCallerPepper(dataKey);
   try {
-    const rotated = await rotateCallerKey(store, keyId, (secret) =>
-      callerKeyVerifier(pepper, secret)
+    const rotated = await rotateCallerKey(
+      store,
+      keyId,
+      (secret) => callerKeyVerifier(pepper, secret),
+      callerEnvMirror(env, pepper)
     );
     return json(rotated);
   } catch (error) {
     return storeError(error);
   }
+}
+
+/**
+ * Whether the deploy carries at least one usable API_KEYS value.
+ *
+ * Parsed exactly the way `authenticateRequest` parses it — split, trim,
+ * drop empties — so `API_KEYS=","` or whitespace counts as "not
+ * configured". A raw truthiness check would claim env callers still work
+ * when nothing can authenticate (review round 2).
+ */
+export function hasConfiguredEnvKeys(env: Env): boolean {
+  return (env.API_KEYS ?? "").split(",").some((key) => key.trim().length > 0);
 }
 
 /**
@@ -774,7 +789,8 @@ async function handleToggleCallerKey(
     const result = await toggleCallerKey(
       store,
       keyId,
-      callerEnvMirror(env, pepper)
+      callerEnvMirror(env, pepper),
+      hasConfiguredEnvKeys(env)
     );
     return json(result);
   } catch (error) {
@@ -838,7 +854,8 @@ async function handleDeleteCallerKey(
     const result = await deleteCallerKey(
       store,
       keyId,
-      callerEnvMirror(env, pepper)
+      callerEnvMirror(env, pepper),
+      hasConfiguredEnvKeys(env)
     );
     return json(result);
   } catch (error) {

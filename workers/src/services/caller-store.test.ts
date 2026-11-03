@@ -240,7 +240,9 @@ describe("createCallerKey against the real migrations (S2)", () => {
     });
     expect(created.secret).toBe("op-secret-1");
     expect(created.key.prefix).toBe("");
-    expect(created.key.suffix).toBe("et-1");
+    // 11 characters is below the hint threshold: a last-4 would publish 36%
+    // of the secret, which 0006 and maskCallerKey both promise it will not.
+    expect(created.key.suffix).toBe("");
   });
 
   test("a blank name defaults to Key N, counting existing rows", async () => {
@@ -552,7 +554,9 @@ describe("caller-key mutations (#128) against the real migrations", () => {
 
     const off = await toggleCallerKey(store, created.key.id);
     expect(off.key.enabled).toBe(false);
-    expect(off.warning).toBeUndefined();
+    // It was the only enabled key and the deploy has no API_KEYS, so the
+    // gate is now open — that is a warning, not silence (review F3).
+    expect(off.warning).toContain("accept unauthenticated callers");
     const on = await toggleCallerKey(store, created.key.id);
     expect(on.key.enabled).toBe(true);
     expect(auditRows(db, "caller_key_toggle")).toHaveLength(2);
@@ -580,8 +584,11 @@ describe("caller-key mutations (#128) against the real migrations", () => {
     const on = await toggleCallerKey(store, created.key.id, mirror);
     expect(on.warning).toBeUndefined();
 
+    // The third flip disables the only key again, this time with no env
+    // mirror: it opens the gate, so it must warn. The old silence here was
+    // the fail-open the review found (F3).
     const plain = await toggleCallerKey(store, created.key.id);
-    expect(plain.warning).toBeUndefined();
+    expect(plain.warning).toContain("accept unauthenticated callers");
   });
 
   test("rename moves the name, keeps the credential, audits once", async () => {
@@ -706,5 +713,255 @@ describe("caller-key mutations (#128) against the real migrations", () => {
     ).toEqual({
       n: 0,
     });
+  });
+});
+
+// ============================================================================
+// Review-round fixes (M1, M5, M7) - regression tests
+// ============================================================================
+// Each test pins the exact failure the review reproduced, so the defect
+// cannot come back silently.
+
+/** One enabled key with id 1, so a racing commit has something to lose. */
+function seedOneKey(db: DatabaseSync): void {
+  db.prepare(
+    "INSERT INTO caller_keys (id, name, secret_hash, prefix, suffix, enabled) " +
+      "VALUES (1, 'CI', 'h', 'p', 'a1b2', 1)"
+  ).run();
+}
+
+/** A store whose first write hits a row that vanished after the read. */
+function vanishingD1(db: DatabaseSync): AdminD1 {
+  const base = writableD1(db);
+  return {
+    prepare: base.prepare,
+    commit: async (writes) => {
+      // The race: another request deletes the key between read and commit.
+      db.prepare("DELETE FROM caller_keys WHERE id = 1").run();
+      return base.commit(writes);
+    },
+  };
+}
+
+function auditCount(db: DatabaseSync, action: string): number {
+  return Number(
+    (
+      db
+        .prepare("SELECT COUNT(*) AS n FROM admin_audit WHERE action = ?")
+        .get(action) as { n: number }
+    ).n
+  );
+}
+
+describe("review fixes: default name (M1)", () => {
+  test("a key already called 'Key 2' does not make the next blank create collide", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    await createCallerKey(store, testVerifier(), { name: "Key 2" });
+
+    // Before the fix this computed the row count (1) and picked "Key 2"
+    // again, so an unnamed create answered 409.
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 3");
+  });
+
+  test("the default still starts at Key 1 on an empty table", async () => {
+    const db = freshDb();
+    const created = await createCallerKey(writableD1(db), testVerifier(), {});
+    expect(created.key.name).toBe("Key 1");
+  });
+
+  test("a non-numeric custom name does not affect the default", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    await createCallerKey(store, testVerifier(), { name: "Laptop" });
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 1");
+  });
+});
+
+describe("review fixes: ghost mutations write no audit row (M5)", () => {
+  test("rotate on a vanished row answers 404 and records nothing", async () => {
+    const db = freshDb();
+    seedOneKey(db);
+    const failure = await rotateCallerKey(
+      vanishingD1(db),
+      1,
+      testVerifier()
+    ).catch((error: unknown) => error);
+    expect((failure as AdminStoreError).status).toBe(404);
+    expect(auditCount(db, "caller_key_rotate")).toBe(0);
+  });
+
+  test("toggle on a vanished row answers 404 and records nothing", async () => {
+    const db = freshDb();
+    seedOneKey(db);
+    const failure = await toggleCallerKey(vanishingD1(db), 1).catch(
+      (error: unknown) => error
+    );
+    expect((failure as AdminStoreError).status).toBe(404);
+    expect(auditCount(db, "caller_key_toggle")).toBe(0);
+  });
+
+  test("rename on a vanished row answers 404 and records nothing", async () => {
+    const db = freshDb();
+    seedOneKey(db);
+    const failure = await renameCallerKey(vanishingD1(db), 1, "renamed").catch(
+      (error: unknown) => error
+    );
+    expect((failure as AdminStoreError).status).toBe(404);
+    expect(auditCount(db, "caller_key_rename")).toBe(0);
+  });
+
+  test("a normal mutation still records its audit row", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    await toggleCallerKey(store, created.key.id);
+    expect(auditCount(db, "caller_key_toggle")).toBe(1);
+  });
+});
+
+describe("review fixes: lockout warning matches the deploy (M7)", () => {
+  test("with API_KEYS configured the warning names the surviving callers", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+
+    const result = await deleteCallerKey(
+      store,
+      created.key.id,
+      undefined,
+      true
+    );
+    expect(result.warning).toContain("API_KEYS values still can");
+    expect(result.warning).not.toContain("reject every caller");
+  });
+
+  test("without API_KEYS the warning is the full lockout", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+
+    const result = await deleteCallerKey(store, created.key.id);
+    // No credentials anywhere keeps ADR-005's open posture, so the warning
+    // must say the gate is OPEN — the old text claimed the opposite.
+    expect(result.warning).toContain("accept unauthenticated callers");
+    expect(result.warning).not.toContain("reject every caller");
+  });
+});
+
+describe("review round 2: default suffix beyond float precision", () => {
+  test("a huge numeric name does not make the next default collide", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    // A suffix past Number.MAX_SAFE_INTEGER: Number() would round it and
+    // `highest + 1` could land back on the same name, 409-ing forever.
+    await createCallerKey(store, testVerifier(), {
+      name: "Key 99999999999999999999",
+    });
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 100000000000000000000");
+  });
+});
+
+describe("review round 3: default name cannot exceed the contract", () => {
+  test("a 120-character numeric name rolls over to a fitting default", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    // "Key " + 116 nines is exactly the 120-character limit; incrementing
+    // it produced a 121-character default that bypassed the API contract.
+    const longest = "Key " + "9".repeat(116);
+    expect(longest.length).toBe(120);
+    await createCallerKey(store, testVerifier(), { name: longest });
+
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name.length).toBeLessThanOrEqual(120);
+    expect(created.key.name).not.toBe(longest);
+  });
+
+  test("the default skips a name that is already taken", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    await createCallerKey(store, testVerifier(), { name: "Key 1" });
+    const created = await createCallerKey(store, testVerifier(), {});
+    expect(created.key.name).toBe("Key 2");
+  });
+});
+
+describe("review F1: a short secret keeps no hint", () => {
+  test("the minimum-length operator secret publishes no suffix", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    // 8 characters is the accepted minimum; a blind last-4 would expose
+    // half of it in the clear, which 0006 and maskCallerKey forbid.
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "shortest",
+      secret: "abcdefgh",
+    });
+    expect(created.key.suffix).toBe("");
+    expect(maskCallerKey(created.key.prefix, created.key.suffix)).toBe("…");
+  });
+
+  test("a secret at the hint threshold keeps its last four", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "long-enough",
+      secret: "abcdefghijklmnop",
+    });
+    expect(created.secret.length).toBe(16);
+    expect(created.key.suffix).toBe("mnop");
+  });
+
+  test("a generated secret always keeps its hint", async () => {
+    const db = freshDb();
+    const created = await createCallerKey(writableD1(db), testVerifier(), {
+      name: "generated",
+    });
+    expect(created.key.suffix).toBe(created.secret.slice(-4));
+    expect(created.key.suffix.length).toBe(4);
+  });
+});
+
+describe("review F2: rotation reports when the old secret still works", () => {
+  test("a mirrored old secret produces the env warning", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    // The predicate stands in for the endpoint's env check: this row's OLD
+    // verifier also matches an API_KEYS value, so the env path still accepts
+    // the old plaintext after the row is rotated.
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier(),
+      async () => true
+    );
+    expect(rotated.warning).toContain("API_KEYS");
+    expect(rotated.secret).not.toBe(created.secret);
+  });
+
+  test("rotating a key that is not in the env carries no warning", async () => {
+    const db = freshDb();
+    const store = writableD1(db);
+    const created = await createCallerKey(store, testVerifier(), {
+      name: "CI",
+    });
+    const rotated = await rotateCallerKey(
+      store,
+      created.key.id,
+      testVerifier(),
+      async () => false
+    );
+    expect(rotated.warning).toBeUndefined();
   });
 });

@@ -15,6 +15,7 @@ import { overlayRegistry } from "./config/exposure-overlay.js";
 import { listModels, MODEL_CONFIGS } from "./config/models.js";
 import {
   authenticateRequest,
+  isAuthGateActive,
   requiresAuth,
   createUnauthorizedResponse,
   buildProtectedResourceMetadata,
@@ -187,7 +188,8 @@ export default {
             version: WORKER_VERSION,
             deployedAt: deployedAtFormatted,
             commitSha: env.COMMIT_SHA || "unknown",
-            authEnabled: !!env.API_KEYS,
+            // The gate, not the env var: D1 caller keys close it on their own.
+            authEnabled: await isAuthGateActive(env),
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },

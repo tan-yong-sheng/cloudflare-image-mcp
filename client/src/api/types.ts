@@ -129,6 +129,12 @@ export interface AdminCallerKeyCreated {
     created_at: number;
   };
   secret: string;
+  /**
+   * A consequence the operator has to know about. Rotation sets it when the
+   * old secret is also an API_KEYS value: it still authenticates, so the
+   * rotation did not revoke it.
+   */
+  warning?: string;
 }
 
 /** One image from a generation response. */

@@ -19,6 +19,60 @@ export interface AuthResult {
 }
 
 /**
+ * Does the D1 store hold at least one enabled caller key?
+ *
+ * This is what keeps the unset-API_KEYS bypass from swallowing a
+ * deployment that moved its credentials into D1 (review H1). The old
+ * posture — no API_KEYS means open — is only correct while NO credential
+ * source exists. Once a key is enabled in `caller_keys`, that table IS the
+ * gate, and an anonymous request must not pass just because the env var
+ * was retired.
+ *
+ * The empty case stays open on purpose: binding PROVIDER_DB (which every
+ * deployment does) must not lock a keys-less Worker out of `/v1` and
+ * `/mcp`. A read failure fails CLOSED — with no env keys there is no other
+ * source, and "the database is down" must not mean "everyone is
+ * authorized".
+ */
+async function hasEnabledCallerKeys(env: Env): Promise<boolean> {
+  if (!env.PROVIDER_DB) return false;
+  try {
+    const row = await env.PROVIDER_DB.prepare(
+      "SELECT 1 AS ok FROM caller_keys WHERE enabled = 1 LIMIT 1"
+    ).first<{ ok: number }>();
+    return row !== null;
+  } catch (error) {
+    console.warn(
+      "auth: caller-key lookup failed with no API_KEYS configured; refusing requests",
+      error instanceof Error ? error.message : String(error)
+    );
+    return true;
+  }
+}
+
+/** The usable values in the comma-separated API_KEYS secret. */
+function configuredEnvKeys(env: Env): string[] {
+  return (env.API_KEYS ?? "")
+    .split(",")
+    .map((key: string) => key.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Whether the request gate is active — i.e. some credential source has an
+ * entry.
+ *
+ * Exported because `/health` used to report `!!env.API_KEYS`, which became a
+ * lie the moment D1 keys could gate on their own: on a deployment that
+ * retired API_KEYS after creating a key (the end state ADR-005 blesses),
+ * `/v1` and `/mcp` rejected anonymous callers while health said
+ * `authEnabled: false`. One condition, one place (review F4).
+ */
+export async function isAuthGateActive(env: Env): Promise<boolean> {
+  return configuredEnvKeys(env).length > 0 || (await hasEnabledCallerKeys(env));
+}
+
+/**
  * Extract and validate API key from request.
  *
  * The bearer authenticates through either credential source (#129, the
@@ -41,11 +95,14 @@ export async function authenticateRequest(
   request: Request,
   env: Env
 ): Promise<AuthResult> {
-  // Skip auth if no API keys are configured (backward compatibility).
-  // Unchanged by #129: a deployment without API_KEYS keeps its open
-  // posture, and the D1 path below is an ADDITIONAL source, not a new
-  // gate. Retiring the bypass is the env-deprecation follow-up's marker.
-  if (!env.API_KEYS) {
+  // Open only when NO credential source is configured (backward
+  // compatibility). With API_KEYS unset but keys enabled in D1, the D1
+  // table is the gate: returning early here would serve `/v1` and `/mcp`
+  // to anyone the moment the operator retired the env var (review H1).
+  // A deployment with neither source keeps the documented open posture,
+  // so binding PROVIDER_DB alone never locks a Worker out.
+  const configuredKeys = configuredEnvKeys(env);
+  if (!(await isAuthGateActive(env))) {
     return { authenticated: true };
   }
 
@@ -70,10 +127,7 @@ export async function authenticateRequest(
   }
 
   // Validate token against configured keys (the legacy mirror)
-  const validKeys = env.API_KEYS.split(",")
-    .map((k: string) => k.trim())
-    .filter(Boolean);
-  if (validKeys.includes(token)) {
+  if (configuredKeys.includes(token)) {
     return {
       authenticated: true,
       apiKey: token,
