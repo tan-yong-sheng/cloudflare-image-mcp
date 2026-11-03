@@ -13,6 +13,13 @@ interface CallerKeyTableProps {
    * this only says that the list is unknown.
    */
   failed?: boolean;
+  /**
+   * Opens the rotate confirmation for the key (#127). The request is the
+   * page's to send — the table only names the row the button is on.
+   */
+  onRotate?: (key: AdminCallerKey) => void;
+  /** Ids of rows whose rotate request is in flight; those rows wait. */
+  pendingRotateIds?: number[];
 }
 
 /**
@@ -39,6 +46,8 @@ export function CallerKeyTable({
   keys,
   loading,
   failed = false,
+  onRotate,
+  pendingRotateIds = [],
 }: CallerKeyTableProps) {
   // A failed refresh leaves the last good rows on screen (TanStack Query
   // keeps the data), so the failure is a statement about those rows, not
@@ -64,6 +73,7 @@ export function CallerKeyTable({
             </th>
             <th className="p-3 font-medium">Masked key</th>
             <th className="p-3 font-medium">Status</th>
+            {onRotate ? <th className="p-3 font-medium">Actions</th> : null}
           </tr>
         </thead>
         <tbody id="adminCallerKeys">
@@ -82,6 +92,19 @@ export function CallerKeyTable({
                   {key.enabled ? "Enabled" : "Disabled"}
                 </span>
               </td>
+              {onRotate ? (
+                <td className="p-3">
+                  <button
+                    id={`adminCallerKeyRotate-${key.id}`}
+                    type="button"
+                    className="btn btn-secondary text-xs py-1 px-3"
+                    disabled={pendingRotateIds.includes(key.id)}
+                    onClick={() => onRotate(key)}
+                  >
+                    {pendingRotateIds.includes(key.id) ? "Rotating…" : "Rotate"}
+                  </button>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>
