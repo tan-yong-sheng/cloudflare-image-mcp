@@ -92,7 +92,9 @@ export default {
 
       // Check authentication for protected routes
       if (requiresAuth(path, request.method)) {
-        const authResult = authenticateRequest(request, env);
+        // #129: the bearer can now answer from D1 caller keys as well as
+        // API_KEYS, so authentication is async (verifier + indexed lookup).
+        const authResult = await authenticateRequest(request, env);
         if (!authResult.authenticated) {
           return withCors(
             createUnauthorizedResponse(authResult.error, request)
