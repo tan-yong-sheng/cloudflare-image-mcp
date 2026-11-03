@@ -86,7 +86,11 @@ describe("collection-phase caller input", () => {
 
   test("invalid n maps to 400, not 500", async () => {
     const response = await endpoint().handle(
-      jsonRequest("/v1/images/generations", { prompt: "p", n: "abc" })
+      jsonRequest("/v1/images/generations", {
+        prompt: "p",
+        model: "@cf/black-forest-labs/flux-1-schnell",
+        n: "abc",
+      })
     );
 
     expect(response.status).toBe(400);

@@ -76,17 +76,17 @@ Generate images from text prompts.
 
 **Parameters:**
 
-| Parameter         | Type    | Required | Default                                | Description                     |
-| ----------------- | ------- | -------- | -------------------------------------- | ------------------------------- |
-| `prompt`          | string  | Yes      | -                                      | Text description of the image   |
-| `model`           | string  | No       | `@cf/black-forest-labs/flux-1-schnell` | Model ID                        |
-| `n`               | integer | No       | 1                                      | Number of images (1-8)          |
-| `size`            | string  | No       | "1024x1024"                            | Image size (model-dependent)    |
-| `response_format` | string  | No       | "url"                                  | "url" or "b64_json"             |
-| `steps`           | integer | No       | Model default                          | Number of diffusion steps       |
-| `seed`            | integer | No       | Random                                 | Random seed for reproducibility |
-| `guidance`        | number  | No       | Model default                          | Guidance scale (1-30)           |
-| `negative_prompt` | string  | No       | -                                      | Elements to avoid               |
+| Parameter         | Type    | Required | Default       | Description                     |
+| ----------------- | ------- | -------- | ------------- | ------------------------------- |
+| `prompt`          | string  | Yes      | -             | Text description of the image   |
+| `model`           | string  | Yes      | -             | Model ID                        |
+| `n`               | integer | No       | 1             | Number of images (1-8)          |
+| `size`            | string  | No       | "1024x1024"   | Image size (model-dependent)    |
+| `response_format` | string  | No       | "url"         | "url" or "b64_json"             |
+| `steps`           | integer | No       | Model default | Number of diffusion steps       |
+| `seed`            | integer | No       | Random        | Random seed for reproducibility |
+| `guidance`        | number  | No       | Model default | Guidance scale (1-30)           |
+| `negative_prompt` | string  | No       | -             | Elements to avoid               |
 
 **Response:**
 
@@ -142,7 +142,7 @@ model: "@cf/stabilityai/stable-diffusion-xl-base-1.0"
 | `image`    | string/binary | Yes      | Source image (base64 or file). Aliases: `image_b64`     |
 | `mask`     | string/binary | No       | Mask for masked edits (inpainting). Aliases: `mask_b64` |
 | `prompt`   | string        | Yes      | Edit description                                        |
-| `model`    | string        | No       | Model ID                                                |
+| `model`    | string        | Yes      | Model ID                                                |
 | `strength` | number        | No       | Transformation strength (0-1)                           |
 
 ### Image Variations
@@ -213,16 +213,14 @@ runtime.
 }
 ```
 
-The generations default (`DEFAULT_MODEL`) stays hand-written in
-`workers/src/config/models.ts`.
+Image routes require an explicit `model`. The server never chooses a
+vendor default on the caller's behalf (ADR-004).
 
 - `enabled: false` hides the model from `list_models`, `GET /v1/models`,
   the frontend dropdown, and makes `describe_model` report unknown model.
   Absent means exposed. No new bindings or endpoints.
 - `alias` offers a short id resolving to the model everywhere ids resolve.
 - `excludedScopes` is stored for future provider overrides; unevaluated.
-- `DEFAULT_MODEL` is fixed in code; changing the OpenAI generations
-  default is a code edit, not config.
 
 ## Model-Specific Parameters
 

@@ -79,6 +79,7 @@ picked for a request.
 
 ## Default model
 
-The model a surface falls back to when a request names none. It is per-surface,
-not one global setting: the playground preselects one, and each `/v1/images/*`
-route historically carried its own hardcoded id — three different ones.
+A surface-owned preselection when the caller has not yet chosen a model. After
+ADR-004 / #158, `/v1/images/*` never falls back: omitting `model` is
+`model_required`. The only remaining default is the playground preselect
+(#162), which is client-owned and never consulted by the HTTP API.

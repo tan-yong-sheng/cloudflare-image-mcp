@@ -6,7 +6,6 @@
 
 import { describe, expect, test } from "vitest";
 import {
-  DEFAULT_MODEL,
   getModelConfig,
   isModelExposed,
   listModels,
@@ -163,9 +162,6 @@ describe("model registry validity", () => {
 
   describe("exposure flags (R0 #69)", () => {
     const SCHNELL = "@cf/black-forest-labs/flux-1-schnell";
-    test("DEFAULT_MODEL is the schnell id", () => {
-      expect(DEFAULT_MODEL).toBe(SCHNELL);
-    });
     test("models are exposed by default (no flags)", () => {
       expect(isModelExposed(MODEL_CONFIGS[SCHNELL])).toBe(true);
       expect(isModelExposed({ exposure: {} } as any)).toBe(true);

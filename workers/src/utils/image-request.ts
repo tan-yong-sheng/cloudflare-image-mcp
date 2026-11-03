@@ -15,7 +15,6 @@ import { arrayBufferToBase64 } from "./encoding.js";
  * parsing in ParamParser can fill the gaps downstream).
  */
 export interface CollectConfig {
-  defaultModel: string;
   params: string[];
   imageKeys?: string[];
   maskKeys?: string[];
@@ -78,10 +77,35 @@ function coerceFormParam(key: string, value: string): any {
 
 /**
  * Caller-input failure during collection (bad count, non-object body,
- * malformed multipart). The endpoint's handle() catch maps this to 400;
- * every other collection-phase throw stays a 500.
+ * malformed multipart, missing model). The endpoint's handle() catch maps
+ * this to 400; every other collection-phase throw stays a 500. Optional
+ * `code`/`param` ride into the OpenAI error envelope when set.
  */
-export class CollectionError extends Error {}
+export class CollectionError extends Error {
+  readonly code: string | null;
+  readonly param: string | null;
+
+  constructor(message: string, options?: { code?: string; param?: string }) {
+    super(message);
+    this.name = "CollectionError";
+    this.code = options?.code ?? null;
+    this.param = options?.param ?? null;
+  }
+}
+
+/**
+ * `model` is required on every image route. Null, empty, and
+ * whitespace-only values count as omitted (ADR-004 / #158).
+ */
+function requireModel(raw: unknown): string {
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw new CollectionError("model is required", {
+      code: "model_required",
+      param: "model",
+    });
+  }
+  return raw.trim();
+}
 
 /**
  * Normalize the image count: absent/blank means 1; anything else must be
@@ -174,7 +198,7 @@ export async function collectInputImages(
   let imageDataArr: string[] = [];
   let maskData: string | undefined;
   let prompt = "";
-  let modelId = config.defaultModel;
+  let modelId: string;
   let n = 1;
   let returnBase64 = false;
   const explicitParams: Record<string, any> = {};
@@ -208,7 +232,7 @@ export async function collectInputImages(
     if (config.includePrompt) {
       prompt = (formData.get("prompt") as string) ?? "";
     }
-    modelId = (formData.get("model") as string) || config.defaultModel;
+    modelId = requireModel(formData.get("model"));
     n = parseCount(formData.get("n"));
     returnBase64 = formData.get("response_format") === "b64_json";
 
@@ -242,7 +266,7 @@ export async function collectInputImages(
     if (config.includePrompt) {
       prompt = body.prompt ?? "";
     }
-    modelId = body.model || config.defaultModel;
+    modelId = requireModel(body.model);
     n = parseCount(body.n);
     returnBase64 = body.response_format === "b64_json";
 

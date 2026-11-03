@@ -563,46 +563,68 @@ describe("GET /v1/models contract", () => {
   });
 });
 
-describe("D1 default-model overlay (S6)", () => {
-  test("a hidden default model breaks model-less requests instead of serving it", async () => {
-    stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv(), {
-      pools: fakePools(),
-      exposureOverlay: new Map([
-        [
-          SCHNELL,
-          { enabled: false, alias: null, isDefault: false, excludedScopes: [] },
-        ],
-      ]),
+describe("model is required on image routes", () => {
+  async function expectModelRequired(res: Response): Promise<void> {
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error).toEqual({
+      message: expect.any(String),
+      type: "invalid_request_error",
+      code: "model_required",
+      param: "model",
     });
+    expect(String(body.error.message)).toMatch(/model/i);
+  }
+
+  test("omitting model on generations returns 400 model_required", async () => {
+    stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
 
     const res = await endpoint.handle(
       post("/v1/images/generations", { prompt: "a beach" })
     );
 
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    await expectModelRequired(res);
   });
 
-  test("is_default rewrites the model-less default", async () => {
+  test("null, empty, and whitespace-only model are treated as omitted", async () => {
     stubInference("json");
-    const endpoint = new OpenAIEndpoint(fakeEnv(), {
-      pools: fakePools(),
-      exposureOverlay: new Map([
-        [
-          SCHNELL,
-          { enabled: false, alias: null, isDefault: false, excludedScopes: [] },
-        ],
-        [
-          KLEIN,
-          { enabled: true, alias: null, isDefault: true, excludedScopes: [] },
-        ],
-      ]),
-    });
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+
+    for (const model of [null, "", "   "]) {
+      const res = await endpoint.handle(
+        post("/v1/images/generations", { prompt: "a beach", model })
+      );
+      await expectModelRequired(res);
+    }
+  });
+
+  test("omitting model on edits returns 400 model_required", async () => {
+    stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
 
     const res = await endpoint.handle(
-      post("/v1/images/generations", { prompt: "a beach" })
+      post("/v1/images/edits", {
+        prompt: "x",
+        image:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      })
     );
 
-    expect(res.status).toBe(200);
+    await expectModelRequired(res);
+  });
+
+  test("omitting model on variations returns 400 model_required", async () => {
+    stubInference("json");
+    const endpoint = new OpenAIEndpoint(fakeEnv(), { pools: fakePools() });
+
+    const res = await endpoint.handle(
+      post("/v1/images/variations", {
+        image:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      })
+    );
+
+    await expectModelRequired(res);
   });
 });

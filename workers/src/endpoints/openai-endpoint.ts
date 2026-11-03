@@ -16,11 +16,7 @@ import {
   collectInputImages,
   type CollectConfig,
 } from "../utils/image-request.js";
-import { DEFAULT_MODEL } from "../config/models.js";
-import {
-  resolveDefaultModel,
-  type ExposureOverlay,
-} from "../config/exposure-overlay.js";
+import type { ExposureOverlay } from "../config/exposure-overlay.js";
 
 /**
  * The OpenAI `owned_by` value. Namespaced ids (@cf/{provider}/{model}) report
@@ -33,9 +29,8 @@ function ownedBy(id: string, provider: string | undefined): string {
 
 // Per-route input configs: which CF params to extract and which defaults
 // apply. Handlers keep routing only; gathering lives in the shared module.
+// `model` is required on every route (ADR-004 / #158) — no defaultModel.
 const GENERATIONS_CONFIG: CollectConfig = {
-  // R0: configured default replaces the hardcoded id.
-  defaultModel: DEFAULT_MODEL,
   // `num_steps` is the SDXL-family spelling of the step count. The
   // client sends the name the model declares, so both must be
   // collected or the control is dead on those models.
@@ -45,7 +40,6 @@ const GENERATIONS_CONFIG: CollectConfig = {
 };
 
 const EDITS_CONFIG: CollectConfig = {
-  defaultModel: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
   params: [
     "size",
     "steps",
@@ -62,7 +56,6 @@ const EDITS_CONFIG: CollectConfig = {
 };
 
 const VARIATIONS_CONFIG: CollectConfig = {
-  defaultModel: "@cf/black-forest-labs/flux-2-klein-4b",
   params: ["size", "steps", "num_steps", "seed", "strength"],
   imageKeys: ["image"],
   // Default strength for variations (more faithful to original)
@@ -72,8 +65,6 @@ const VARIATIONS_CONFIG: CollectConfig = {
 export class OpenAIEndpoint {
   private generator: ImageGeneratorService;
   private corsHeaders: Record<string, string>;
-  /** R1b overlay: the D1 is_default row rewrites the model-less default. */
-  private defaultModel: string;
 
   constructor(
     env: Env,
@@ -83,10 +74,6 @@ export class OpenAIEndpoint {
       pools: deps?.pools,
       exposureOverlay: deps?.exposureOverlay,
     });
-    this.defaultModel = resolveDefaultModel(
-      DEFAULT_MODEL,
-      deps?.exposureOverlay ?? null
-    );
     this.corsHeaders = corsHeaders;
   }
 
@@ -151,12 +138,15 @@ export class OpenAIEndpoint {
             : error instanceof Error
               ? error.message
               : String(error);
+        const code = error instanceof CollectionError ? error.code : null;
+        const param = error instanceof CollectionError ? error.param : null;
         return new Response(
           JSON.stringify({
             error: {
               message,
               type: "invalid_request_error",
-              code: null,
+              code,
+              ...(param ? { param } : {}),
             },
           }),
           {
@@ -189,10 +179,7 @@ export class OpenAIEndpoint {
    */
   private async handleGenerations(request: Request): Promise<Response> {
     const { prompt, modelId, n, returnBase64, explicitParams } =
-      await collectInputImages(request, {
-        ...GENERATIONS_CONFIG,
-        defaultModel: this.defaultModel,
-      });
+      await collectInputImages(request, GENERATIONS_CONFIG);
 
     // Validate required fields
     if (!prompt) {

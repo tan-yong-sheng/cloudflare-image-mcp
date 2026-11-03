@@ -57,14 +57,7 @@ export function overlayRegistry(
   return merged;
 }
 
-/** The top-level default model after the overlay (is_default wins). */
-export function resolveDefaultModel(
-  baseDefault: string,
-  overlay: ExposureOverlay | null
-): string {
-  if (!overlay) return baseDefault;
-  for (const [id, row] of overlay) {
-    if (row.isDefault) return id;
-  }
-  return baseDefault;
-}
+// resolveDefaultModel was deleted by #158 / ADR-004: image routes require
+// an explicit model, so is_default no longer rewrites any API default.
+// The ExposureOverride.isDefault field and the DB column remain for admin
+// health visibility until a later migration drops them.
