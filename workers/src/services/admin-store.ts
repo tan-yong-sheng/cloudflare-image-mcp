@@ -394,7 +394,7 @@ const UNIQUE_PATTERNS = [
   /duplicate key/i,
   /already exists/i,
 ];
-function isUniqueViolation(error: unknown): boolean {
+export function isUniqueViolation(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return UNIQUE_PATTERNS.some((p) => p.test(message));
 }

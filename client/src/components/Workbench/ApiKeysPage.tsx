@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useCallerKeys } from "../../api/admin";
+import { useCallerKeys, useCreateCallerKey } from "../../api/admin";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { LogoutButton, ThemeToggleButton } from "../AppHeader";
 import { adminRefusal, gateErrorFor } from "./admin-gate";
+import { CallerKeyCreate } from "./CallerKeyCreate";
 import { CallerKeyTable } from "./CallerKeyTable";
 import { UnlockGate } from "./UnlockGate";
 
@@ -41,9 +42,17 @@ export function ApiKeysPage() {
   }, [lock, logout]);
 
   const callerKeys = useCallerKeys(session);
+  const createKey = useCreateCallerKey(session, endRefusedSession);
 
   const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+  // The one-shot secret from the last create, held in component state so
+  // the operator can actually copy it. Locking tears it down with the
+  // session; nothing ever writes it to storage.
+  const [created, setCreated] = useState<{
+    name: string;
+    secret: string;
+  } | null>(null);
   const handledError = useRef<unknown>(null);
 
   useEffect(() => {
@@ -72,10 +81,12 @@ export function ApiKeysPage() {
 
   const handleLock = () => {
     // The provider owns the teardown: it drops the key and the cached
-    // list together.
+    // list together — and the one-shot secret with them. A locked panel
+    // leaves nothing behind to read.
     lock();
     setGateError(null);
     setPanelError(null);
+    setCreated(null);
   };
 
   return (
@@ -144,6 +155,15 @@ export function ApiKeysPage() {
         id="apiKeysPanel"
         className={`space-y-4${unlocked ? "" : " hidden"}`}
       >
+        <CallerKeyCreate
+          busy={createKey.isPending}
+          created={created}
+          onDismiss={() => setCreated(null)}
+          onSubmit={async (values) => {
+            const result = await createKey.mutateAsync(values);
+            setCreated({ name: result.key.name, secret: result.secret });
+          }}
+        />
         <CallerKeyTable
           keys={callerKeys.data?.keys ?? []}
           loading={callerKeys.isPending}

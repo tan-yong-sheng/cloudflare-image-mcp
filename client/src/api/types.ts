@@ -109,6 +109,28 @@ export interface AdminCallerKeys {
   keys: AdminCallerKey[];
 }
 
+/**
+ * The 201 the create call answers with: the key's identity, and the
+ * plaintext secret — exactly once.
+ *
+ * The secret is the only form of the key the client ever receives. The
+ * row in D1 holds a keyed verifier, so no later request can reveal it:
+ * if this value is lost, the key is rotated. It lives in component state
+ * only — never in a cache, storage backend, or cookie.
+ */
+export interface AdminCallerKeyCreated {
+  key: {
+    id: number;
+    name: string;
+    prefix: string;
+    suffix: string;
+    enabled: boolean;
+    /** Unix seconds. */
+    created_at: number;
+  };
+  secret: string;
+}
+
 /** One image from a generation response. */
 export interface GenerationImage {
   url?: string;

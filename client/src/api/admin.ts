@@ -11,7 +11,11 @@ import {
 } from "../../../workers/src/routes";
 import { apiFetch, type ApiOptions, type ApiResult } from "./client";
 import { modelsQueryKey } from "./models";
-import type { AdminCallerKeys, AdminHealth } from "./types";
+import type {
+  AdminCallerKeyCreated,
+  AdminCallerKeys,
+  AdminHealth,
+} from "./types";
 
 /**
  * The admin API client.
@@ -150,6 +154,64 @@ export function useCallerKeys(session: AdminSession) {
     enabled: session.adminKey !== null,
     refetchOnMount: false,
     retry: false,
+  });
+}
+
+export interface CreateCallerKeyVariables {
+  /** 1–120 characters; blank or omitted lets the server name the key. */
+  name?: string;
+  /** Blank or omitted lets the server generate the secret. */
+  secret?: string;
+}
+
+/**
+ * Create a caller key. The answer carries the plaintext secret — the only
+ * time it is ever served — so this request is not cached and the mutation
+ * resets itself on success: the secret must live in the caller's component
+ * state (which the lock tears down), never in a query or mutation cache
+ * entry that outlives the render that received it.
+ */
+export async function createCallerKeyRequest(
+  session: AdminSession,
+  variables: CreateCallerKeyVariables
+): Promise<AdminCallerKeyCreated> {
+  const body: Record<string, unknown> = {};
+  if (variables.name) body.name = variables.name;
+  if (variables.secret) body.secret = variables.secret;
+  const result = await apiFetch<AdminCallerKeyCreated>(ADMIN_CALLER_KEYS_PATH, {
+    method: "POST",
+    body,
+    adminKey: session.adminKey,
+    authToken: session.bearerToken,
+  });
+  if (!result.ok) throw toError(result);
+  return result.data as AdminCallerKeyCreated;
+}
+
+export function useCreateCallerKey(
+  session: AdminSession,
+  onRefused?: (failure: AdminApiError) => void
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...ADMIN_MUTATION_KEY, "create-caller-key"],
+    mutationFn: (variables: CreateCallerKeyVariables) =>
+      createCallerKeyRequest(session, variables),
+    onSuccess: () => {
+      // The list grew; the refetch is what makes the row appear. The
+      // secret itself is not put into any cache: the caller received it
+      // through the awaited promise.
+      queryClient.invalidateQueries({ queryKey: CALLER_KEYS_QUERY_FAMILY });
+      // Drop the one-shot plaintext from the mutation cache. The caller
+      // already holds the value from the awaited result.
+      const cache = queryClient.getMutationCache();
+      cache
+        .findAll({ mutationKey: [...ADMIN_MUTATION_KEY, "create-caller-key"] })
+        .forEach((mutation) => cache.remove(mutation));
+    },
+    onError: (error: AdminApiError) => {
+      if (error.status === 401) onRefused?.(error);
+    },
   });
 }
 
