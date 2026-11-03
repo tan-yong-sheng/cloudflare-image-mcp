@@ -108,11 +108,44 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
   return (
     <div id="adminShell" className="container mx-auto px-4 py-4 max-w-6xl">
+      {/* Top Navbar: Brand and global utility actions (Lock, Theme Toggle, Logout) */}
+      <header className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <i className="fa-solid fa-shield-halved text-base" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-bold">Cloudflare Image MCP</span>
+            <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              Administration
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            id="adminLock"
+            type="button"
+            className={`btn btn-secondary p-2 h-12 flex items-center justify-center${
+              unlocked ? "" : " hidden"
+            }`}
+            aria-label="Lock the administrative area"
+            title="Lock administration session"
+            onClick={handleLock}
+          >
+            <i className="fa-solid fa-lock mr-2" />
+            Lock
+          </button>
+          <ThemeToggleButton id="themeToggleAdmin" />
+          <LogoutButton id="logoutButtonAdmin" />
+        </div>
+      </header>
+
       <div className="flex flex-col md:flex-row gap-6">
         <nav
           id="adminNav"
           aria-label="Administration"
-          className="card p-2 flex flex-row flex-wrap md:flex-col gap-1 md:w-14 lg:w-[220px] flex-shrink-0 md:self-start"
+          className="card p-2 flex flex-row flex-wrap md:flex-col gap-1 w-full md:w-52 lg:w-56 flex-shrink-0 md:self-start"
         >
           {/*
             A skip link has to be a link, but the router owns the hash:
@@ -133,19 +166,26 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             Skip to content
           </a>
 
+          <div className="text-xs font-bold uppercase tracking-wider text-muted px-2 pt-1 pb-1">
+            Navigation
+          </div>
+
           <a
             id="adminNavPlayground"
             href="#"
-            className="flex items-center justify-center md:justify-start gap-2 p-2 rounded border border-transparent text-sm hover:bg-[rgba(var(--primary-rgb),.05)]"
+            className="flex items-center gap-2.5 p-2 rounded border border-transparent text-sm hover:bg-[rgba(var(--primary-rgb),.05)] transition-colors"
             aria-label="Back to the playground"
+            title="Back to the playground"
           >
-            <i className="fa-solid fa-arrow-left flex-shrink-0" />
-            <span className="md:sr-only lg:not-sr-only">Playground</span>
+            <i className="fa-solid fa-arrow-left flex-shrink-0 w-4 text-center" />
+            <span>Playground</span>
           </a>
 
-          <p className="hidden lg:block text-xs uppercase tracking-wide text-muted px-2 pt-2">
-            Administration
-          </p>
+          <div className="hidden md:block my-2 border-t border-gray-700/60" />
+
+          <div className="text-xs font-bold uppercase tracking-wider text-muted px-2 pt-1 pb-1">
+            Admin Spaces
+          </div>
 
           {ADMIN_SPACES.map((space) => {
             const active = space.route === route;
@@ -155,35 +195,25 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                 id={`adminNav-${space.route}`}
                 href={space.hash}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center justify-center md:justify-start gap-2 p-2 rounded border text-sm ${
-                  active ? "font-medium" : ""
+                title={space.label}
+                className={`flex items-center gap-2.5 p-2 rounded border text-sm transition-colors ${
+                  active ? "font-semibold" : ""
                 }`}
                 style={{
                   borderColor: active ? "var(--primary)" : "transparent",
-                  backgroundColor: active ? "rgba(var(--primary-rgb),.08)" : "",
+                  backgroundColor: active
+                    ? "rgba(var(--primary-rgb),.12)"
+                    : "transparent",
+                  color: active ? "var(--primary-light)" : "inherit",
                 }}
               >
-                <i className={`fa-solid ${space.icon} flex-shrink-0`} />
-                <span className="md:sr-only lg:not-sr-only">{space.label}</span>
+                <i
+                  className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center`}
+                />
+                <span>{space.label}</span>
               </a>
             );
           })}
-
-          <div className="flex flex-row md:flex-col gap-1 md:mt-auto md:pt-2 md:border-t md:border-gray-700">
-            <button
-              id="adminLock"
-              type="button"
-              className={`btn btn-secondary p-2 h-12 w-12 flex items-center justify-center${
-                unlocked ? "" : " hidden"
-              }`}
-              aria-label="Lock the administrative area"
-              onClick={handleLock}
-            >
-              <i className="fa-solid fa-lock" />
-            </button>
-            <ThemeToggleButton id="themeToggleAdmin" />
-            <LogoutButton id="logoutButtonAdmin" />
-          </div>
         </nav>
 
         <div id="adminContent" className="flex-1 min-w-0" tabIndex={-1}>
@@ -192,18 +222,18 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           ) : (
             <ApiKeysPage onGateRefusal={reportGateRefusal} />
           )}
+
+          <UnlockGate
+            key={unlocked ? "unlocked" : "locked"}
+            hidden={unlocked}
+            error={gateError}
+            onUnlock={(key) => {
+              setGateError(null);
+              unlock(key);
+            }}
+          />
         </div>
       </div>
-
-      <UnlockGate
-        key={unlocked ? "unlocked" : "locked"}
-        hidden={unlocked}
-        error={gateError}
-        onUnlock={(key) => {
-          setGateError(null);
-          unlock(key);
-        }}
-      />
     </div>
   );
 }

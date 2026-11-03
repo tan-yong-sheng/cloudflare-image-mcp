@@ -211,20 +211,31 @@ export function AdminView({ onGateRefusal }: AdminViewProps) {
       role="main"
       aria-labelledby="adminViewTitle"
     >
-      <div className="flex flex-wrap items-center justify-end gap-2 mb-6 pb-4 border-b border-gray-700">
-        <span
-          id="adminChipsActive"
-          className={`chip chip-ok${unlocked && healthLoaded ? "" : " hidden"}`}
-        >
-          {keys.filter((key) => key.enabled).length}/{keys.length} active keys
-        </span>
-        <span
-          id="adminChipsFamilies"
-          className={`chip${unlocked && healthLoaded ? "" : " hidden"}`}
-        >
-          {providers.length}{" "}
-          {providers.length === 1 ? "provider family" : "provider families"}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <i className="fa-solid fa-server text-primary" />
+            Provider Credentials
+          </h2>
+          <p className="text-xs text-muted">
+            Credentials authenticating this Worker to upstream model providers
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            id="adminChipsActive"
+            className={`chip chip-ok${unlocked && healthLoaded ? "" : " hidden"}`}
+          >
+            {keys.filter((key) => key.enabled).length}/{keys.length} active keys
+          </span>
+          <span
+            id="adminChipsFamilies"
+            className={`chip${unlocked && healthLoaded ? "" : " hidden"}`}
+          >
+            {providers.length}{" "}
+            {providers.length === 1 ? "provider family" : "provider families"}
+          </span>
+        </div>
       </div>
 
       <p

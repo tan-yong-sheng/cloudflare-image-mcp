@@ -149,31 +149,39 @@ export function ApiKeysPage() {
 
   return (
     <main
-      className="mx-auto max-w-5xl px-4 py-8"
-      role="region"
-      aria-label="API keys management"
+      id="apiKeysView"
+      className="min-w-0"
+      role="main"
+      aria-labelledby="apiKeysTitle"
     >
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">API Keys</h1>
-          <p className="mt-1 text-sm text-gray-400">
-            Keys your clients use to call this Worker
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggleButton />
-          <LogoutButton />
-        </div>
-      </header>
-
-      {panelError ? (
-        <div
-          role="alert"
-          className="mb-4 rounded bg-red-900/30 p-3 text-sm text-red-300 border border-red-700"
+      <div className="mb-4">
+        <h1
+          id="apiKeysTitle"
+          className="text-lg font-bold flex items-center gap-2"
+          tabIndex={-1}
         >
-          {panelError}
-        </div>
-      ) : null}
+          <i className="fa-solid fa-key text-primary" />
+          API keys
+        </h1>
+        <p id="apiKeysIntro" className="text-xs text-muted mt-1 max-w-3xl">
+          The keys your clients send in{" "}
+          <span className="font-mono">Authorization: Bearer</span> to call this
+          Worker&apos;s <span className="font-mono">/v1</span> and{" "}
+          <span className="font-mono">/mcp</span> endpoints. They are not
+          provider credentials: a provider key authenticates the Worker to
+          Cloudflare and lives on the workbench.
+        </p>
+      </div>
+
+      <p
+        id="apiKeysError"
+        className={`text-sm p-3 mb-4 rounded bg-red-900/30 text-red-300 border border-red-700${
+          panelError ? "" : " hidden"
+        }`}
+        role="alert"
+      >
+        {panelError}
+      </p>
 
       <div
         id="apiKeysPanel"
