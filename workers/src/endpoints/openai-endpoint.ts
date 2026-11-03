@@ -363,9 +363,10 @@ export class OpenAIEndpoint {
   /**
    * GET /v1/models
    * List available models
+   * ADR-004 / #160: public API returns servable subset only
    */
   private handleListModels(): Response {
-    const models = this.generator.listModels();
+    const models = this.generator.listModels({ servableOnly: true });
 
     return new Response(
       JSON.stringify({
@@ -408,9 +409,14 @@ export class OpenAIEndpoint {
   }
 
   /**
-   * Map a failed seam result to the OpenAI envelope. Validation failures
-   * (invalid caller input) are 400 invalid_request_error; operational
-   * failures are 500 api_error. Every envelope carries code: null.
+   * Map a failed seam result to the OpenAI envelope. ADR-004 / #159 adds
+   * typed error codes:
+   *
+   * - 400 invalid_request_error, code=model_required (#158)
+   * - 404, code=model_not_found (model absent from registry)
+   * - 503, code=provider_unavailable (model known, no servable credential)
+   * - 502, code=null (upstream provider failure)
+   * - 400/500 validation/operational fallback (pre-existing)
    *
    * A batch that failed part-way still carries the images that succeeded
    * (runMany's contract), so they ride along under `data`. Without them the
@@ -424,14 +430,46 @@ export class OpenAIEndpoint {
     result: BatchResult,
     options: { returnBase64: boolean; origin: string }
   ): Response {
-    const validation = result.validationError === true;
+    let status: number;
+    let type: string;
+    let code: string | null = null;
+    let message = result.error;
+
+    // ADR-004 / #159: typed error codes
+    if (result.errorCode === "model_not_found") {
+      status = 404;
+      type = "invalid_request_error";
+      code = "model_not_found";
+    } else if (result.errorCode === "provider_unavailable") {
+      status = 503;
+      type = "api_error";
+      code = "provider_unavailable";
+    } else if (result.validationError === true) {
+      status = 400;
+      type = "invalid_request_error";
+      // Keep CollectionError.code from #158 (e.g., model_required)
+      code = null; // Already in result.error via CollectionError
+    } else {
+      // Upstream failure or operational error (ADR-004 / #159: 502)
+      status = 502;
+      type = "api_error";
+      code = null;
+    }
+
     const body: Record<string, unknown> = {
       error: {
-        message: result.error,
-        type: validation ? "invalid_request_error" : "api_error",
-        code: null,
+        message,
+        type,
+        code,
       },
     };
+
+    // Include servable models list for provider_unavailable (ADR-004 / #159)
+    if (result.errorCode === "provider_unavailable" && result.servableModels) {
+      (body.error as Record<string, unknown>)["servable_models"] =
+        result.servableModels;
+    }
+
     if (result.images.length > 0) {
       const partial = buildImageResponse(result.images, {
         returnBase64: options.returnBase64,
@@ -441,13 +479,14 @@ export class OpenAIEndpoint {
       body["data"] = partial.data;
     }
     return new Response(JSON.stringify(body), {
-      status: validation ? 400 : 500,
+      status,
       headers: { ...this.corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   /**
-   * Create error response
+   * Create error response (catch-all for unexpected errors).
+   * ADR-004 / #159: upstream failures map to 502.
    */
   private errorResponse(error: unknown): Response {
     const message = error instanceof Error ? error.message : String(error);
@@ -460,7 +499,7 @@ export class OpenAIEndpoint {
         },
       }),
       {
-        status: 500,
+        status: 502,
         headers: { ...this.corsHeaders, "Content-Type": "application/json" },
       }
     );
