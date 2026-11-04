@@ -95,6 +95,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
   const { adminKey, unlock, lock } = useAdminKey();
   const [gateError, setGateError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const unlocked = adminKey !== null;
 
@@ -132,20 +133,43 @@ export function AdminShell({ route }: { route: AdminRoute }) {
     const heading = document.getElementById(CONTENT_HEADINGS[route]);
     if (!heading || heading.closest(".hidden")) return;
     heading.focus();
+    setMobileMenuOpen(false);
   }, [route, unlocked]);
+
+  // Close mobile drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileMenuOpen]);
 
   return (
     <div
       id="adminShell"
-      className="flex flex-col md:flex-row min-h-screen w-full bg-background text-text overflow-x-hidden"
+      className="flex flex-col md:flex-row min-h-screen w-full bg-background text-text overflow-x-hidden relative"
     >
-      {/* Full-height Collapsible Sidebar */}
+      {/* Mobile Drawer Backdrop Scrim */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          aria-hidden="true"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Full-height Collapsible Sidebar / Mobile Drawer */}
       <nav
         id="adminNav"
         aria-label="Administration"
-        className={`relative flex flex-col flex-shrink-0 border-b md:border-b-0 md:border-r border-border bg-[var(--card-bg)] transition-[width] duration-300 z-20 w-full md:${
-          sidebarCollapsed ? "w-20" : "w-56 lg:w-60"
-        } md:min-h-screen`}
+        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen flex flex-col flex-shrink-0 border-r border-border bg-[var(--card-bg)] transition-all duration-300 z-50 ${
+          mobileMenuOpen
+            ? "translate-x-0 shadow-2xl"
+            : "-translate-x-full md:translate-x-0"
+        } ${sidebarCollapsed ? "md:w-20" : "w-72 md:w-56 lg:w-60"}`}
       >
         {/*
           A skip link has to be a link, but the router owns the hash:
@@ -161,6 +185,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           onClick={(event) => {
             event.preventDefault();
             document.getElementById("adminContent")?.focus();
+            setMobileMenuOpen(false);
           }}
         >
           Skip to content
@@ -168,22 +193,62 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
         {/* Brand Header */}
         <div
-          className={`flex items-center gap-3 px-3 py-4 border-b border-border/60 mb-2 ${
-            sidebarCollapsed ? "justify-center" : ""
+          className={`flex items-center justify-between px-3 py-4 border-b border-border/60 mb-2 ${
+            sidebarCollapsed ? "md:justify-center" : ""
           }`}
         >
-          <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center flex-shrink-0">
-            <i className="fa-solid fa-shield-halved text-sm" />
-          </div>
-          {!sidebarCollapsed && (
-            <div className="flex flex-col min-w-0 overflow-hidden">
-              <span className="text-sm font-bold truncate">Admin</span>
-              <span className="text-[11px] text-text-light truncate">
-                Control Console
-              </span>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center flex-shrink-0">
+              <i className="fa-solid fa-shield-halved text-sm" />
             </div>
-          )}
+            {(!sidebarCollapsed || mobileMenuOpen) && (
+              <div className="flex flex-col min-w-0 overflow-hidden">
+                <span className="text-sm font-bold truncate">Admin</span>
+                <span className="text-[11px] text-text-light truncate">
+                  Control Console
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Close Button */}
+          <button
+            type="button"
+            className="md:hidden flex items-center justify-center w-10 h-10 min-h-[44px] min-w-[44px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <i className="fa-solid fa-xmark text-lg" />
+          </button>
+
+          {/* Desktop Rail Toggle */}
+          <button
+            type="button"
+            className={`hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors ${
+              sidebarCollapsed ? "hidden" : ""
+            }`}
+            onClick={() => setSidebarCollapsed(true)}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+          >
+            <i className="fa-solid fa-chevron-left text-xs" />
+          </button>
         </div>
+
+        {/* Desktop Expand Button when collapsed */}
+        {sidebarCollapsed && (
+          <div className="hidden md:flex justify-center mb-2 px-2">
+            <button
+              type="button"
+              className="flex items-center justify-center w-10 h-10 rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+            >
+              <i className="fa-solid fa-chevron-right text-xs" />
+            </button>
+          </div>
+        )}
 
         {/* Back to Playground */}
         <div className="px-2 mb-2">
@@ -191,13 +256,16 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             id="adminNavPlayground"
             href="#"
             className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
-              sidebarCollapsed ? "justify-center" : "gap-3"
+              sidebarCollapsed ? "md:justify-center" : "gap-3"
             }`}
             aria-label="Back to the playground"
             title="Back to the playground"
+            onClick={() => setMobileMenuOpen(false)}
           >
             <i className="fa-solid fa-arrow-left flex-shrink-0 w-4 text-center" />
-            <span className={sidebarCollapsed ? "hidden" : ""}>Playground</span>
+            <span className={sidebarCollapsed ? "md:hidden" : ""}>
+              Playground
+            </span>
           </a>
         </div>
 
@@ -207,7 +275,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         {/* Admin Spaces - Flat list of items */}
         <div
           id="adminNavSpaces"
-          className={`flex flex-col gap-1 px-2 flex-1${unlocked ? "" : " hidden"}`}
+          className={`flex flex-col gap-1 px-2 flex-1 overflow-y-auto${unlocked ? "" : " hidden"}`}
         >
           {ADMIN_NAV_GROUPS.flatMap((group) =>
             group.spaces.map((space) => {
@@ -219,15 +287,16 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   href={space.hash}
                   aria-current={active ? "page" : undefined}
                   title={space.label}
+                  onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm transition-colors duration-150 relative ${
-                    sidebarCollapsed ? "justify-center" : "gap-3"
+                    sidebarCollapsed ? "md:justify-center" : "gap-3"
                   } ${
                     active
                       ? "font-medium text-primary dark:text-primary-light bg-[rgba(var(--primary-rgb),0.12)]"
                       : "text-text-light hover:text-text hover:bg-[var(--secondary)]"
                   }`}
                 >
-                  {active && !sidebarCollapsed && (
+                  {active && (!sidebarCollapsed || mobileMenuOpen) && (
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r" />
                   )}
                   <i
@@ -238,13 +307,13 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                     }`}
                   />
                   <span
-                    className={`flex-1 truncate ${sidebarCollapsed ? "hidden" : ""}`}
+                    className={`flex-1 truncate ${sidebarCollapsed ? "md:hidden" : ""}`}
                   >
                     {space.label}
                   </span>
                   {space.badge !== undefined &&
                     space.badge > 0 &&
-                    !sidebarCollapsed && (
+                    (!sidebarCollapsed || mobileMenuOpen) && (
                       <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary dark:text-primary-light">
                         {space.badge}
                       </span>
@@ -261,45 +330,49 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             id="adminLock"
             type="button"
             className={`w-full flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
-              sidebarCollapsed ? "justify-center" : "gap-3"
+              sidebarCollapsed ? "md:justify-center" : "gap-3"
             }${unlocked ? "" : " hidden"}`}
             aria-label="Lock the administrative area"
             title="Lock administration session"
-            onClick={handleLock}
+            onClick={() => {
+              setMobileMenuOpen(false);
+              handleLock();
+            }}
           >
             <i className="fa-solid fa-lock flex-shrink-0 w-4 text-center" />
-            {!sidebarCollapsed && <span>Lock</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Lock</span>}
           </button>
         </div>
-
-        {/* Floating Toggle Button on the Right Border */}
-        <button
-          type="button"
-          className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 min-w-[48px] min-h-[48px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full items-center justify-center text-text-light hover:text-text shadow-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <i
-            className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-xs`}
-          />
-        </button>
       </nav>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-background">
-        {/* Top Navbar: Brand and global utility actions (Theme Toggle, Logout) */}
-        <header className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6 py-4 border-b border-border bg-[var(--background)]">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xl font-bold">Cloudflare Image MCP</span>
-              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20">
+        {/* Top Navbar */}
+        <header className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 border-b border-border bg-[var(--background)] sticky top-0 z-30">
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Mobile Hamburger Trigger */}
+            <button
+              type="button"
+              className="md:hidden flex items-center justify-center w-10 h-10 min-h-[44px] min-w-[44px] rounded-lg text-text hover:bg-[var(--secondary)] transition-colors border border-border"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="adminNav"
+            >
+              <i className="fa-solid fa-bars text-base" />
+            </button>
+
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className="text-lg sm:text-xl font-bold truncate">
+                Cloudflare Image MCP
+              </span>
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20 whitespace-nowrap">
                 Administration
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <ThemeToggleButton id="themeToggleAdmin" />
             <LogoutButton id="logoutButtonAdmin" />
           </div>
