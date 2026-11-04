@@ -113,7 +113,9 @@ async function unlock(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/Management Key/i), "management-key");
   await user.click(screen.getByTestId("adminUnlock"));
   await waitFor(() =>
-    expect(document.getElementById("adminCallerKeys")?.children.length).toBeGreaterThan(0)
+    expect(
+      document.getElementById("adminCallerKeys")?.children.length
+    ).toBeGreaterThan(0)
   );
 }
 
