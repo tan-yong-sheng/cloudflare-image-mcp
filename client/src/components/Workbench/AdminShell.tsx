@@ -217,8 +217,10 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
         {/* Brand Header */}
         <div
-          className={`flex items-center justify-between px-3 py-4 border-b border-border/60 mb-2 ${
-            sidebarCollapsed ? "md:justify-center" : ""
+          className={`flex items-center px-3 py-4 border-b border-border/60 mb-2 ${
+            sidebarCollapsed
+              ? "md:flex-col md:gap-2 justify-center"
+              : "justify-between"
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -245,10 +247,14 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <i className="fa-solid fa-xmark text-lg" />
           </button>
 
-          {/* Tablet & Laptop Rail Toggle Button */}
+          {/* Tablet & Laptop Rail Toggle Button (Always present and easily clickable) */}
           <button
             type="button"
-            className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors"
+            className={`hidden md:flex items-center justify-center rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors ${
+              sidebarCollapsed
+                ? "w-9 h-9 min-h-[36px] min-w-[36px] mt-1"
+                : "w-8 h-8"
+            }`}
             onClick={toggleSidebar}
             aria-label={
               sidebarCollapsed
