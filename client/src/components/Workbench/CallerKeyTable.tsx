@@ -89,7 +89,7 @@ export function CallerKeyTable({
     >
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left opacity-60 border-b border-gray-800">
+          <tr className="text-left text-muted border-b border-gray-800">
             <th id="adminCallerKeysHead" className="p-3 font-medium">
               Name
             </th>
@@ -213,7 +213,7 @@ export function CallerKeyTable({
                         </button>
                       ) : null}
                       {pendingIds.includes(key.id) ? (
-                        <span className="text-xs opacity-60">Working…</span>
+                        <span className="text-xs text-muted">Working…</span>
                       ) : null}
                     </span>
                   )}
@@ -225,7 +225,7 @@ export function CallerKeyTable({
       </table>
       <p
         id="adminCallerKeysEmpty"
-        className={`text-sm opacity-60 text-center py-10${
+        className={`text-sm text-muted text-center py-10${
           keys.length > 0 && !failureText ? " hidden" : ""
         }`}
       >

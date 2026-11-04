@@ -164,10 +164,10 @@ export function CallerKeyCreate({
       <h2 id="callerKeyCreateTitle" className="text-lg font-bold mb-1">
         Add key
       </h2>
-      <p id="callerKeyCreateHint" className="text-sm opacity-60 mb-4">
-        Both fields are optional: a blank name gets "Key N", a blank secret
-        gets one generated for you. The plaintext is shown once, above,
-        the moment the key is created.
+      <p id="callerKeyCreateHint" className="text-sm text-muted mb-4">
+        Both fields are optional: a blank name gets "Key N", a blank secret gets
+        one generated for you. The plaintext is shown once, above, the moment
+        the key is created.
       </p>
 
       <form onSubmit={submit} className="space-y-3" aria-label="Add API key">
@@ -195,7 +195,7 @@ export function CallerKeyCreate({
             className="block text-sm font-medium mb-1"
           >
             Your own secret{" "}
-            <span className="opacity-60 font-normal">
+            <span className="text-muted font-normal">
               (optional — blank generates one)
             </span>
           </label>
