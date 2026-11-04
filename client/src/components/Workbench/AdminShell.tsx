@@ -15,26 +15,54 @@ interface AdminSpace {
   label: string;
   icon: string;
   hash: string;
+  badge?: number;
+}
+
+/** A navigation group that contains related spaces. */
+interface AdminNavGroup {
+  name: string;
+  icon: string;
+  spaces: AdminSpace[];
 }
 
 /**
- * The spaces the rail lists.
+ * The navigation groups for the admin sidebar.
  *
- * Provider credentials comes first because it is the screen an operator
- * opens to fix a broken pool; the caller keys are read after that.
+ * Groups are ordered by workflow: Generate (model configuration),
+ * Manage (keys and operations), Configure (settings and deployment).
  */
-const ADMIN_SPACES: AdminSpace[] = [
+const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
-    route: "admin",
-    label: "Provider credentials",
-    icon: "fa-server",
-    hash: "#admin",
+    name: "Generate",
+    icon: "fa-wand-magic-sparkles",
+    spaces: [
+      {
+        route: "admin",
+        label: "Provider credentials",
+        icon: "fa-server",
+        hash: "#admin",
+      },
+    ],
   },
   {
-    route: "admin-api-keys",
-    label: "API keys",
-    icon: "fa-key",
-    hash: "#admin/api-keys",
+    name: "Manage",
+    icon: "fa-sliders",
+    spaces: [
+      {
+        route: "admin-api-keys",
+        label: "API keys",
+        icon: "fa-key",
+        hash: "#admin/api-keys",
+        badge: 0, // Dynamic count can be added later
+      },
+    ],
+  },
+  {
+    name: "Configure",
+    icon: "fa-gear",
+    spaces: [
+      // Future: settings, deployment, etc.
+    ],
   },
 ];
 
@@ -48,27 +76,40 @@ const CONTENT_HEADINGS: Record<AdminRoute, string> = {
  * The administrative area.
  *
  * The playground is the product and keeps its own header; this shell
- * belongs to the operator screens only. It owns the spaces rail, the one
- * management-key gate, and the lock/theme/logout controls that used to be
- * duplicated into each screen's header.
+ * belongs to the operator screens only. It owns the grouped sidebar
+ * navigation, the one management-key gate, and the lock/theme/logout
+ * controls that used to be duplicated into each screen's header.
  *
  * The gate lives here rather than in each screen for one reason: moving
  * between Provider credentials and API keys is one session, so one gate
  * covers the area and a 403 re-shows it from one place. The screens
  * assume a session and ask for nothing before the key is in hand.
  *
- * The shell owns the width constraint, not the pages. The issue's width
- * math counts the rail inside the same 1152px the screens already used
- * (at 1301px: `max-w-6xl`, a 256px family rail, ~800px of key table,
- * ~730px once the sidebar takes its 190px). Keeping the container on the
- * pages as well would put the rail outside that 1152px and double the
- * padding, so the pages drop theirs.
+ * The shell owns the width constraint, not the pages. The sidebar uses
+ * the same width budget as before (w-52 to w-56, ~208-224px), keeping
+ * the total container at max-w-6xl (1152px). Pages drop their own
+ * padding to avoid double-counting.
  */
 export function AdminShell({ route }: { route: AdminRoute }) {
   const { adminKey, unlock, lock } = useAdminKey();
   const [gateError, setGateError] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set()
+  );
 
   const unlocked = adminKey !== null;
+
+  const toggleGroup = useCallback((groupName: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  }, []);
 
   // A page says the gate refused it. The session is over, so the shell
   // locks and explains itself on the gate — an error the operator cannot
@@ -166,10 +207,15 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             Skip to content
           </a>
 
-          <div className="text-xs font-bold uppercase tracking-wider text-muted px-2 pt-1 pb-1">
-            Navigation
+          {/* Brand Header */}
+          <div className="flex items-center gap-2 px-2 py-3 border-b border-gray-700/60 mb-2">
+            <div className="w-7 h-7 rounded bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+              <i className="fa-solid fa-shield-halved text-sm" />
+            </div>
+            <span className="text-sm font-bold">Admin</span>
           </div>
 
+          {/* Back to Playground */}
           <a
             id="adminNavPlayground"
             href="#"
@@ -181,41 +227,85 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <span>Playground</span>
           </a>
 
+          {/* Admin Spaces - Collapsible Groups */}
           <div
             id="adminNavSpaces"
             className={`flex flex-col gap-1${unlocked ? "" : " hidden"}`}
           >
             <div className="hidden md:block my-2 border-t border-gray-700/60" />
 
-            <div className="text-xs font-bold uppercase tracking-wider text-muted px-2 pt-1 pb-1">
-              Admin Spaces
-            </div>
+            {ADMIN_NAV_GROUPS.map((group) => {
+              const isCollapsed = collapsedGroups.has(group.name);
+              const hasSpaces = group.spaces.length > 0;
 
-            {ADMIN_SPACES.map((space) => {
-              const active = space.route === route;
               return (
-                <a
-                  key={space.route}
-                  id={`adminNav-${space.route}`}
-                  href={space.hash}
-                  aria-current={active ? "page" : undefined}
-                  title={space.label}
-                  className={`flex items-center gap-2.5 p-2 rounded border text-sm transition-colors ${
-                    active ? "font-semibold" : ""
-                  }`}
-                  style={{
-                    borderColor: active ? "var(--primary)" : "transparent",
-                    backgroundColor: active
-                      ? "rgba(var(--primary-rgb),.12)"
-                      : "transparent",
-                    color: active ? "var(--primary-light)" : "inherit",
-                  }}
-                >
-                  <i
-                    className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center`}
-                  />
-                  <span>{space.label}</span>
-                </a>
+                <div key={group.name} className="flex flex-col gap-1">
+                  {/* Group Header - Clickable to collapse/expand */}
+                  {hasSpaces && (
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold uppercase tracking-wider text-muted hover:text-text transition-colors"
+                      onClick={() => toggleGroup(group.name)}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`group-${group.name.toLowerCase()}`}
+                    >
+                      <i
+                        className={`fa-solid fa-chevron-${
+                          isCollapsed ? "right" : "down"
+                        } text-[10px] transition-transform`}
+                      />
+                      <i className={`fa-solid ${group.icon} text-xs`} />
+                      <span>{group.name}</span>
+                    </button>
+                  )}
+
+                  {/* Group Items */}
+                  {hasSpaces && (
+                    <div
+                      id={`group-${group.name.toLowerCase()}`}
+                      className={`flex flex-col gap-1 overflow-hidden transition-all${
+                        isCollapsed ? " hidden" : ""
+                      }`}
+                    >
+                      {group.spaces.map((space) => {
+                        const active = space.route === route;
+                        return (
+                          <a
+                            key={space.route}
+                            id={`adminNav-${space.route}`}
+                            href={space.hash}
+                            aria-current={active ? "page" : undefined}
+                            title={space.label}
+                            className={`flex items-center gap-2.5 p-2 rounded border text-sm transition-colors pl-6${
+                              active ? " font-semibold" : ""
+                            }`}
+                            style={{
+                              borderColor: active
+                                ? "var(--primary)"
+                                : "transparent",
+                              backgroundColor: active
+                                ? "rgba(var(--primary-rgb),.12)"
+                                : "transparent",
+                              color: active
+                                ? "var(--primary-light)"
+                                : "inherit",
+                            }}
+                          >
+                            <i
+                              className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center`}
+                            />
+                            <span className="flex-1">{space.label}</span>
+                            {space.badge !== undefined && space.badge > 0 && (
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
+                                {space.badge}
+                              </span>
+                            )}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
