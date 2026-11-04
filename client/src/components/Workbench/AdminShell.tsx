@@ -144,7 +144,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         id="adminNav"
         aria-label="Administration"
         className={`relative flex flex-col flex-shrink-0 min-h-screen border-r border-border bg-[var(--card-bg)] transition-[width] duration-300 z-20 ${
-          sidebarCollapsed ? "w-16" : "w-56 lg:w-60"
+          sidebarCollapsed ? "w-20" : "w-56 lg:w-60"
         }`}
       >
         {/*
@@ -157,7 +157,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         <a
           id="adminSkipLink"
           href="#adminContent"
-          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-3 py-2 text-white whitespace-nowrap focus:top-4 transition-[top]"
+          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-4 py-3 min-h-[48px] h-12 text-white whitespace-nowrap focus:top-4 transition-[top] flex items-center justify-center text-sm font-medium"
           onClick={(event) => {
             event.preventDefault();
             document.getElementById("adminContent")?.focus();
@@ -190,7 +190,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <a
             id="adminNavPlayground"
             href="#"
-            className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
+            className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
               sidebarCollapsed ? "justify-center" : "gap-3"
             }`}
             aria-label="Back to the playground"
@@ -219,7 +219,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   href={space.hash}
                   aria-current={active ? "page" : undefined}
                   title={space.label}
-                  className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 relative ${
+                  className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm transition-colors duration-150 relative ${
                     sidebarCollapsed ? "justify-center" : "gap-3"
                   } ${
                     active
@@ -260,7 +260,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <button
             id="adminLock"
             type="button"
-            className={`w-full flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
+            className={`w-full flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
               sidebarCollapsed ? "justify-center" : "gap-3"
             }${unlocked ? "" : " hidden"}`}
             aria-label="Lock the administrative area"
@@ -275,7 +275,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         {/* Floating Toggle Button on the Right Border */}
         <button
           type="button"
-          className="absolute -right-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 min-w-[44px] min-h-[44px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary"
+          className="absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 min-w-[48px] min-h-[48px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}

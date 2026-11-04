@@ -69,8 +69,8 @@
 }
 
 .dark {
-  --primary: #675fe8;
-  --primary-rgb: 103 95 232;
+  --primary: #817af2;
+  --primary-rgb: 129 122 242;
   --primary-light: #8a84ee;
   --primary-light-rgb: 138 132 238;
   --primary-dark: #5046e5;
@@ -133,6 +133,10 @@ body {
 
 .text-primary {
   color: var(--primary);
+}
+
+.text-primary-light {
+  color: var(--primary-light);
 }
 
 /* Helper and metadata copy. Uses the token rather than a Tailwind gray so it
