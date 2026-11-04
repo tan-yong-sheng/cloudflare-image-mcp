@@ -48,7 +48,7 @@ export function FamilyRail({
             aria-pressed={active}
             onClick={() => onSelect(provider.id)}
           >
-            <div className="flex items-center text-sm font-medium">
+            <div className="flex items-center text-sm font-medium whitespace-nowrap">
               <FamilyMark providerId={provider.id} />
               {provider.displayName || provider.id}
             </div>

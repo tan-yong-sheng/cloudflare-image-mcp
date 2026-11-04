@@ -70,8 +70,8 @@ An explicit choice is stored under `theme` and wins over the system preference; 
 
 | Semantic Token  | Light Mode (Default) | Dark Mode (`.dark`) | Application Role                                           |
 | :-------------- | :------------------- | :------------------ | :--------------------------------------------------------- |
-| `primary`       | `#5046e5`            | `#817af2`           | Primary action buttons, active slider thumbs, icon accents |
-| `primary-light` | `#675fe8`            | `#8a84ee`           | Hover state for primary buttons                            |
+| `primary`       | `#5046e5`            | `#938df4`           | Primary action buttons, active slider thumbs, icon accents |
+| `primary-light` | `#675fe8`            | `#a39ef7`           | Hover state for primary buttons                            |
 | `primary-dark`  | `#4338ca`            | `#5046e5`           | Active/pressed state for primary buttons                   |
 | `secondary`     | `#f0f4f8`            | `#2d3748`           | Secondary button backgrounds (no other current consumer)   |
 | `text`          | `#1a202c`            | `#f7fafc`           | Primary copy, titles, field labels                         |

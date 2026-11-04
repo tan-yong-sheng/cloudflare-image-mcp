@@ -266,7 +266,7 @@ export function AdminView({ onGateRefusal }: AdminViewProps) {
           >
             <h1
               id="adminViewTitle"
-              className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
+              className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700 min-w-0 break-words"
               tabIndex={-1}
             >
               <i className="fa-solid fa-server mr-2 text-primary" />

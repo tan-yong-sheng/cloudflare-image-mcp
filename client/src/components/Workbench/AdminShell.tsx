@@ -137,15 +137,15 @@ export function AdminShell({ route }: { route: AdminRoute }) {
   return (
     <div
       id="adminShell"
-      className="flex min-h-screen w-full bg-background text-text"
+      className="flex flex-col md:flex-row min-h-screen w-full bg-background text-text overflow-x-hidden"
     >
       {/* Full-height Collapsible Sidebar */}
       <nav
         id="adminNav"
         aria-label="Administration"
-        className={`relative flex flex-col flex-shrink-0 min-h-screen border-r border-border bg-[var(--card-bg)] transition-[width] duration-300 z-20 ${
+        className={`relative flex flex-col flex-shrink-0 border-b md:border-b-0 md:border-r border-border bg-[var(--card-bg)] transition-[width] duration-300 z-20 w-full md:${
           sidebarCollapsed ? "w-20" : "w-56 lg:w-60"
-        }`}
+        } md:min-h-screen`}
       >
         {/*
           A skip link has to be a link, but the router owns the hash:
@@ -275,7 +275,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         {/* Floating Toggle Button on the Right Border */}
         <button
           type="button"
-          className="absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 min-w-[48px] min-h-[48px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary"
+          className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 min-w-[48px] min-h-[48px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full items-center justify-center text-text-light hover:text-text shadow-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -289,9 +289,9 @@ export function AdminShell({ route }: { route: AdminRoute }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-background">
         {/* Top Navbar: Brand and global utility actions (Theme Toggle, Logout) */}
-        <header className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-border bg-[var(--background)]">
+        <header className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6 py-4 border-b border-border bg-[var(--background)]">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xl font-bold">Cloudflare Image MCP</span>
               <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20">
                 Administration
@@ -306,8 +306,8 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         </header>
 
         {/* Main Content Container */}
-        <main className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-6xl mx-auto">
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+          <div className="max-w-6xl mx-auto w-full">
             <div id="adminContent" className="min-w-0" tabIndex={-1}>
               {route === "admin" ? (
                 <AdminView onGateRefusal={reportGateRefusal} />
