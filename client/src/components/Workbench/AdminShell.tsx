@@ -204,7 +204,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         */}
         <button
           type="button"
-          className="group hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-30 h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-sm transition-colors duration-150 before:absolute before:-inset-x-2.5 before:inset-y-0 before:content-[''] hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="group hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-30 h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 before:absolute before:inset-[-10px] before:inset-y-[-10px] before:content-[''] hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           onClick={toggleSidebar}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!sidebarCollapsed}
@@ -216,7 +216,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           }
         >
           <i
-            className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-[10px] transition-transform duration-150`}
+            className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-[10px] transition-colors duration-150`}
           />
         </button>
 
@@ -293,9 +293,11 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           {sidebarCollapsed && (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
+              className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)] md:group-hover/nav-item:block transition-opacity duration-150"
             >
               Playground
+              <span className="absolute right-full top-1/2 -translate-y-1/2 border-5px border-transparent border-r-[var(--border)]" />
+              <span className="absolute right-full top-1/2 -translate-y-1/2 border-4px border-transparent border-r-[var(--text)]" />
             </span>
           )}
         </div>
@@ -357,9 +359,11 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   {sidebarCollapsed && (
                     <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
+                      className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)] md:group-hover/nav-item:block transition-opacity duration-150"
                     >
                       {space.label}
+                      <span className="absolute right-full top-1/2 -translate-y-1/2 border-5px border-transparent border-r-[var(--border)]" />
+                      <span className="absolute right-full top-1/2 -translate-y-1/2 border-4px border-transparent border-r-[var(--text)]" />
                     </span>
                   )}
                 </div>
@@ -391,9 +395,11 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           {sidebarCollapsed && (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
+              className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)] md:group-hover/nav-item:block transition-opacity duration-150"
             >
               Lock
+              <span className="absolute right-full top-1/2 -translate-y-1/2 border-5px border-transparent border-r-[var(--border)]" />
+              <span className="absolute right-full top-1/2 -translate-y-1/2 border-4px border-transparent border-r-[var(--text)]" />
             </span>
           )}
         </div>
