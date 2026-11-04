@@ -292,7 +292,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
           {sidebarCollapsed && (
             <span
-              role="tooltip"
+              aria-hidden="true"
               className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
             >
               Playground
@@ -356,7 +356,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
                   {sidebarCollapsed && (
                     <span
-                      role="tooltip"
+                      aria-hidden="true"
                       className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
                     >
                       {space.label}
@@ -390,7 +390,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
           {sidebarCollapsed && (
             <span
-              role="tooltip"
+              aria-hidden="true"
               className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
             >
               Lock
