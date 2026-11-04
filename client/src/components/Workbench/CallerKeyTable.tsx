@@ -89,14 +89,17 @@ export function CallerKeyTable({
     >
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left opacity-60 border-b border-gray-800">
-            <th id="adminCallerKeysHead" className="p-3 font-medium">
+          <tr className="text-left text-text-light border-b border-border">
+            <th
+              id="adminCallerKeysHead"
+              className="p-3 font-medium whitespace-nowrap"
+            >
               Name
             </th>
-            <th className="p-3 font-medium">Masked key</th>
-            <th className="p-3 font-medium">Status</th>
+            <th className="p-3 font-medium whitespace-nowrap">Masked key</th>
+            <th className="p-3 font-medium whitespace-nowrap">Status</th>
             {hasMutations || onRotate ? (
-              <th className="p-3 font-medium">Actions</th>
+              <th className="p-3 font-medium whitespace-nowrap">Actions</th>
             ) : null}
           </tr>
         </thead>
@@ -213,7 +216,9 @@ export function CallerKeyTable({
                         </button>
                       ) : null}
                       {pendingIds.includes(key.id) ? (
-                        <span className="text-xs opacity-60">Working…</span>
+                        <span className="text-xs text-text-light">
+                          Working…
+                        </span>
                       ) : null}
                     </span>
                   )}
@@ -225,7 +230,7 @@ export function CallerKeyTable({
       </table>
       <p
         id="adminCallerKeysEmpty"
-        className={`text-sm opacity-60 text-center py-10${
+        className={`text-sm text-text-light text-center py-10${
           keys.length > 0 && !failureText ? " hidden" : ""
         }`}
       >

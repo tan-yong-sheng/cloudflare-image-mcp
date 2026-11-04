@@ -157,7 +157,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         <a
           id="adminSkipLink"
           href="#adminContent"
-          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-[var(--primary)] focus:px-3 focus:py-2 focus:text-white"
+          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-3 py-2 text-white whitespace-nowrap focus:top-4 transition-all"
           onClick={(event) => {
             event.preventDefault();
             document.getElementById("adminContent")?.focus();
@@ -190,7 +190,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <a
             id="adminNavPlayground"
             href="#"
-            className={`flex items-center px-3 py-2 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-all ${
+            className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-all ${
               sidebarCollapsed ? "justify-center" : "gap-3"
             }`}
             aria-label="Back to the playground"
@@ -219,11 +219,11 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   href={space.hash}
                   aria-current={active ? "page" : undefined}
                   title={space.label}
-                  className={`flex items-center px-3 py-2.5 rounded-lg text-sm transition-all relative ${
+                  className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm transition-all relative ${
                     sidebarCollapsed ? "justify-center" : "gap-3"
                   } ${
                     active
-                      ? "font-medium text-primary bg-[rgba(var(--primary-rgb),0.12)]"
+                      ? "font-medium text-primary dark:text-primary-light bg-[rgba(var(--primary-rgb),0.12)]"
                       : "text-text-light hover:text-text hover:bg-[var(--secondary)]"
                   }`}
                 >
@@ -232,7 +232,9 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   )}
                   <i
                     className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center ${
-                      active ? "text-primary" : "opacity-80"
+                      active
+                        ? "text-primary dark:text-primary-light"
+                        : "opacity-80"
                     }`}
                   />
                   <span
@@ -243,7 +245,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   {space.badge !== undefined &&
                     space.badge > 0 &&
                     !sidebarCollapsed && (
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary dark:text-primary-light">
                         {space.badge}
                       </span>
                     )}
@@ -256,13 +258,13 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         {/* Floating Toggle Button on the Right Border */}
         <button
           type="button"
-          className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-6 h-12 bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+          className="absolute -right-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 min-w-[44px] min-h-[44px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <i
-            className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-[10px]`}
+            className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-xs`}
           />
         </button>
       </nav>
@@ -274,7 +276,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl font-bold">Cloudflare Image MCP</span>
-              <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20">
                 Administration
               </span>
             </div>
@@ -284,7 +286,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <button
               id="adminLock"
               type="button"
-              className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
+              className={`btn btn-secondary px-3 py-2 min-h-[44px] h-11 flex items-center justify-center${
                 unlocked ? "" : " hidden"
               }`}
               aria-label="Lock the administrative area"
