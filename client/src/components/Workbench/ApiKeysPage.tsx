@@ -196,8 +196,8 @@ export function ApiKeysPage() {
         <span className="font-mono">Authorization: Bearer</span> to call this
         Worker&apos;s <span className="font-mono">/v1</span> and{" "}
         <span className="font-mono">/mcp</span> endpoints. They are not provider
-        credentials: a provider key authenticates the Worker to Cloudflare and
-        lives on the workbench.
+        credentials: a provider key authenticates the Worker to Cloudflare.
+        It lives on the workbench.
       </p>
 
       <p
