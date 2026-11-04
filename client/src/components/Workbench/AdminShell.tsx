@@ -94,10 +94,30 @@ const CONTENT_HEADINGS: Record<AdminRoute, string> = {
 export function AdminShell({ route }: { route: AdminRoute }) {
   const { adminKey, unlock, lock } = useAdminKey();
   const [gateError, setGateError] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Default to collapsed on tablet (< 1024px) to preserve table width, expanded on larger screens (>= 1024px)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("adminSidebarCollapsed");
+      if (stored !== null) return stored === "true";
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const unlocked = adminKey !== null;
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("adminSidebarCollapsed", String(next));
+      } catch {
+        // storage disabled or unavailable
+      }
+      return next;
+    });
+  }, []);
 
   // A page says the gate refused it. The session is over, so the shell
   // locks and explains itself on the gate — an error the operator cannot
@@ -136,16 +156,20 @@ export function AdminShell({ route }: { route: AdminRoute }) {
     setMobileMenuOpen(false);
   }, [route, unlocked]);
 
-  // Close mobile drawer on Escape key
+  // Close mobile drawer on Escape key, and toggle sidebar on Ctrl+B / Cmd+B
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && mobileMenuOpen) {
         setMobileMenuOpen(false);
       }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        toggleSidebar();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, toggleSidebar]);
 
   return (
     <div
@@ -221,34 +245,27 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <i className="fa-solid fa-xmark text-lg" />
           </button>
 
-          {/* Desktop Rail Toggle */}
+          {/* Tablet & Laptop Rail Toggle Button */}
           <button
             type="button"
-            className={`hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors ${
-              sidebarCollapsed ? "hidden" : ""
-            }`}
-            onClick={() => setSidebarCollapsed(true)}
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
+            className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors"
+            onClick={toggleSidebar}
+            aria-label={
+              sidebarCollapsed
+                ? "Expand sidebar (Ctrl+B)"
+                : "Collapse sidebar (Ctrl+B)"
+            }
+            title={
+              sidebarCollapsed
+                ? "Expand sidebar (Ctrl+B)"
+                : "Collapse sidebar (Ctrl+B)"
+            }
           >
-            <i className="fa-solid fa-chevron-left text-xs" />
+            <i
+              className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-xs`}
+            />
           </button>
         </div>
-
-        {/* Desktop Expand Button when collapsed */}
-        {sidebarCollapsed && (
-          <div className="hidden md:flex justify-center mb-2 px-2">
-            <button
-              type="button"
-              className="flex items-center justify-center w-10 h-10 rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors"
-              onClick={() => setSidebarCollapsed(false)}
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-            >
-              <i className="fa-solid fa-chevron-right text-xs" />
-            </button>
-          </div>
-        )}
 
         {/* Back to Playground */}
         <div className="px-2 mb-2">
@@ -360,6 +377,25 @@ export function AdminShell({ route }: { route: AdminRoute }) {
               aria-controls="adminNav"
             >
               <i className="fa-solid fa-bars text-base" />
+            </button>
+
+            {/* Tablet & Laptop Quick Sidebar Toggle */}
+            <button
+              type="button"
+              className="hidden md:flex items-center justify-center w-9 h-9 min-h-[36px] min-w-[36px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors border border-border/80 mr-1"
+              onClick={toggleSidebar}
+              aria-label={
+                sidebarCollapsed
+                  ? "Expand sidebar (Ctrl+B)"
+                  : "Collapse sidebar (Ctrl+B)"
+              }
+              title={
+                sidebarCollapsed
+                  ? "Expand sidebar (Ctrl+B)"
+                  : "Collapse sidebar (Ctrl+B)"
+              }
+            >
+              <i className="fa-solid fa-bars-staggered text-sm" />
             </button>
 
             <div className="flex items-center gap-2 flex-wrap min-w-0">
