@@ -191,12 +191,12 @@ export function ApiKeysPage() {
         </div>
       </div>
 
-      <p id="apiKeysIntro" className="text-sm opacity-70 mb-4 max-w-3xl">
+      <p id="apiKeysIntro" className="text-sm text-muted mb-4 max-w-3xl">
         The keys your clients send in{" "}
         <span className="font-mono">Authorization: Bearer</span> to call this
         Worker&apos;s <span className="font-mono">/v1</span> and{" "}
         <span className="font-mono">/mcp</span> endpoints. They are not provider
-        credentials: a provider key authenticates the Worker to Cloudflare and
+        credentials: a provider key authenticates the Worker to Cloudflare. It
         lives on the workbench.
       </p>
 
