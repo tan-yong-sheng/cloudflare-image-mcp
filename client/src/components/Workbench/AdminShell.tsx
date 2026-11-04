@@ -143,7 +143,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
       <nav
         id="adminNav"
         aria-label="Administration"
-        className={`relative flex flex-col flex-shrink-0 min-h-screen border-r border-border bg-[var(--card-bg)] transition-all duration-300 z-20 ${
+        className={`relative flex flex-col flex-shrink-0 min-h-screen border-r border-border bg-[var(--card-bg)] transition-[width] duration-300 z-20 ${
           sidebarCollapsed ? "w-16" : "w-56 lg:w-60"
         }`}
       >
@@ -157,7 +157,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         <a
           id="adminSkipLink"
           href="#adminContent"
-          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-3 py-2 text-white whitespace-nowrap focus:top-4 transition-all"
+          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-3 py-2 text-white whitespace-nowrap focus:top-4 transition-[top]"
           onClick={(event) => {
             event.preventDefault();
             document.getElementById("adminContent")?.focus();
@@ -190,7 +190,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <a
             id="adminNavPlayground"
             href="#"
-            className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-all ${
+            className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
               sidebarCollapsed ? "justify-center" : "gap-3"
             }`}
             aria-label="Back to the playground"
@@ -219,7 +219,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                   href={space.hash}
                   aria-current={active ? "page" : undefined}
                   title={space.label}
-                  className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm transition-all relative ${
+                  className={`flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 relative ${
                     sidebarCollapsed ? "justify-center" : "gap-3"
                   } ${
                     active
@@ -255,10 +255,27 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           )}
         </div>
 
+        {/* Bottom utility: Lock admin session */}
+        <div className="p-2 border-t border-border/60 mt-auto">
+          <button
+            id="adminLock"
+            type="button"
+            className={`w-full flex items-center min-h-[44px] min-w-[44px] px-3 py-2.5 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
+              sidebarCollapsed ? "justify-center" : "gap-3"
+            }${unlocked ? "" : " hidden"}`}
+            aria-label="Lock the administrative area"
+            title="Lock administration session"
+            onClick={handleLock}
+          >
+            <i className="fa-solid fa-lock flex-shrink-0 w-4 text-center" />
+            {!sidebarCollapsed && <span>Lock</span>}
+          </button>
+        </div>
+
         {/* Floating Toggle Button on the Right Border */}
         <button
           type="button"
-          className="absolute -right-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 min-w-[44px] min-h-[44px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+          className="absolute -right-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 min-w-[44px] min-h-[44px] bg-[var(--card-bg)] hover:bg-[var(--secondary)] border border-[var(--border)] rounded-full flex items-center justify-center text-text-light hover:text-text shadow-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -271,31 +288,18 @@ export function AdminShell({ route }: { route: AdminRoute }) {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-background">
-        {/* Top Navbar: Brand and global utility actions (Lock, Theme Toggle, Logout) */}
+        {/* Top Navbar: Brand and global utility actions (Theme Toggle, Logout) */}
         <header className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-border bg-[var(--background)]">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl font-bold">Cloudflare Image MCP</span>
-              <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20">
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20">
                 Administration
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              id="adminLock"
-              type="button"
-              className={`btn btn-secondary px-3 py-2 min-h-[44px] h-11 flex items-center justify-center${
-                unlocked ? "" : " hidden"
-              }`}
-              aria-label="Lock the administrative area"
-              title="Lock administration session"
-              onClick={handleLock}
-            >
-              <i className="fa-solid fa-lock mr-2" />
-              Lock
-            </button>
             <ThemeToggleButton id="themeToggleAdmin" />
             <LogoutButton id="logoutButtonAdmin" />
           </div>
