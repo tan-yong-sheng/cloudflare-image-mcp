@@ -94,6 +94,7 @@ const CONTENT_HEADINGS: Record<AdminRoute, string> = {
 export function AdminShell({ route }: { route: AdminRoute }) {
   const { adminKey, unlock, lock } = useAdminKey();
   const [gateError, setGateError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const unlocked = adminKey !== null;
 
@@ -168,11 +169,13 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         </div>
       </header>
 
-      <div className="flex flex-col md:flex-row gap-6">
+      <div className="flex flex-col md:flex-row gap-6 min-h-screen">
         <nav
           id="adminNav"
           aria-label="Administration"
-          className="card p-2 flex flex-row flex-wrap md:flex-col gap-1 w-full md:w-52 lg:w-56 flex-shrink-0 md:self-start"
+          className={`card p-2 flex flex-row flex-wrap md:flex-col gap-1 flex-shrink-0 transition-all duration-300 self-stretch${
+            sidebarCollapsed ? "md:w-16" : "md:w-52 lg:w-56"
+          }`}
         >
           {/*
             A skip link has to be a link, but the router owns the hash:
@@ -194,27 +197,48 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           </a>
 
           {/* Brand Header */}
-          <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-700/40 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center flex-shrink-0">
-              <i className="fa-solid fa-shield-halved text-sm" />
+          <div className="flex items-center justify-between px-3 py-3 border-b border-gray-700/40 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center flex-shrink-0">
+                <i className="fa-solid fa-shield-halved text-sm" />
+              </div>
+              <span
+                className={`text-sm font-semibold transition-all duration-300 ${sidebarCollapsed ? "hidden" : ""}`}
+              >
+                Admin
+              </span>
             </div>
-            <span className="text-sm font-semibold">Admin</span>
+            <button
+              type="button"
+              className="p-1.5 rounded hover:bg-gray-800/50 transition-colors text-muted hover:text-text"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={
+                sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+              }
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <i
+                className={`fa-solid ${sidebarCollapsed ? "fa-chevron-right" : "fa-chevron-left"} text-sm`}
+              />
+            </button>
           </div>
 
           {/* Back to Playground */}
           <a
             id="adminNavPlayground"
             href="#"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-gray-800/30 transition-all"
+            className={`flex items-center px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-gray-800/30 transition-all ${
+              sidebarCollapsed ? "justify-center" : "gap-3"
+            }`}
             aria-label="Back to the playground"
             title="Back to the playground"
           >
             <i className="fa-solid fa-arrow-left flex-shrink-0 w-4 text-center" />
-            <span>Playground</span>
+            <span className={sidebarCollapsed ? "hidden" : ""}>Playground</span>
           </a>
 
           {/* Section Divider */}
-          <div className="my-3 px-3">
+          <div className={`my-3 px-3 ${sidebarCollapsed ? "hidden" : ""}`}>
             <div className="h-px bg-gray-700/40" />
           </div>
 
@@ -233,24 +257,32 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                     href={space.hash}
                     aria-current={active ? "page" : undefined}
                     title={space.label}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all relative${
+                    className={`flex items-center px-3 py-2 rounded-lg text-sm transition-all relative${
+                      sidebarCollapsed ? "justify-center" : "gap-3"
+                    }${
                       active
                         ? " font-medium text-primary"
                         : " text-muted hover:text-text hover:bg-gray-800/30"
                     }`}
                   >
-                    {active && (
+                    {active && !sidebarCollapsed && (
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r" />
                     )}
                     <i
                       className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center${active ? "" : " opacity-70"}`}
                     />
-                    <span className="flex-1">{space.label}</span>
-                    {space.badge !== undefined && space.badge > 0 && (
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
-                        {space.badge}
-                      </span>
-                    )}
+                    <span
+                      className={`flex-1 ${sidebarCollapsed ? "hidden" : ""}`}
+                    >
+                      {space.label}
+                    </span>
+                    {space.badge !== undefined &&
+                      space.badge > 0 &&
+                      !sidebarCollapsed && (
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
+                          {space.badge}
+                        </span>
+                      )}
                   </a>
                 );
               })
