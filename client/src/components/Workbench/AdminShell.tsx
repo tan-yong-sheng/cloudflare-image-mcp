@@ -213,6 +213,11 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <span>Playground</span>
           </a>
 
+          {/* Section Divider */}
+          <div className="my-3 px-3">
+            <div className="h-px bg-gray-700/40" />
+          </div>
+
           {/* Admin Spaces - Flat list of items */}
           <div
             id="adminNavSpaces"
@@ -228,30 +233,21 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                     href={space.hash}
                     aria-current={active ? "page" : undefined}
                     title={space.label}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all${
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all relative${
                       active
-                        ? " font-medium"
+                        ? " font-medium text-primary"
                         : " text-muted hover:text-text hover:bg-gray-800/30"
                     }`}
-                    style={{
-                      backgroundColor: active
-                        ? "var(--primary)"
-                        : "transparent",
-                      color: active ? "white" : "inherit",
-                    }}
                   >
+                    {active && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r" />
+                    )}
                     <i
                       className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center${active ? "" : " opacity-70"}`}
                     />
                     <span className="flex-1">{space.label}</span>
                     {space.badge !== undefined && space.badge > 0 && (
-                      <span
-                        className={`text-xs font-semibold px-1.5 py-0.5 rounded-full${
-                          active
-                            ? "bg-white/20 text-white"
-                            : "bg-primary/20 text-primary"
-                        }`}
-                      >
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
                         {space.badge}
                       </span>
                     )}
