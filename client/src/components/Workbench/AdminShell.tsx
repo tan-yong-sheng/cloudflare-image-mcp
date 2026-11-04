@@ -174,7 +174,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
   return (
     <div
       id="adminShell"
-      className="flex flex-col md:flex-row min-h-screen w-full bg-background text-text overflow-x-hidden relative"
+      className="relative flex flex-col w-full min-h-screen bg-background text-text overflow-x-clip md:flex-row"
     >
       {/* Mobile Drawer Backdrop Scrim */}
       {mobileMenuOpen && (
@@ -195,6 +195,31 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             : "-translate-x-full md:translate-x-0"
         } ${sidebarCollapsed ? "md:w-20" : "w-72 md:w-56 lg:w-60"}`}
       >
+        {/*
+          Collapse / expand handle. It straddles the rail border at mid
+          height, the way a splitter does: a slim 28x48 pill so it never
+          crowds the nav rows, with an invisible 10px overhang on each
+          side so the hit area is comfortably above 44px wide. Tablet and
+          desktop only; below md the rail is an off-canvas drawer instead.
+        */}
+        <button
+          type="button"
+          className="group hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-30 h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-sm transition-colors duration-150 before:absolute before:-inset-x-2.5 before:inset-y-0 before:content-[''] hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          onClick={toggleSidebar}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!sidebarCollapsed}
+          aria-controls="adminNav"
+          title={
+            sidebarCollapsed
+              ? "Expand sidebar (Ctrl+B)"
+              : "Collapse sidebar (Ctrl+B)"
+          }
+        >
+          <i
+            className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-[10px] transition-transform duration-150`}
+          />
+        </button>
+
         {/*
           A skip link has to be a link, but the router owns the hash:
           following `#adminContent` would land on the generator, because
@@ -218,9 +243,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         {/* Brand Header */}
         <div
           className={`flex items-center px-3 py-4 border-b border-border/60 mb-2 ${
-            sidebarCollapsed
-              ? "md:flex-col md:gap-2 justify-center"
-              : "justify-between"
+            sidebarCollapsed ? "md:justify-center" : "justify-between"
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -246,35 +269,10 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           >
             <i className="fa-solid fa-xmark text-lg" />
           </button>
-
-          {/* Tablet & Laptop Rail Toggle Button (Always present and easily clickable) */}
-          <button
-            type="button"
-            className={`hidden md:flex items-center justify-center rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors ${
-              sidebarCollapsed
-                ? "w-9 h-9 min-h-[36px] min-w-[36px] mt-1"
-                : "w-8 h-8"
-            }`}
-            onClick={toggleSidebar}
-            aria-label={
-              sidebarCollapsed
-                ? "Expand sidebar (Ctrl+B)"
-                : "Collapse sidebar (Ctrl+B)"
-            }
-            title={
-              sidebarCollapsed
-                ? "Expand sidebar (Ctrl+B)"
-                : "Collapse sidebar (Ctrl+B)"
-            }
-          >
-            <i
-              className={`fa-solid fa-chevron-${sidebarCollapsed ? "right" : "left"} text-xs`}
-            />
-          </button>
         </div>
 
         {/* Back to Playground */}
-        <div className="px-2 mb-2">
+        <div className="relative px-2 mb-2 group/nav-item">
           <a
             id="adminNavPlayground"
             href="#"
@@ -282,73 +280,96 @@ export function AdminShell({ route }: { route: AdminRoute }) {
               sidebarCollapsed ? "md:justify-center" : "gap-3"
             }`}
             aria-label="Back to the playground"
-            title="Back to the playground"
             onClick={() => setMobileMenuOpen(false)}
           >
             <i className="fa-solid fa-arrow-left flex-shrink-0 w-4 text-center" />
-            <span className={sidebarCollapsed ? "md:hidden" : ""}>
+            {/* Collapsed keeps the label for assistive tech; only the
+                pointer gets the icon + tooltip treatment. */}
+            <span className={sidebarCollapsed ? "sr-only" : "flex-1 truncate"}>
               Playground
             </span>
           </a>
+
+          {sidebarCollapsed && (
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
+            >
+              Playground
+            </span>
+          )}
         </div>
 
         {/* Section Divider */}
         <div className="mx-3 my-1 border-t border-border/60" />
 
-        {/* Admin Spaces - Flat list of items */}
+        {/* Admin Spaces - Flat list of items. Deliberately not a scroll
+            container: an overflow ancestor clips the collapsed-rail
+            tooltips that sit outside the rail's own box. */}
         <div
           id="adminNavSpaces"
-          className={`flex flex-col gap-1 px-2 flex-1 overflow-y-auto${unlocked ? "" : " hidden"}`}
+          className={`flex flex-col gap-1 px-2 flex-1 min-h-0${unlocked ? "" : " hidden"}`}
         >
           {ADMIN_NAV_GROUPS.flatMap((group) =>
             group.spaces.map((space) => {
               const active = space.route === route;
               return (
-                <a
-                  key={space.route}
-                  id={`adminNav-${space.route}`}
-                  href={space.hash}
-                  aria-current={active ? "page" : undefined}
-                  title={space.label}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm transition-colors duration-150 relative ${
-                    sidebarCollapsed ? "md:justify-center" : "gap-3"
-                  } ${
-                    active
-                      ? "font-medium text-primary dark:text-primary-light bg-[rgba(var(--primary-rgb),0.12)]"
-                      : "text-text-light hover:text-text hover:bg-[var(--secondary)]"
-                  }`}
-                >
-                  {active && (!sidebarCollapsed || mobileMenuOpen) && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r" />
-                  )}
-                  <i
-                    className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center ${
+                <div key={space.route} className="relative group/nav-item">
+                  <a
+                    id={`adminNav-${space.route}`}
+                    href={space.hash}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm transition-colors duration-150 relative ${
+                      sidebarCollapsed ? "md:justify-center" : "gap-3"
+                    } ${
                       active
-                        ? "text-primary dark:text-primary-light"
-                        : "opacity-80"
+                        ? "font-medium text-primary dark:text-primary-light bg-[rgba(var(--primary-rgb),0.12)]"
+                        : "text-text-light hover:text-text hover:bg-[var(--secondary)]"
                     }`}
-                  />
-                  <span
-                    className={`flex-1 truncate ${sidebarCollapsed ? "md:hidden" : ""}`}
                   >
-                    {space.label}
-                  </span>
-                  {space.badge !== undefined &&
-                    space.badge > 0 &&
-                    (!sidebarCollapsed || mobileMenuOpen) && (
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary dark:text-primary-light">
-                        {space.badge}
-                      </span>
+                    {active && (!sidebarCollapsed || mobileMenuOpen) && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r" />
                     )}
-                </a>
+                    <i
+                      className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center ${
+                        active
+                          ? "text-primary dark:text-primary-light"
+                          : "opacity-80"
+                      }`}
+                    />
+                    <span
+                      className={
+                        sidebarCollapsed ? "sr-only" : "flex-1 truncate"
+                      }
+                    >
+                      {space.label}
+                    </span>
+                    {space.badge !== undefined &&
+                      space.badge > 0 &&
+                      (!sidebarCollapsed || mobileMenuOpen) && (
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary dark:text-primary-light">
+                          {space.badge}
+                        </span>
+                      )}
+                  </a>
+
+                  {sidebarCollapsed && (
+                    <span
+                      role="tooltip"
+                      className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
+                    >
+                      {space.label}
+                    </span>
+                  )}
+                </div>
               );
             })
           )}
         </div>
 
         {/* Bottom utility: Lock admin session */}
-        <div className="p-2 border-t border-border/60 mt-auto">
+        <div className="relative p-2 mt-auto border-t border-border/60 group/nav-item">
           <button
             id="adminLock"
             type="button"
@@ -356,15 +377,25 @@ export function AdminShell({ route }: { route: AdminRoute }) {
               sidebarCollapsed ? "md:justify-center" : "gap-3"
             }${unlocked ? "" : " hidden"}`}
             aria-label="Lock the administrative area"
-            title="Lock administration session"
             onClick={() => {
               setMobileMenuOpen(false);
               handleLock();
             }}
           >
             <i className="fa-solid fa-lock flex-shrink-0 w-4 text-center" />
-            {(!sidebarCollapsed || mobileMenuOpen) && <span>Lock</span>}
+            <span className={sidebarCollapsed ? "sr-only" : "flex-1 text-left"}>
+              Lock
+            </span>
           </button>
+
+          {sidebarCollapsed && (
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-full top-1/2 z-50 ml-4 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-[var(--text)] px-2.5 py-1.5 text-xs font-medium text-[var(--background)] shadow-lg md:group-hover/nav-item:block"
+            >
+              Lock
+            </span>
+          )}
         </div>
       </nav>
 
