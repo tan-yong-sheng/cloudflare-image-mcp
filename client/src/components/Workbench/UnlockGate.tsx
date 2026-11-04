@@ -70,6 +70,7 @@ export function UnlockGate({ error, hidden, onUnlock }: UnlockGateProps) {
         </div>
         <button
           id="adminUnlock"
+          data-testid="adminUnlock"
           type="submit"
           className="btn btn-primary w-full py-2 flex items-center justify-center"
         >

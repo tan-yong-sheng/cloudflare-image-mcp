@@ -9,13 +9,16 @@ import {
 } from "../../api/admin";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
-import { LogoutButton, ThemeToggleButton } from "../AppHeader";
 import type { AdminCallerKey } from "../../api/types";
-import { adminRefusal, gateErrorFor } from "./admin-gate";
+import { adminRefusal } from "./admin-gate";
 import { CallerKeyCreate } from "./CallerKeyCreate";
 import { CallerKeyTable } from "./CallerKeyTable";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { UnlockGate } from "./UnlockGate";
+
+interface ApiKeysPageProps {
+  /** Called when the admin gate refuses a request (403). */
+  onGateRefusal?: (failure: unknown) => void;
+}
 
 /**
  * The API-keys page.
@@ -35,9 +38,9 @@ import { UnlockGate } from "./UnlockGate";
  * opening it cold asks for the key. Nothing behind the gate is requested
  * before it is in hand. The gate itself belongs to `AdminShell`.
  */
-export function ApiKeysPage() {
+export function ApiKeysPage({ onGateRefusal }: ApiKeysPageProps = {}) {
   const session = useAdminSession();
-  const { adminKey, unlock, lock } = useAdminKey();
+  const { adminKey, lock } = useAdminKey();
   const { logout } = useAuth();
 
   // Every piece of one-shot secret material this page holds. Teardown
@@ -83,7 +86,6 @@ export function ApiKeysPage() {
   const renameKey = useRenameCallerKey(session, endRefusedSession);
   const deleteKey = useDeleteCallerKey(session, endRefusedSession);
 
-  const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
   // Whether the panel is unlocked right now, read from an async
@@ -121,9 +123,12 @@ export function ApiKeysPage() {
       return;
     }
     if (refusal?.status === 403) {
-      lock();
-      clearSecretState();
-      setGateError(gateErrorFor(refusal));
+      if (onGateRefusal) {
+        onGateRefusal(failure);
+      } else {
+        lock();
+        clearSecretState();
+      }
       return;
     }
     setPanelError(failure instanceof Error ? failure.message : String(failure));
@@ -133,19 +138,10 @@ export function ApiKeysPage() {
     clearSecretState,
     endRefusedSession,
     lock,
+    onGateRefusal,
   ]);
 
   const unlocked = adminKey !== null;
-
-  const handleLock = () => {
-    // The provider owns the teardown: it drops the key and the cached
-    // list together — and the one-shot secret and the open confirmation
-    // with them. A locked panel leaves nothing behind to read.
-    lock();
-    setGateError(null);
-    setPanelError(null);
-    clearSecretState();
-  };
 
   return (
     <main
@@ -184,7 +180,7 @@ export function ApiKeysPage() {
       </p>
 
       <div
-        id="apiKeysPanel"
+        id="adminCallerKeys"
         className={`space-y-4${unlocked ? "" : " hidden"}`}
       >
         {/*
@@ -333,16 +329,6 @@ export function ApiKeysPage() {
             );
             setRotating(null);
           }
-        }}
-      />
-
-      <UnlockGate
-        key={unlocked ? "unlocked" : "locked"}
-        hidden={unlocked}
-        error={gateError}
-        onUnlock={(key) => {
-          setGateError(null);
-          unlock(key);
         }}
       />
     </main>
