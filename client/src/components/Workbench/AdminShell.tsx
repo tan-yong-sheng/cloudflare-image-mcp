@@ -30,6 +30,7 @@ interface AdminNavGroup {
  *
  * Groups are ordered by workflow: Generate (model configuration),
  * Manage (keys and operations), Configure (settings and deployment).
+ * Group headers are not rendered; only the space items are shown.
  */
 const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
@@ -93,23 +94,8 @@ const CONTENT_HEADINGS: Record<AdminRoute, string> = {
 export function AdminShell({ route }: { route: AdminRoute }) {
   const { adminKey, unlock, lock } = useAdminKey();
   const [gateError, setGateError] = useState<string | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    new Set()
-  );
 
   const unlocked = adminKey !== null;
-
-  const toggleGroup = useCallback((groupName: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
-      } else {
-        next.add(groupName);
-      }
-      return next;
-    });
-  }, []);
 
   // A page says the gate refused it. The session is over, so the shell
   // locks and explains itself on the gate — an error the operator cannot
@@ -227,90 +213,52 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <span>Playground</span>
           </a>
 
-          {/* Admin Spaces - Collapsible Groups */}
+          {/* Admin Spaces - Flat list of items */}
           <div
             id="adminNavSpaces"
-            className={`flex flex-col gap-2 px-2${unlocked ? "" : " hidden"}`}
+            className={`flex flex-col gap-0.5 px-2${unlocked ? "" : " hidden"}`}
           >
-            {ADMIN_NAV_GROUPS.map((group) => {
-              const isCollapsed = collapsedGroups.has(group.name);
-              const hasSpaces = group.spaces.length > 0;
-
-              return (
-                <div key={group.name} className="flex flex-col">
-                  {/* Group Header - Clickable to collapse/expand */}
-                  {hasSpaces && (
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 px-2 py-2 text-xs font-semibold text-muted hover:text-text transition-colors rounded-lg hover:bg-gray-800/50"
-                      onClick={() => toggleGroup(group.name)}
-                      aria-expanded={!isCollapsed}
-                      aria-controls={`group-${group.name.toLowerCase()}`}
-                    >
-                      <i
-                        className={`fa-solid fa-chevron-${
-                          isCollapsed ? "right" : "down"
-                        } text-[10px] transition-transform`}
-                      />
-                      <i className={`fa-solid ${group.icon} text-sm`} />
-                      <span className="capitalize">
-                        {group.name.toLowerCase()}
+            {ADMIN_NAV_GROUPS.flatMap((group) =>
+              group.spaces.map((space) => {
+                const active = space.route === route;
+                return (
+                  <a
+                    key={space.route}
+                    id={`adminNav-${space.route}`}
+                    href={space.hash}
+                    aria-current={active ? "page" : undefined}
+                    title={space.label}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all${
+                      active
+                        ? " font-medium"
+                        : " text-muted hover:text-text hover:bg-gray-800/30"
+                    }`}
+                    style={{
+                      backgroundColor: active
+                        ? "var(--primary)"
+                        : "transparent",
+                      color: active ? "white" : "inherit",
+                    }}
+                  >
+                    <i
+                      className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center${active ? "" : " opacity-70"}`}
+                    />
+                    <span className="flex-1">{space.label}</span>
+                    {space.badge !== undefined && space.badge > 0 && (
+                      <span
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded-full${
+                          active
+                            ? "bg-white/20 text-white"
+                            : "bg-primary/20 text-primary"
+                        }`}
+                      >
+                        {space.badge}
                       </span>
-                    </button>
-                  )}
-
-                  {/* Group Items */}
-                  {hasSpaces && (
-                    <div
-                      id={`group-${group.name.toLowerCase()}`}
-                      className={`flex flex-col gap-0.5 mt-1 overflow-hidden transition-all${
-                        isCollapsed ? " hidden" : ""
-                      }`}
-                    >
-                      {group.spaces.map((space) => {
-                        const active = space.route === route;
-                        return (
-                          <a
-                            key={space.route}
-                            id={`adminNav-${space.route}`}
-                            href={space.hash}
-                            aria-current={active ? "page" : undefined}
-                            title={space.label}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all${
-                              active
-                                ? " font-medium"
-                                : " text-muted hover:text-text hover:bg-gray-800/30"
-                            }`}
-                            style={{
-                              backgroundColor: active
-                                ? "var(--primary)"
-                                : "transparent",
-                              color: active ? "white" : "inherit",
-                            }}
-                          >
-                            <i
-                              className={`fa-solid ${space.icon} flex-shrink-0 w-4 text-center${active ? "" : " opacity-70"}`}
-                            />
-                            <span className="flex-1">{space.label}</span>
-                            {space.badge !== undefined && space.badge > 0 && (
-                              <span
-                                className={`text-xs font-semibold px-1.5 py-0.5 rounded-full${
-                                  active
-                                    ? "bg-white/20 text-white"
-                                    : "bg-primary/20 text-primary"
-                                }`}
-                              >
-                                {space.badge}
-                              </span>
-                            )}
-                          </a>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </a>
+                );
+              })
+            )}
           </div>
         </nav>
 
