@@ -69,12 +69,12 @@
 }
 
 .dark {
-  --primary: #938df4;
-  --primary-rgb: 147 141 244;
-  --primary-light: #a39ef7;
-  --primary-light-rgb: 163 158 247;
-  --primary-dark: #5046e5;
-  --primary-dark-rgb: 80 70 229;
+  --primary: #7c73e0;
+  --primary-rgb: 124 115 224;
+  --primary-light: #938df4;
+  --primary-light-rgb: 147 141 244;
+  --primary-dark: #625bd0;
+  --primary-dark-rgb: 98 91 208;
   --secondary: #2d3748;
   --secondary-rgb: 45 55 72;
   --text: #f7fafc;
@@ -190,6 +190,14 @@ body {
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark .btn-primary {
+  background-color: var(--primary-dark);
+}
+
+.dark .btn-primary:hover {
+  background-color: var(--primary);
 }
 
 .btn-secondary {
@@ -511,4 +519,13 @@ textarea:focus {
   .container {
     max-width: 1200px;
   }
+}
+
+/* Safe area support for mobile devices with notches and dynamic islands */
+.pt-safe-top {
+  padding-top: max(env(safe-area-inset-top, 0px), 40px);
+}
+
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

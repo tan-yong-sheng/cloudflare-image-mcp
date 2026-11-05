@@ -197,14 +197,13 @@ export function AdminShell({ route }: { route: AdminRoute }) {
       >
         {/*
           Collapse / expand handle. It straddles the rail border at mid
-          height, the way a splitter does: a slim 28x48 pill so it never
-          crowds the nav rows, with an invisible 10px overhang on each
-          side so the hit area is comfortably above 44px wide. Tablet and
-          desktop only; below md the rail is an off-canvas drawer instead.
+          height, the way a splitter does: a 44x44 pill so it meets the
+          tap target minimum. Tablet and desktop only; below md the rail
+          is an off-canvas drawer instead.
         */}
         <button
           type="button"
-          className="group max-md:hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-[60] h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="group max-md:hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-[60] h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           onClick={toggleSidebar}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!sidebarCollapsed}
@@ -230,7 +229,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         <a
           id="adminSkipLink"
           href="#adminContent"
-          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-4 py-3 min-h-[48px] h-12 text-white whitespace-nowrap focus:top-4 transition-[top] flex items-center justify-center text-sm font-medium"
+          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-4 py-3 min-h-[48px] h-12 text-white whitespace-nowrap focus:top-4 transition-[top] flex items-center justify-center text-sm font-medium font-semibold"
           onClick={(event) => {
             event.preventDefault();
             document.getElementById("adminContent")?.focus();
@@ -285,7 +284,13 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             <i className="fa-solid fa-arrow-left flex-shrink-0 w-4 text-center" />
             {/* Collapsed keeps the label for assistive tech; only the
                 pointer gets the icon + tooltip treatment. */}
-            <span className={sidebarCollapsed ? "sr-only" : "flex-1 truncate"}>
+            <span
+              className={
+                sidebarCollapsed
+                  ? "sr-only absolute -left-[9999px] w-px h-px overflow-hidden"
+                  : "flex-1 truncate"
+              }
+            >
               Playground
             </span>
           </a>
@@ -342,7 +347,9 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                     />
                     <span
                       className={
-                        sidebarCollapsed ? "sr-only" : "flex-1 truncate"
+                        sidebarCollapsed
+                          ? "sr-only absolute -left-[9999px] w-px h-px overflow-hidden"
+                          : "flex-1 truncate"
                       }
                     >
                       {space.label}
@@ -387,7 +394,13 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             }}
           >
             <i className="fa-solid fa-lock flex-shrink-0 w-4 text-center" />
-            <span className={sidebarCollapsed ? "sr-only" : "flex-1 text-left"}>
+            <span
+              className={
+                sidebarCollapsed
+                  ? "sr-only absolute -left-[9999px] w-px h-px overflow-hidden"
+                  : "flex-1 text-left"
+              }
+            >
               Lock
             </span>
           </button>
@@ -408,7 +421,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-background">
         {/* Top Navbar */}
-        <header className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 border-b border-border bg-[var(--background)] sticky top-0 z-30">
+        <header className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 pt-safe-top border-b border-border bg-[var(--background)] sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile Hamburger Trigger */}
             <button
@@ -423,10 +436,10 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             </button>
 
             <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <span className="text-lg sm:text-xl font-bold truncate">
+              <span className="text-lg sm:text-xl font-bold truncate min-w-0">
                 Cloudflare Image MCP
               </span>
-              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20 whitespace-nowrap">
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-light border border-primary/20 whitespace-nowrap flex-shrink-0">
                 Administration
               </span>
             </div>
