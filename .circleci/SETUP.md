@@ -7,67 +7,34 @@ This repo now uses CircleCI with **dynamic config + path filtering** (Option C h
 - **`.circleci/setup.yml`** - Entry point that detects which files changed using `circleci/path-filtering` orb
 - **`.circleci/continue.yml`** - Actual jobs that run conditionally based on pipeline parameters
 
-## Web UI Configuration Required (Automated Option Available)
+## Manual CLI Triggering (Current Setup)
 
-You must configure triggers in CircleCI. The path filtering orb alone cannot detect PR events; GitHub App triggers are needed.
-
-### Option A: Automated Setup (Recommended)
-
-Run the provided script to automate trigger setup:
+This project uses CircleCI-native VCS integration, which doesn't support automatic GitHub webhook triggers. Use the provided script to trigger pipelines manually:
 
 ```bash
-node scripts/setup-circleci-triggers.mjs
+# Trigger for current branch
+./scripts/trigger-circleci.sh
+
+# Trigger for specific branch
+./scripts/trigger-circleci.sh ci/add-circleci
 ```
 
 This script:
 
-1. Waits for CircleCI to auto-discover pipeline definitions from `setup.yml`
-2. Gets the pipeline definition ID
-3. Gets the GitHub repo ID
-4. Creates three triggers:
-   - `only-open-prs` → `pr-checks` workflow
-   - `only-ready-for-review-prs` → `e2e-full` workflow
-   - `only-merged-prs` → `tag-release` workflow
+- Uses the CircleCI CLI to trigger the pipeline definition
+- Passes the branch name to CircleCI
+- Outputs the pipeline URL for viewing results
 
-### Option B: Manual Web UI Setup
+**Note:** Since the project uses CircleCI-native VCS, automatic PR triggers are not available. You must manually trigger pipelines after pushing changes.
 
-If you prefer manual configuration, follow these steps:
+## Alternative: GitHub App Integration (For Automatic Triggers)
 
-#### Step 1: Ensure GitHub App Integration
+If you want automatic PR triggers, the CircleCI project must be recreated with GitHub App integration:
 
-1. Go to [CircleCI Organization Settings](https://app.circleci.com/settings/organization)
-2. Check your Organization slug format:
-   - `circleci/<UID>` = GitHub App integration ✅
-   - `github/<org>` or `gh/<org>` = OAuth integration (no PR triggers)
-
-If you see `github/` or `gh/`, you need to migrate to GitHub App integration.
-
-### Step 2: Configure Project Triggers
-
-Go to **Project Settings > Triggers** and create three triggers:
-
-#### Trigger 1: Fast PR Checks (for `pr-checks` workflow)
-
-- **Pipeline:** `setup.yml` (auto-detected)
-- **Trigger type:** GitHub App
-- **Run on:** `PR opened or pushed to`
-- **Branches:** `main` (only PRs targeting main)
-
-#### Trigger 2: Full E2E Pipeline (for `e2e-full` workflow)
-
-- **Pipeline:** `setup.yml`
-- **Trigger type:** GitHub App
-- **Run on:** `PR marked ready for review`
-- **Branches:** `main`
-
-This means expensive E2E tests only run when you explicitly mark a PR as ready for review.
-
-#### Trigger 3: Release Pipeline (for `tag-release` workflow)
-
-- **Pipeline:** `setup.yml`
-- **Trigger type:** GitHub App
-- **Run on:** `PR merged`
-- **Branches:** `main`
+1. Delete the current CircleCI project in the web UI
+2. Re-add the repository, choosing "GitHub App" integration
+3. Run `node scripts/setup-circleci-triggers.mjs` to configure triggers
+4. The `setup-circleci-triggers.mjs` script will fail with CircleCI-native VCS and guide you to this step
 
 ### Step 3: Configure Contexts
 
@@ -129,6 +96,8 @@ Go to **Project Settings > Environment Variables** and set:
 
 ## Migration Notes
 
-- GitHub Actions workflows (`.github/workflows/`) remain until CircleCI is proven
-- Once CircleCI is stable, you can remove `.github/workflows/pr-checks.yml`, `tag-release.yml`, and `e2e-tests.yml`
-- Keep `.github/workflows/deploy-workers.yml` separately (excluded from this migration)
+- GitHub Actions workflows replaced by CircleCI have been deleted:
+  - `.github/workflows/pr-checks.yml` → CircleCI `pr-checks` workflow
+  - `.github/workflows/tag-release.yml` → CircleCI `tag-release` workflow
+  - `.github/workflows/e2e-tests.yml` → CircleCI `e2e-full` workflow
+- `.github/workflows/deploy-workers.yml` remains for deployment (excluded from this migration - handles actual deployment to Workers)
