@@ -1,0 +1,209 @@
+version: 2.1
+
+# CircleCI CI/CD for cloudflare-image-mcp
+# Replicates GitHub Actions: pr-checks.yml + deploy-workers.yml
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:24.18
+    working_directory: ~/project
+    resource_class: medium
+
+commands:
+  setup-node:
+    description: "Setup Node.js and restore cache"
+    steps:
+      - restore_cache:
+          keys:
+            - workers-deps-{{ checksum "workers/package-lock.json" }}
+            - client-deps-{{ checksum "client/package-lock.json" }}
+      - run:
+          name: Install workers dependencies
+          command: cd workers && npm ci
+      - run:
+          name: Install client dependencies
+          command: cd client && npm ci
+      - save_cache:
+          key: workers-deps-{{ checksum "workers/package-lock.json" }}
+          paths:
+            - workers/node_modules
+      - save_cache:
+          key: client-deps-{{ checksum "client/package-lock.json" }}
+          paths:
+            - client/node_modules
+
+  typecheck-workers:
+    description: "Type check workers"
+    steps:
+      - run:
+          name: Type check workers
+          command: cd workers && npm run check
+
+  typecheck-client:
+    description: "Type check client"
+    steps:
+      - run:
+          name: Type check client
+          command: cd client && npm run check
+
+  build-client:
+    description: "Build React client"
+    steps:
+      - run:
+          name: Build client
+          command: cd client && npm run build
+      - run:
+          name: Verify build output
+          command: cd client && test -f dist/index.html
+
+  test-client:
+    description: "Run client unit tests"
+    steps:
+      - run:
+          name: Client unit tests
+          command: cd client && npm test
+
+  format-check:
+    description: "Check code formatting"
+    steps:
+      - run:
+          name: Client format check
+          command: cd client && npx --no-install prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
+      - run:
+          name: Workers format check
+          command: cd workers && npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" "../.circleci/config.yml"
+
+  test-workers:
+    description: "Run workers unit tests"
+    steps:
+      - run:
+          name: Workers unit tests
+          command: cd workers && npm test
+
+  verify-secrets:
+    description: "Verify deployment secrets are configured"
+    steps:
+      - run:
+          name: Verify secrets
+          command: |
+            if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+              echo "❌ ERROR: CLOUDFLARE_API_TOKEN is not set"
+              exit 1
+            fi
+            if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+              echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID is not set"
+              exit 1
+            fi
+            if [ -z "$D1_DATABASE_ID" ]; then
+              echo "❌ ERROR: D1_DATABASE_ID is not set (one per CircleCI environment)"
+              exit 1
+            fi
+            if [[ ! "$D1_DATABASE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+              echo "❌ ERROR: D1_DATABASE_ID is not a valid database UUID"
+              exit 1
+            fi
+            echo "✅ All required secrets are configured"
+
+  generate-wrangler-toml:
+    description: "Generate wrangler.toml from secrets"
+    steps:
+      - run:
+          name: Generate wrangler.toml
+          command: |
+            cd workers
+            cat > wrangler.toml << EOF
+            name = "cloudflare-image-mcp"
+            main = "src/index.ts"
+            compatibility_date = "2024-01-01"
+
+            [vars]
+            WORKER_VERSION = "$(node -p "require('./package.json').version")"
+            EOF
+            if [ -n "$API_KEYS" ]; then
+              echo 'API_KEYS = "'"$API_KEYS"'"' >> wrangler.toml
+            fi
+            if [ -n "$TZ" ]; then
+              echo 'TZ = "'"$TZ"'"' >> wrangler.toml
+            fi
+            echo "[[d1_databases]]" >> wrangler.toml
+            echo 'binding = "DB"' >> wrangler.toml
+            echo 'database_name = "cloudflare-image-mcp-db"' >> wrangler.toml
+            echo 'database_id = "'"$D1_DATABASE_ID"'"' >> wrangler.toml
+            echo "" >> wrangler.toml
+            echo "[assets]" >> wrangler.toml
+            echo 'directory = "../client/dist"' >> wrangler.toml
+            echo 'binding = "ASSETS"' >> wrangler.toml
+            echo "" >> wrangler.toml
+            echo "[routes]" >> wrangler.toml
+            echo 'pattern = "mcp.tanys.dev/*"' >> wrangler.toml
+            echo 'zone_id = "'"$CLOUDFLARE_ACCOUNT_ID"'"' >> wrangler.toml
+
+  deploy-workers:
+    description: "Deploy to Cloudflare Workers"
+    steps:
+      - run:
+          name: Deploy to Cloudflare
+          command: |
+            cd workers
+            npx wrangler deploy --env production
+      - run:
+          name: Cleanup wrangler.toml
+          command: cd workers && rm -f wrangler.toml
+
+jobs:
+  pr-checks:
+    executor: node-executor
+    steps:
+      - checkout
+      - run:
+          name: Agent doc pointers
+          command: node scripts/check-agent-doc-paths.mjs
+      - setup-node
+      - typecheck-workers
+      - typecheck-client
+      - build-client
+      - test-client
+      - format-check
+      - test-workers
+      - run:
+          name: Version consistency
+          command: |
+            cd workers
+            PKG="$(node -p "require('./package.json').version")"
+            SRC="$(node -p "require('fs').readFileSync('src/version.ts','utf8').match(/WORKER_VERSION = \"([^\"]+)\"/)[1]")"
+            if [ "$PKG" != "$SRC" ]; then
+              echo "::error::version skew: package.json ($PKG) != src/version.ts ($SRC) — bump both in the same PR"
+              exit 1
+            fi
+            echo "✅ Version consistent: $PKG"
+
+  deploy:
+    executor: node-executor
+    steps:
+      - checkout
+      - setup-node
+      - typecheck-workers
+      - build-client
+      - verify-secrets
+      - generate-wrangler-toml
+      - deploy-workers
+
+workflows:
+  version: 2
+  pr-checks:
+    jobs:
+      - pr-checks:
+          filters:
+            branches:
+              only:
+                - main
+  deploy:
+    jobs:
+      - deploy:
+          filters:
+            branches:
+              only:
+                - main
+          context:
+            - cloudflare-secrets
