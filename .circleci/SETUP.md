@@ -23,7 +23,11 @@ This script:
 
 - Uses the CircleCI CLI to trigger the pipeline definition
 - Passes the branch name to CircleCI
-- Outputs the pipeline URL for viewing results
+- Sets `force_run_all=true`, which enables `pr-checks` regardless of path filtering
+  (the path-filtering orb cannot read the diff on CircleCI-native VCS projects, so
+  a manual run would otherwise finish with no workflows)
+
+Extra parameters can be appended as `--param key=value`.
 
 **Note:** Since the project uses CircleCI-native VCS, automatic PR triggers are not available. You must manually trigger pipelines after pushing changes.
 
