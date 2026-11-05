@@ -1,7 +1,25 @@
 version: 2.1
 
-# Combined CircleCI config for cloudflare-image-mcp
-# Replicates GitHub Actions: pr-checks.yml, tag-release.yml, e2e-tests.yml
+# Continuation config for cloudflare-image-mcp
+# This config is dynamically triggered by setup.yml based on path filtering
+# Pipeline parameters are set by circleci/path-filtering orb
+
+parameters:
+  run_workers:
+    type: boolean
+    default: false
+  run_client:
+    type: boolean
+    default: false
+  run_e2e:
+    type: boolean
+    default: false
+  run_ci:
+    type: boolean
+    default: false
+  run_docs:
+    type: boolean
+    default: false
 
 executors:
   node-executor:
@@ -55,7 +73,7 @@ commands:
             - e2e-deps-{{ checksum "e2e/package-lock.json" }}
       - run:
           name: Install E2E dependencies
-          working_directory: e2e
+          working-directory: e2e
           command: npm ci
       - save_cache:
           key: e2e-deps-{{ checksum "e2e/package-lock.json" }}
@@ -63,11 +81,12 @@ commands:
             - e2e/node_modules
       - run:
           name: Install Playwright browsers
-          working_directory: e2e
+          working-directory: e2e
           command: npx playwright install --with-deps chromium
 
 jobs:
-  # Fast per-push gate for feature PRs
+  # Fast checks (always run on PRs regardless of file changes)
+  # This is the gate for every PR - quick typecheck, lint, unit tests
   fast:
     executor: node-executor
     steps:
@@ -107,7 +126,7 @@ jobs:
       - run:
           name: Format check
           working_directory: workers
-          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" ".circleci/config.yml"
+          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" ".circleci/*.yml"
 
       - run:
           name: Unit tests
@@ -126,7 +145,7 @@ jobs:
             fi
             echo "✅ Version consistent: $PKG"
 
-  # Tag and release on main branch
+  # Tag and release on main branch (only if workers/package.json changed)
   tag-and-release:
     executor: node-executor
     environment:
@@ -217,7 +236,7 @@ jobs:
           environment:
             GH_TOKEN: ${GH_TOKEN}
 
-  # E2E test jobs
+  # E2E test jobs (only run if workers/, client/, or e2e/ changed)
   deploy_staging:
     executor: node-executor
     environment:
@@ -400,36 +419,34 @@ jobs:
 workflows:
   version: 2
 
-  # Fast per-push checks on main branch
+  # Fast PR checks (always run on PR events)
   pr-checks:
+    when:
+      equal: [true, << pipeline.parameters.run_ci >>]
     jobs:
-      - fast:
-          filters:
-            branches:
-              only:
-                - main
+      - fast
 
-  # Tag and release on main branch
+  # Tag and release (only on main merge and workers/package.json changed)
   tag-release:
+    when:
+      and:
+        - equal: [true, << pipeline.parameters.run_workers >>]
+        - equal: [main, << pipeline.git.branch >>]
     jobs:
       - tag-and-release:
           context:
             - github-release
-          filters:
-            branches:
-              only:
-                - main
 
-  # E2E tests on main and release branches
-  e2e-tests:
+  # Full E2E pipeline (only when workers/, client/, or e2e/ changed)
+  # This runs on "PR marked ready for review" or manual dispatch via GitHub App
+  e2e-full:
+    when:
+      or:
+        - equal: [true, << pipeline.parameters.run_workers >>]
+        - equal: [true, << pipeline.parameters.run_client >>]
+        - equal: [true, << pipeline.parameters.run_e2e >>]
     jobs:
-      - deploy_staging:
-          filters:
-            branches:
-              only:
-                - main
-                - prerelease/*
-                - release/*
+      - deploy_staging
       - e2e-tests:
           requires:
             - deploy_staging
@@ -441,7 +458,7 @@ workflows:
             - e2e-tests
             - cleanup-staging
 
-  # Scheduled daily E2E (canary tier)
+  # Scheduled daily E2E (canary tier) - bypasses path filtering
   e2e-scheduled:
     triggers:
       - schedule:
