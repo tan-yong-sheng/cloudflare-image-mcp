@@ -422,25 +422,6 @@ export function AdminShell({ route }: { route: AdminRoute }) {
               <i className="fa-solid fa-bars text-base" />
             </button>
 
-            {/* Desktop Sidebar Collapse Toggle */}
-            <button
-              type="button"
-              className="max-md:hidden md:flex items-center justify-center w-9 h-9 min-h-[36px] min-w-[36px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors border border-border/80 mr-1"
-              onClick={toggleSidebar}
-              aria-label={
-                sidebarCollapsed
-                  ? "Expand sidebar (Ctrl+B)"
-                  : "Collapse sidebar (Ctrl+B)"
-              }
-              title={
-                sidebarCollapsed
-                  ? "Expand sidebar (Ctrl+B)"
-                  : "Collapse sidebar (Ctrl+B)"
-              }
-            >
-              <i className="fa-solid fa-bars-staggered text-sm" />
-            </button>
-
             <div className="flex items-center gap-2 flex-wrap min-w-0">
               <span className="text-lg sm:text-xl font-bold truncate">
                 Cloudflare Image MCP
