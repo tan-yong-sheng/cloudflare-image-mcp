@@ -108,7 +108,8 @@ test("the repo's own config stays clean (scanner calibration)", () => {
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const files = [
     ".github/workflows/deploy-workers.yml",
-    ".github/workflows/pr-checks.yml",
+    ".circleci/setup.yml",
+    ".circleci/continue.yml",
     "docs/DEPLOY.md",
     "CONTRIB.md",
   ];

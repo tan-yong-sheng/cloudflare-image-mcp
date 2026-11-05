@@ -1,0 +1,37 @@
+version: 2.1
+setup: true
+
+orbs:
+  path-filtering: circleci/path-filtering@0.1.1
+
+parameters:
+  # These parameters are set by path-filtering orb based on changed files
+  run_workers:
+    type: boolean
+    default: false
+  run_client:
+    type: boolean
+    default: false
+  run_e2e:
+    type: boolean
+    default: false
+  run_ci:
+    type: boolean
+    default: false
+  run_docs:
+    type: boolean
+    default: false
+
+workflows:
+  setup-workflow:
+    jobs:
+      - path-filtering/filter:
+          name: detect-changes
+          mapping: |
+            ^workers/ run_workers true
+            ^client/ run_client true
+            ^e2e/ run_e2e true
+            ^\.circleci/ run_ci true
+            \.md$ run_docs true
+          base-revision: main
+          config-path: .circleci/continue.yml

@@ -1,0 +1,485 @@
+version: 2.1
+
+# Continuation config for cloudflare-image-mcp
+# This config is dynamically triggered by setup.yml based on path filtering
+# Pipeline parameters are set by circleci/path-filtering orb
+# Updated to trigger path-filtering for CI testing
+
+parameters:
+  run_workers:
+    type: boolean
+    default: false
+  run_client:
+    type: boolean
+    default: false
+  run_e2e:
+    type: boolean
+    default: false
+  run_ci:
+    type: boolean
+    default: false
+  run_docs:
+    type: boolean
+    default: false
+  # Manual override: path-filtering cannot read the diff for CircleCI-native
+  # VCS projects, so a manual run passes force_run_all=true instead.
+  force_run_all:
+    type: boolean
+    default: false
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:24.18
+    working_directory: ~/project
+    resource_class: medium
+
+  playwright-executor:
+    docker:
+      - image: mcr.microsoft.com/playwright:v1.48.2-jammy
+    working_directory: ~/project
+    resource_class: medium
+
+commands:
+  setup-node:
+    description: "Setup Node.js and restore cache"
+    steps:
+      - restore_cache:
+          keys:
+            - workers-deps-{{ checksum "workers/package-lock.json" }}
+            - client-deps-{{ checksum "client/package-lock.json" }}
+      - run:
+          name: Install workers dependencies
+          command: cd workers && npm ci
+      - run:
+          name: Install client dependencies
+          command: cd client && npm ci
+      - save_cache:
+          key: workers-deps-{{ checksum "workers/package-lock.json" }}
+          paths:
+            - workers/node_modules
+      - save_cache:
+          key: client-deps-{{ checksum "client/package-lock.json" }}
+          paths:
+            - client/node_modules
+
+  setup-wrangler:
+    description: "Setup Wrangler for deployment"
+    steps:
+      - run:
+          name: Install Wrangler
+          working_directory: workers
+          command: npm install -g wrangler
+
+  setup-e2e:
+    description: "Setup E2E test environment"
+    steps:
+      - restore_cache:
+          keys:
+            - e2e-deps-{{ checksum "e2e/package-lock.json" }}
+      - run:
+          name: Install E2E dependencies
+          working-directory: e2e
+          command: npm ci
+      - save_cache:
+          key: e2e-deps-{{ checksum "e2e/package-lock.json" }}
+          paths:
+            - e2e/node_modules
+      - run:
+          name: Install Playwright browsers
+          working-directory: e2e
+          command: npx playwright install --with-deps chromium
+
+jobs:
+  # Fast checks (always run on PRs regardless of file changes)
+  # This is the gate for every PR - quick typecheck, lint, unit tests
+  fast:
+    executor: node-executor
+    steps:
+      - checkout
+
+      - run:
+          name: Agent doc pointers
+          command: node scripts/check-agent-doc-paths.mjs
+
+      - setup-node
+
+      - run:
+          name: Type check
+          working_directory: workers
+          command: npm run check
+
+      - run:
+          name: Client type check
+          working_directory: client
+          command: npm run check
+
+      - run:
+          name: Client build
+          working_directory: client
+          command: npm run build
+
+      - run:
+          name: Client unit tests
+          working_directory: client
+          command: npm test
+
+      - run:
+          name: Client format check
+          working_directory: client
+          command: npx --no-install prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
+
+      - run:
+          name: Format check
+          working_directory: workers
+          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json"
+
+      - run:
+          name: Unit tests
+          working_directory: workers
+          command: npm test
+
+      - run:
+          name: Version consistency
+          working_directory: workers
+          command: |
+            PKG="$(node -p "require('./package.json').version")"
+            SRC="$(node -p "require('fs').readFileSync('src/version.ts','utf8').match(/WORKER_VERSION = \"([^\"]+)\"/)[1]")"
+            if [ "$PKG" != "$SRC" ]; then
+              echo "❌ ERROR: version skew: package.json ($PKG) != src/version.ts ($SRC) — bump both in the same PR"
+              exit 1
+            fi
+            echo "✅ Version consistent: $PKG"
+
+  # Tag and release on main branch (only if workers/package.json changed)
+  tag-and-release:
+    executor: node-executor
+    environment:
+      GIT_USER_NAME: github-actions[bot]
+      GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+    steps:
+      - checkout
+
+      - run:
+          name: Install gh CLI
+          command: |
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+
+      - run:
+          name: Resolve version
+          command: |
+            RAW="$(node -p "require('./workers/package.json').version")"
+            if ! printf '%s' "$RAW" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+              echo "❌ ERROR: workers/package.json version is not strict semver: '$RAW'"
+              exit 1
+            fi
+            VERSION="${RAW#v}"
+            TAG="v$VERSION"
+            CORE_AND_PRERELEASE="${VERSION%%+*}"
+            case "$CORE_AND_PRERELEASE" in
+              *"-"*) PRERELEASE=true ;;
+              *) PRERELEASE=false ;;
+            esac
+            echo "VERSION=$VERSION" >> $BASH_ENV
+            echo "TAG=$TAG" >> $BASH_ENV
+            echo "PRERELEASE=$PRERELEASE" >> $BASH_ENV
+            echo "Version: $VERSION → tag $TAG (prerelease: $PRERELEASE)"
+
+      - run:
+          name: Check existing tag and release
+          command: |
+            TAG="${TAG}"
+            if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+              echo "TAG_EXISTS=true" >> $BASH_ENV
+              echo "Tag $TAG already exists"
+            else
+              echo "TAG_EXISTS=false" >> $BASH_ENV
+              echo "Tag $TAG not found"
+            fi
+            if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+              echo "RELEASE_EXISTS=true" >> $BASH_ENV
+              echo "Release $TAG already exists"
+            else
+              echo "RELEASE_EXISTS=false" >> $BASH_ENV
+              echo "Release $TAG not found"
+            fi
+          environment:
+            GH_TOKEN: ${GH_TOKEN}
+
+      - run:
+          name: Create and push tag
+          command: |
+            if [ "$TAG_EXISTS" = "false" ]; then
+              git config user.name "$GIT_USER_NAME"
+              git config user.email "$GIT_USER_EMAIL"
+              git tag "$TAG" "$(git rev-parse HEAD)"
+              git push origin "$TAG"
+              echo "Tag $TAG created"
+            else
+              echo "Tag already exists, skipping"
+            fi
+
+      - run:
+          name: Create GitHub Release
+          command: |
+            if [ "$RELEASE_EXISTS" = "false" ]; then
+              ARGS=(
+                --title "cloudflare-image-mcp $TAG"
+                --target "$(git rev-parse HEAD)"
+                --generate-notes
+              )
+              if [ "$PRERELEASE" = "true" ]; then
+                ARGS+=(--prerelease)
+              fi
+              gh release create "$TAG" "${ARGS[@]}"
+              echo "Release $TAG published"
+            else
+              echo "Release already exists, skipping"
+            fi
+          environment:
+            GH_TOKEN: ${GH_TOKEN}
+
+  # E2E test jobs (only run if workers/, client/, or e2e/ changed)
+  deploy_staging:
+    executor: node-executor
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+      D1_DATABASE_ID: ${D1_DATABASE_ID_STAGING}
+    steps:
+      - checkout
+      - run:
+          name: Generate wrangler.toml
+          working_directory: workers
+          command: |
+            cat > wrangler.toml \<<EOF
+            name = "cloudflare-image-workers-staging"
+            main = "src/index.ts"
+            compatibility_date = "2024-01-01"
+
+            [[d1_databases]]
+            binding = "DB"
+            database_name = "cloudflare-image-mcp-staging"
+            database_id = "${D1_DATABASE_ID}"
+
+            [assets]
+            directory = "../client/dist"
+            binding = "ASSETS"
+
+            [vars]
+            ENVIRONMENT = "staging"
+            EOF
+      - setup-wrangler
+      - run:
+          name: Apply D1 migrations
+          working_directory: workers
+          command: |
+            for migration in migrations/*.sql; do
+              echo "Applying $migration"
+              wrangler d1 execute DB --remote --file="$migration"
+            done
+      - run:
+          name: Deploy staging worker
+          working_directory: workers
+          command: |
+            wrangler deploy --env staging
+            WORKER_URL=$(wrangler whoami 2>/dev/null || echo "https://cloudflare-image-workers-staging.workers.dev")
+            echo "WORKERS_URL=$WORKER_URL" >> $BASH_ENV
+      - run:
+          name: Save workers URL
+          command: |
+            echo "export WORKERS_URL=$WORKER_URL" >> $BASH_ENV
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .env*
+
+  e2e-tests:
+    executor: playwright-executor
+    environment:
+      TEST_TARGET: staging
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+      API_KEY: ${API_KEY}
+      API_KEYS: ${API_KEYS}
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - setup-e2e
+      - run:
+          name: Derive base URL
+          command: |
+            if [ -n "$WORKERS_URL" ]; then
+              echo "TEST_BASE_URL=$WORKERS_URL" >> $BASH_ENV
+            else
+              SUBDOMAIN=$(curl -sS \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+                | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const j=JSON.parse(s); if(!j.success){ console.error(JSON.stringify(j.errors||j, null, 2)); process.exit(1);} console.log(j.result?.subdomain||'');});")
+              if [ -z "$SUBDOMAIN" ]; then
+                echo "❌ Could not derive workers.dev subdomain"
+                exit 1
+              fi
+              echo "TEST_BASE_URL=https://cloudflare-image-workers-staging.${SUBDOMAIN}.workers.dev" >> $BASH_ENV
+            fi
+            echo "Resolved TEST_BASE_URL=$(cat $BASH_ENV | grep '^TEST_BASE_URL=' | cut -d'=' -f2-)"
+      - run:
+          name: Derive API key
+          command: |
+            if [ -n "$API_KEYS" ]; then
+              FIRST_KEY=$(echo "$API_KEYS" | cut -d',' -f1 | xargs)
+              echo "API_KEY_EFFECTIVE=$FIRST_KEY" >> $BASH_ENV
+            elif [ -n "$API_KEY" ]; then
+              echo "API_KEY_EFFECTIVE=$API_KEY" >> $BASH_ENV
+            else
+              echo "API_KEY_EFFECTIVE=" >> $BASH_ENV
+            fi
+      - run:
+          name: Smoke check /health
+          command: |
+            echo "Testing /health at: $TEST_BASE_URL/health"
+            curl -sS -D /tmp/headers.txt -o /tmp/body.txt "$TEST_BASE_URL/health" || true
+            echo "Status line: $(head -n 1 /tmp/headers.txt || true)"
+            echo "Response body:"
+            cat /tmp/body.txt || true
+            if ! grep -q "^HTTP/.* 200" /tmp/headers.txt; then
+              echo "❌ /health is not reachable (expected HTTP 200)"
+              exit 1
+            fi
+            echo "✅ /health reachable"
+      - run:
+          name: Run E2E tests
+          working_directory: e2e
+          command: |
+            E2E_TIER="${E2E_TIER:-contract}"
+            echo "Running E2E tier: $E2E_TIER"
+            npx playwright test --reporter=list,junit,html
+          environment:
+            E2E_TIER: ${E2E_TIER}
+            ADMIN_API_KEY_E2E: ${ADMIN_API_KEY}
+            E2E_SLOW: ${E2E_SLOW}
+            E2E_SMOKE: ${E2E_SMOKE}
+            E2E_DRIFT: ${E2E_DRIFT}
+            API_KEY: ${API_KEY_EFFECTIVE}
+            CI: true
+      - store_test_results:
+          path: e2e/test-results
+      - store_artifacts:
+          path: e2e/playwright-report
+          destination: playwright-report
+      - store_artifacts:
+          path: e2e/test-results
+          destination: test-results
+      - store_artifacts:
+          path: e2e/junit-results.xml
+          destination: junit-results
+      - store_artifacts:
+          path: e2e/test-results/**/*.png
+          destination: screenshots
+          when: on_fail
+
+  cleanup-staging:
+    executor: node-executor
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+    steps:
+      - checkout
+      - setup-wrangler
+      - run:
+          name: Delete Staging Worker
+          working_directory: workers
+          command: |
+            echo "Deleting staging worker..."
+            wrangler delete --name cloudflare-image-workers-staging --force
+            echo "✅ Staging worker deleted successfully"
+
+  e2e-gate-sentinel:
+    executor: node-executor
+    steps:
+      - run:
+          name: Evaluate gate honesty
+          command: |
+            if [ "$E2E_GATED" = "true" ]; then
+              if [ "$E2E_RESULT" != "success" ]; then
+                echo "❌ E2E did not succeed on gated branch (result: $E2E_RESULT) — blocking merge"
+                exit 1
+              fi
+              if [ "$CLEANUP_RESULT" != "success" ] && [ "$CLEANUP_RESULT" != "skipped" ]; then
+                echo "❌ E2E passed but staging cleanup failed (result: $CLEANUP_RESULT) — blocking merge"
+                exit 1
+              fi
+              echo "✅ E2E succeeded on gated branch"
+            else
+              echo "✅ Non-gated branch/event — sentinel passes (e2e-tests result: $E2E_RESULT)"
+            fi
+          environment:
+            E2E_GATED: ${E2E_GATED}
+            E2E_RESULT: ${E2E_RESULT}
+            CLEANUP_RESULT: ${CLEANUP_RESULT}
+
+workflows:
+  version: 2
+
+  # Fast PR checks (always run on PR events)
+  pr-checks:
+    when:
+      or:
+        - equal: [true, << pipeline.parameters.force_run_all >>]
+        - equal: [true, << pipeline.parameters.run_ci >>]
+    jobs:
+      - fast
+
+  # Tag and release (only on main merge and workers/package.json changed)
+  tag-release:
+    when:
+      and:
+        - equal: [true, << pipeline.parameters.run_workers >>]
+        - equal: [main, << pipeline.git.branch >>]
+    jobs:
+      - tag-and-release:
+          context:
+            - github-release
+
+  # Full E2E pipeline (only when workers/, client/, or e2e/ changed)
+  # This runs on "PR marked ready for review" or manual dispatch via GitHub App
+  e2e-full:
+    when:
+      or:
+        - equal: [true, << pipeline.parameters.run_workers >>]
+        - equal: [true, << pipeline.parameters.run_client >>]
+        - equal: [true, << pipeline.parameters.run_e2e >>]
+    jobs:
+      - deploy_staging
+      - e2e-tests:
+          requires:
+            - deploy_staging
+      - cleanup-staging:
+          requires:
+            - e2e-tests
+      - e2e-gate-sentinel:
+          requires:
+            - e2e-tests
+            - cleanup-staging
+
+  # Scheduled daily E2E (canary tier) - bypasses path filtering
+  e2e-scheduled:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - deploy_staging
+      - e2e-tests:
+          requires:
+            - deploy_staging
+      - cleanup-staging:
+          requires:
+            - e2e-tests
