@@ -189,7 +189,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
       <nav
         id="adminNav"
         aria-label="Administration"
-        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen flex flex-col flex-shrink-0 border-r border-border bg-[var(--card-bg)] transition-all duration-300 z-50 ${
+        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen flex flex-col flex-shrink-0 border-r border-border bg-[var(--card-bg)] transition-all duration-300 z-50 pt-safe-top${
           mobileMenuOpen
             ? "translate-x-0 shadow-2xl"
             : "-translate-x-full md:translate-x-0"
@@ -229,7 +229,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         <a
           id="adminSkipLink"
           href="#adminContent"
-          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary)] px-4 py-3 min-h-[48px] h-12 text-white whitespace-nowrap focus:top-4 transition-[top] flex items-center justify-center text-sm font-medium font-semibold"
+          className="absolute -top-96 left-4 z-50 rounded bg-[var(--primary-dark)] px-4 py-3 min-h-[48px] h-12 text-white whitespace-nowrap focus:top-4 transition-[top] flex items-center justify-center text-sm font-medium font-semibold"
           onClick={(event) => {
             event.preventDefault();
             document.getElementById("adminContent")?.focus();

@@ -69,12 +69,12 @@
 }
 
 .dark {
-  --primary: #7c73e0;
-  --primary-rgb: 124 115 224;
-  --primary-light: #938df4;
-  --primary-light-rgb: 147 141 244;
-  --primary-dark: #625bd0;
-  --primary-dark-rgb: 98 91 208;
+  --primary: #6b5bd0;
+  --primary-rgb: 107 91 208;
+  --primary-light: #8b7ee0;
+  --primary-light-rgb: 139 126 224;
+  --primary-dark: #5a4bc0;
+  --primary-dark-rgb: 90 75 192;
   --secondary: #2d3748;
   --secondary-rgb: 45 55 72;
   --text: #f7fafc;
