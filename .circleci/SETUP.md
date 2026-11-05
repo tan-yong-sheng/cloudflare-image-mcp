@@ -23,7 +23,8 @@ This script:
 
 - Uses the CircleCI CLI to trigger the pipeline definition
 - Passes the branch name to CircleCI
-- Sets `force_run_all=true`, which enables `pr-checks` regardless of path filtering
+- Bypasses the path-filtering orb by passing pipeline parameters directly
+  (`run_ci=true`, `run_workers=true`, `run_client=true`)
   (the path-filtering orb cannot read the diff on CircleCI-native VCS projects, so
   a manual run would otherwise finish with no workflows)
 
@@ -105,3 +106,5 @@ Go to **Project Settings > Environment Variables** and set:
   - `.github/workflows/tag-release.yml` → CircleCI `tag-release` workflow
   - `.github/workflows/e2e-tests.yml` → CircleCI `e2e-full` workflow
 - `.github/workflows/deploy-workers.yml` remains for deployment (excluded from this migration - handles actual deployment to Workers)
+- **Dynamic config used:** `.circleci/setup.yml` (entry with path-filtering) → `.circleci/continue.yml` (actual jobs)
+- **Manual trigger required:** Project uses CircleCI-native VCS; use `./scripts/trigger-circleci.sh`
