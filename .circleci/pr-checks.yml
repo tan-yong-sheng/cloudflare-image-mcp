@@ -101,7 +101,7 @@ jobs:
 
       - run:
           name: Unit tests
-          working-directory: workers
+          working_directory: workers
           command: npm test
 
       - run:
