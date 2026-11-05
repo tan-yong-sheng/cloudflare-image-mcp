@@ -1,40 +1,38 @@
 #!/usr/bin/env bash
 
-# Trigger CircleCI pipeline manually
+# Trigger a CircleCI pipeline run manually.
 # Usage: ./scripts/trigger-circleci.sh [branch] [--param KEY=VALUE ...]
-# Defaults to current branch if not specified
-# Additional pipeline parameters can be passed after the branch
-# Uses setup-manual.yml to bypass path-filtering and honor manual parameters
+#
+# Note: this project's CircleCI integration uses CircleCI-native VCS, so the
+# path-filtering orb cannot read the diff and would leave every workflow off.
+# The default here therefore sets force_run_all=true, which gates the
+# pr-checks workflow independently of path filtering.
 
-set -e
+set -euo pipefail
 
 PROJECT_SLUG="circleci/EpKr3yPPwk6x8UkpiKhG9m/TdAVxSgrvkHaBdVN5J7mmB"
-PIPELINE_ID="7d06d2ae-4156-4d13-a794-57b43cbfc777"
+DEFINITION_ID="7d06d2ae-4156-4d13-a794-57b43cbfc777"
 
-# Parse arguments
 BRANCH="${1:-$(git branch --show-current)}"
 shift 2>/dev/null || true
 
-echo "Triggering CircleCI pipeline for branch: $BRANCH"
-echo "Project: $PROJECT_SLUG"
-echo "Pipeline ID: $PIPELINE_ID"
-echo "Using manual setup config (bypasses path-filtering)"
-echo ""
+ARGS=(--project "$PROJECT_SLUG" --definition-id "$DEFINITION_ID" --branch "$BRANCH")
 
-# Build the command with manual setup config
-CMD="/home/linuxbrew/.linuxbrew/bin/circleci pipeline run --project $PROJECT_SLUG --definition-id $PIPELINE_ID --branch $BRANCH --config .circleci/setup-manual.yml"
+# The pipeline definition reads .circleci/setup.yml; force_run_all bypasses
+# path filtering, which cannot see the diff on this project.
+ARGS+=(--param "force_run_all=true")
 
-# Add any additional parameters
-for arg in "$@"; do
-  if [[ "$arg" == --param=* ]]; then
-    CMD="$CMD $arg"
-  fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --param) ARGS+=(--param "$2"); shift 2 ;;
+    --param=*) ARGS+=(--param "${1#--param=}"); shift ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
 done
 
-CMD="$CMD --json"
-
-# Run the command
-eval "$CMD"
-
+echo "Triggering CircleCI pipeline for branch: $BRANCH"
+echo "Project: $PROJECT_SLUG"
+echo "Pipeline definition: $DEFINITION_ID"
 echo ""
-echo "✅ Pipeline triggered. View at: https://app.circleci.com/pipelines/github/tan-yong-sheng/cloudflare-image-mcp"
+
+circleci pipeline run "${ARGS[@]}" --json

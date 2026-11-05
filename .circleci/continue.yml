@@ -21,6 +21,11 @@ parameters:
   run_docs:
     type: boolean
     default: false
+  # Manual override: path-filtering cannot read the diff for CircleCI-native
+  # VCS projects, so a manual run passes force_run_all=true instead.
+  force_run_all:
+    type: boolean
+    default: false
 
 executors:
   node-executor:
@@ -423,7 +428,9 @@ workflows:
   # Fast PR checks (always run on PR events)
   pr-checks:
     when:
-      equal: [true, << pipeline.parameters.run_ci >>]
+      or:
+        - equal: [true, << pipeline.parameters.force_run_all >>]
+        - equal: [true, << pipeline.parameters.run_ci >>]
     jobs:
       - fast
 
