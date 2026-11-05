@@ -7,11 +7,33 @@ This repo now uses CircleCI with **dynamic config + path filtering** (Option C h
 - **`.circleci/setup.yml`** - Entry point that detects which files changed using `circleci/path-filtering` orb
 - **`.circleci/continue.yml`** - Actual jobs that run conditionally based on pipeline parameters
 
-## Web UI Configuration Required
+## Web UI Configuration Required (Automated Option Available)
 
-You must configure triggers in CircleCI web UI. The path filtering orb alone cannot detect PR events; GitHub App triggers are needed.
+You must configure triggers in CircleCI. The path filtering orb alone cannot detect PR events; GitHub App triggers are needed.
 
-### Step 1: Ensure GitHub App Integration
+### Option A: Automated Setup (Recommended)
+
+Run the provided script to automate trigger setup:
+
+```bash
+node scripts/setup-circleci-triggers.mjs
+```
+
+This script:
+
+1. Waits for CircleCI to auto-discover pipeline definitions from `setup.yml`
+2. Gets the pipeline definition ID
+3. Gets the GitHub repo ID
+4. Creates three triggers:
+   - `only-open-prs` → `pr-checks` workflow
+   - `only-ready-for-review-prs` → `e2e-full` workflow
+   - `only-merged-prs` → `tag-release` workflow
+
+### Option B: Manual Web UI Setup
+
+If you prefer manual configuration, follow these steps:
+
+#### Step 1: Ensure GitHub App Integration
 
 1. Go to [CircleCI Organization Settings](https://app.circleci.com/settings/organization)
 2. Check your Organization slug format:
