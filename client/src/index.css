@@ -522,8 +522,18 @@ textarea:focus {
 }
 
 /* Safe area support for mobile devices with notches and dynamic islands */
-.pt-safe-top {
-  padding-top: max(env(safe-area-inset-top, 0px), 40px);
+/* Mobile-only: use max(env(...), 40px) to clear notch area on devices without env support */
+@media (max-width: 767px) {
+  .pt-safe-top {
+    padding-top: max(env(safe-area-inset-top, 0px), 40px);
+  }
+}
+
+/* Desktop: apply safe-area inset only if device reports it (e.g., tablet with notch) */
+@media (min-width: 768px) {
+  .pt-safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
 }
 
 .pb-safe-bottom {

@@ -189,7 +189,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
       <nav
         id="adminNav"
         aria-label="Administration"
-        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen flex flex-col flex-shrink-0 border-r border-border bg-[var(--card-bg)] transition-all duration-300 z-50 pt-safe-top${
+        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen flex flex-col flex-shrink-0 border-r border-border bg-[var(--card-bg)] transition-all duration-300 z-50 ${
           mobileMenuOpen
             ? "translate-x-0 shadow-2xl"
             : "-translate-x-full md:translate-x-0"
@@ -242,7 +242,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         {/* Brand Header */}
         <div
           className={`flex items-center px-3 py-4 border-b border-border/60 mb-2 ${
-            sidebarCollapsed ? "md:justify-center" : "justify-between"
+            sidebarCollapsed ? "md:justify-center" : "justify-between gap-3"
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -250,7 +250,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
               <i className="fa-solid fa-shield-halved text-sm" />
             </div>
             {(!sidebarCollapsed || mobileMenuOpen) && (
-              <div className="flex flex-col min-w-0 overflow-hidden">
+              <div className="flex flex-col min-w-0">
                 <span className="text-sm font-bold truncate">Admin</span>
                 <span className="text-[11px] text-text-light truncate">
                   Control Console
@@ -275,21 +275,15 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <a
             id="adminNavPlayground"
             href="#"
+            aria-label="Back to the playground"
             className={`flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
               sidebarCollapsed ? "md:justify-center" : "gap-3"
             }`}
-            aria-label="Back to the playground"
             onClick={() => setMobileMenuOpen(false)}
           >
             <i className="fa-solid fa-arrow-left flex-shrink-0 w-4 text-center" />
-            {/* Collapsed keeps the label for assistive tech; only the
-                pointer gets the icon + tooltip treatment. */}
             <span
-              className={
-                sidebarCollapsed
-                  ? "sr-only absolute -left-[9999px] w-px h-px overflow-hidden"
-                  : "flex-1 truncate"
-              }
+              className={`flex-1 truncate ${!sidebarCollapsed ? "md:block" : "md:hidden"} max-md:block`}
             >
               Playground
             </span>
@@ -345,15 +339,9 @@ export function AdminShell({ route }: { route: AdminRoute }) {
                           : "opacity-80"
                       }`}
                     />
-                    <span
-                      className={
-                        sidebarCollapsed
-                          ? "sr-only absolute -left-[9999px] w-px h-px overflow-hidden"
-                          : "flex-1 truncate"
-                      }
-                    >
-                      {space.label}
-                    </span>
+                    {!sidebarCollapsed && (
+                      <span className="flex-1 truncate">{space.label}</span>
+                    )}
                     {space.badge !== undefined &&
                       space.badge > 0 &&
                       (!sidebarCollapsed || mobileMenuOpen) && (
@@ -384,25 +372,19 @@ export function AdminShell({ route }: { route: AdminRoute }) {
           <button
             id="adminLock"
             type="button"
+            aria-label="Lock the administrative area"
             className={`w-full flex items-center min-h-[48px] h-12 px-3 py-3 rounded-lg text-sm text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors duration-150 ${
               sidebarCollapsed ? "md:justify-center" : "gap-3"
             }${unlocked ? "" : " hidden"}`}
-            aria-label="Lock the administrative area"
             onClick={() => {
               setMobileMenuOpen(false);
               handleLock();
             }}
           >
             <i className="fa-solid fa-lock flex-shrink-0 w-4 text-center" />
-            <span
-              className={
-                sidebarCollapsed
-                  ? "sr-only absolute -left-[9999px] w-px h-px overflow-hidden"
-                  : "flex-1 text-left"
-              }
-            >
-              Lock
-            </span>
+            {!sidebarCollapsed && (
+              <span className="flex-1 text-left">Lock</span>
+            )}
           </button>
 
           {sidebarCollapsed && (
