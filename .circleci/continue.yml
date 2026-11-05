@@ -127,7 +127,7 @@ jobs:
       - run:
           name: Format check
           working_directory: workers
-          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" ".circleci/*.yml"
+          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json"
 
       - run:
           name: Unit tests
