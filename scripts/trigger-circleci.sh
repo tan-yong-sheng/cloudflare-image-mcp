@@ -18,9 +18,11 @@ shift 2>/dev/null || true
 
 ARGS=(--project "$PROJECT_SLUG" --definition-id "$DEFINITION_ID" --branch "$BRANCH")
 
-# The pipeline definition reads .circleci/setup.yml; force_run_all bypasses
-# path filtering, which cannot see the diff on this project.
-ARGS+=(--param "force_run_all=true")
+# Since this project uses CircleCI-native VCS, path-filtering cannot read the diff.
+# Bypass it by directly passing the parameters that pr-checks needs.
+ARGS+=(--param "run_ci=true")
+ARGS+=(--param "run_workers=true")
+ARGS+=(--param "run_client=true")
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
