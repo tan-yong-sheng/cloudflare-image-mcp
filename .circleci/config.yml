@@ -1,0 +1,100 @@
+version: 2.1
+
+# Mirrors .github/workflows/pr-checks.yml, which is the source of truth.
+# Both run the same gate: install cache + strict typecheck + format check +
+# pure-logic unit tests. No deployment, no browsers, no secrets.
+#
+# CircleCI's GitHub Actions orchestration mode (running the workflow file
+# directly, no config here) was tried and failed twice with an infrastructure
+# error at the first `npm ci` step, so this native config is the fallback.
+# Keep it in sync with the workflow file when the gate changes.
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:24
+    resource_class: small
+    working_directory: ~/project
+
+jobs:
+  fast:
+    executor: node-executor
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - node-cache-v1-{{ checksum "workers/package-lock.json" }}-{{ checksum "client/package-lock.json" }}
+            - node-cache-v1-
+
+      - run:
+          name: Agent doc pointers
+          command: node scripts/check-agent-doc-paths.mjs
+
+      - run:
+          name: Install workers dependencies
+          working_directory: workers
+          command: npm ci
+
+      - run:
+          name: Type check
+          working_directory: workers
+          command: npm run check
+
+      - run:
+          name: Install client dependencies
+          working_directory: client
+          command: npm ci
+
+      - run:
+          name: Client type check
+          working_directory: client
+          command: npm run check
+
+      - run:
+          name: Client build
+          working_directory: client
+          command: npm run build
+
+      - run:
+          name: Client unit tests
+          working_directory: client
+          command: npm test
+
+      - run:
+          name: Client format check
+          working_directory: client
+          command: npx --no-install prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
+
+      - run:
+          name: Format check
+          working_directory: workers
+          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" "../.github/workflows/pr-checks.yml"
+
+      - run:
+          name: Unit tests
+          working_directory: workers
+          command: npm test
+
+      - run:
+          name: Version consistency
+          working_directory: workers
+          command: |
+            PKG="$(node -p "require('./package.json').version")"
+            SRC="$(node -p "require('fs').readFileSync('src/version.ts','utf8').match(/WORKER_VERSION = \"([^\"]+)\"/)[1]")"
+            if [ "$PKG" != "$SRC" ]; then
+              echo "version skew: package.json ($PKG) != src/version.ts ($SRC) — bump both in the same PR"
+              exit 1
+            fi
+            echo "✅ Version consistent: $PKG"
+
+      - save_cache:
+          key: node-cache-v1-{{ checksum "workers/package-lock.json" }}-{{ checksum "client/package-lock.json" }}
+          paths:
+            - workers/node_modules
+            - client/node_modules
+
+workflows:
+  pr-checks:
+    jobs:
+      - fast
