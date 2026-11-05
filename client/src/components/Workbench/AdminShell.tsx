@@ -174,7 +174,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
   return (
     <div
       id="adminShell"
-      className="relative flex flex-col w-full min-h-screen bg-background text-text overflow-x-clip md:flex-row"
+      className="relative flex flex-col w-full min-h-screen bg-background text-text overflow-x-clip md:overflow-x-visible md:flex-row"
     >
       {/* Mobile Drawer Backdrop Scrim */}
       {mobileMenuOpen && (
@@ -204,7 +204,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         */}
         <button
           type="button"
-          className="group hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-30 h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 before:absolute before:inset-[-10px] before:inset-y-[-10px] before:content-[''] hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="group hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-[60] h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           onClick={toggleSidebar}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!sidebarCollapsed}
