@@ -28,10 +28,10 @@ workflows:
       - path-filtering/filter:
           name: detect-changes
           mapping: |
-            workers/.* run_workers true
-            client/.* run_client true
-            e2e/.* run_e2e true
-            .circleci/.* run_ci true
-            *.md run_docs true
+            ^workers/ run_workers true
+            ^client/ run_client true
+            ^e2e/ run_e2e true
+            ^\.circleci/ run_ci true
+            \.md$ run_docs true
           base-revision: main
           config-path: .circleci/continue.yml
