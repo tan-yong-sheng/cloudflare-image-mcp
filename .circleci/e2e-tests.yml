@@ -1,0 +1,277 @@
+version: 2.1
+
+# E2E test workflow: deploys staging, runs Playwright tests, cleans up.
+# Triggered manually or on schedule; gated on release-integration branches.
+# Mirrors .github/workflows/e2e-tests.yml logic.
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:24.18
+    working_directory: ~/project
+    resource_class: medium
+
+  playwright-executor:
+    docker:
+      - image: mcr.microsoft.com/playwright:v1.48.2-jammy
+    working_directory: ~/project
+    resource_class: medium
+
+commands:
+  setup-wrangler:
+    description: "Setup Wrangler for deployment"
+    steps:
+      - run:
+          name: Install Wrangler
+          working_directory: workers
+          command: npm install -g wrangler
+
+  setup-e2e:
+    description: "Setup E2E test environment"
+    steps:
+      - restore_cache:
+          keys:
+            - e2e-deps-{{ checksum "e2e/package-lock.json" }}
+      - run:
+          name: Install E2E dependencies
+          working_directory: e2e
+          command: npm ci
+      - save_cache:
+          key: e2e-deps-{{ checksum "e2e/package-lock.json" }}
+          paths:
+            - e2e/node_modules
+      - run:
+          name: Install Playwright browsers
+          working_directory: e2e
+          command: npx playwright install --with-deps chromium
+
+jobs:
+  deploy_staging:
+    executor: node-executor
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+      D1_DATABASE_ID: ${D1_DATABASE_ID_STAGING}
+    timeout-minutes: 15
+    steps:
+      - checkout
+      - run:
+          name: Generate wrangler.toml
+          working_directory: workers
+          command: |
+            cat > wrangler.toml <<EOF
+            name = "cloudflare-image-workers-staging"
+            main = "src/index.ts"
+            compatibility_date = "2024-01-01"
+
+            [[d1_databases]]
+            binding = "DB"
+            database_name = "cloudflare-image-mcp-staging"
+            database_id = "${D1_DATABASE_ID}"
+
+            [assets]
+            directory = "../client/dist"
+            binding = "ASSETS"
+
+            [vars]
+            ENVIRONMENT = "staging"
+            EOF
+      - setup-wrangler
+      - run:
+          name: Apply D1 migrations
+          working_directory: workers
+          command: |
+            for migration in migrations/*.sql; do
+              echo "Applying $migration"
+              wrangler d1 execute DB --remote --file="$migration"
+            done
+      - run:
+          name: Deploy staging worker
+          working_directory: workers
+          command: |
+            wrangler deploy --env staging
+            WORKER_URL=$(wrangler whoami 2>/dev/null || echo "https://cloudflare-image-workers-staging.workers.dev")
+            echo "WORKERS_URL=$WORKER_URL" >> $BASH_ENV
+      - run:
+          name: Save workers URL
+          command: |
+            echo "export WORKERS_URL=$WORKER_URL" >> $BASH_ENV
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .env*
+
+  e2e-tests:
+    executor: playwright-executor
+    environment:
+      TEST_TARGET: staging
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+      API_KEY: ${API_KEY}
+      API_KEYS: ${API_KEYS}
+    timeout-minutes: 30
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - setup-e2e
+      - run:
+          name: Derive base URL
+          command: |
+            if [ -n "$WORKERS_URL" ]; then
+              echo "TEST_BASE_URL=$WORKERS_URL" >> $BASH_ENV
+            else
+              # Derive from workers.dev subdomain
+              SUBDOMAIN=$(curl -sS \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+                | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const j=JSON.parse(s); if(!j.success){ console.error(JSON.stringify(j.errors||j, null, 2)); process.exit(1);} console.log(j.result?.subdomain||'');});")
+              if [ -z "$SUBDOMAIN" ]; then
+                echo "❌ Could not derive workers.dev subdomain"
+                exit 1
+              fi
+              echo "TEST_BASE_URL=https://cloudflare-image-workers-staging.${SUBDOMAIN}.workers.dev" >> $BASH_ENV
+            fi
+            echo "Resolved TEST_BASE_URL=$(cat $BASH_ENV | grep '^TEST_BASE_URL=' | cut -d'=' -f2-)"
+      - run:
+          name: Derive API key
+          command: |
+            if [ -n "$API_KEYS" ]; then
+              FIRST_KEY=$(echo "$API_KEYS" | cut -d',' -f1 | xargs)
+              echo "API_KEY_EFFECTIVE=$FIRST_KEY" >> $BASH_ENV
+            elif [ -n "$API_KEY" ]; then
+              echo "API_KEY_EFFECTIVE=$API_KEY" >> $BASH_ENV
+            else
+              echo "API_KEY_EFFECTIVE=" >> $BASH_ENV
+            fi
+      - run:
+          name: Smoke check /health
+          command: |
+            echo "Testing /health at: $TEST_BASE_URL/health"
+            curl -sS -D /tmp/headers.txt -o /tmp/body.txt "$TEST_BASE_URL/health" || true
+            echo "Status line: $(head -n 1 /tmp/headers.txt || true)"
+            echo "Response body:"
+            cat /tmp/body.txt || true
+            if ! grep -q "^HTTP/.* 200" /tmp/headers.txt; then
+              echo "❌ /health is not reachable (expected HTTP 200)"
+              exit 1
+            fi
+            echo "✅ /health reachable"
+      - run:
+          name: Run E2E tests
+          working_directory: e2e
+          command: |
+            # Default to contract tier; schedule runs canary
+            E2E_TIER="${E2E_TIER:-contract}"
+            echo "Running E2E tier: $E2E_TIER"
+            npx playwright test --reporter=list,junit,html
+          environment:
+            E2E_TIER: ${E2E_TIER}
+            ADMIN_API_KEY_E2E: ${ADMIN_API_KEY}
+            E2E_SLOW: ${E2E_SLOW}
+            E2E_SMOKE: ${E2E_SMOKE}
+            E2E_DRIFT: ${E2E_DRIFT}
+            API_KEY: ${API_KEY_EFFECTIVE}
+            CI: true
+      - store_test_results:
+          path: e2e/test-results
+      - store_artifacts:
+          path: e2e/playwright-report
+          destination: playwright-report
+      - store_artifacts:
+          path: e2e/test-results
+          destination: test-results
+      - store_artifacts:
+          path: e2e/junit-results.xml
+          destination: junit-results
+      - store_artifacts:
+          path: e2e/test-results/**/*.png
+          destination: screenshots
+          when: on_fail
+
+  cleanup-staging:
+    executor: node-executor
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+    timeout-minutes: 10
+    steps:
+      - checkout
+      - setup-wrangler
+      - run:
+          name: Delete Staging Worker
+          working_directory: workers
+          command: |
+            echo "Deleting staging worker..."
+            wrangler delete --name cloudflare-image-workers-staging --force
+            echo "✅ Staging worker deleted successfully"
+
+  e2e-gate-sentinel:
+    executor: node-executor
+    # Honest-skip sentinel: fails closed if E2E did not succeed on gated branches
+    timeout-minutes: 5
+    steps:
+      - run:
+          name: Evaluate gate honesty
+          command: |
+            # Gated = release-integration prefix OR e2e label
+            # In CircleCI, we'll use environment variables to control this
+            if [ "$E2E_GATED" = "true" ]; then
+              if [ "$E2E_RESULT" != "success" ]; then
+                echo "❌ E2E did not succeed on gated branch (result: $E2E_RESULT) — blocking merge"
+                exit 1
+              fi
+              if [ "$CLEANUP_RESULT" != "success" ] && [ "$CLEANUP_RESULT" != "skipped" ]; then
+                echo "❌ E2E passed but staging cleanup failed (result: $CLEANUP_RESULT) — blocking merge"
+                exit 1
+              fi
+              echo "✅ E2E succeeded on gated branch"
+            else
+              echo "✅ Non-gated branch/event — sentinel passes (e2e-tests result: $E2E_RESULT)"
+            fi
+          environment:
+            E2E_GATED: ${E2E_GATED}
+            E2E_RESULT: ${E2E_RESULT}
+            CLEANUP_RESULT: ${CLEANUP_RESULT}
+
+workflows:
+  version: 2
+  e2e-tests:
+    jobs:
+      - deploy_staging:
+          filters:
+            branches:
+              only:
+                - main
+                - prerelease/*
+                - release/*
+      - e2e-tests:
+          requires:
+            - deploy_staging
+      - cleanup-staging:
+          requires:
+            - e2e-tests
+      - e2e-gate-sentinel:
+          requires:
+            - e2e-tests
+            - cleanup-staging
+
+  # Scheduled run (canary tier)
+  e2e-scheduled:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *" # Daily at midnight UTC
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - deploy_staging
+      - e2e-tests:
+          requires:
+            - deploy_staging
+          environment:
+            E2E_TIER: canary
+      - cleanup-staging:
+          requires:
+            - e2e-tests

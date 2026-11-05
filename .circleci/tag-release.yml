@@ -1,0 +1,130 @@
+version: 2.1
+
+# Phase 1 of versioned releases (issue #8): every production deployment
+# gets a version + GitHub Release with notes, with zero change to how
+# deploys happen. Continuous delivery on default-branch push is untouched
+# — this workflow only observes version bumps.
+#
+# Design: main-push autotag — the workflow mints v<semver> tags,
+# existence checks make re-pushes no-ops, concurrent bumps serialize
+# (never cancel), GH_TOKEN-only auth, --generate-notes.
+#
+# Requires CircleCI context 'github-release' with GH_TOKEN.
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:24.18
+    working_directory: ~/project
+    resource_class: medium
+
+jobs:
+  tag-and-release:
+    executor: node-executor
+    # Only run on main branch
+    environment:
+      GIT_USER_NAME: github-actions[bot]
+      GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+    timeout-minutes: 10
+    steps:
+      - checkout
+
+      - run:
+          name: Install gh CLI
+          command: |
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+
+      - run:
+          name: Resolve version
+          command: |
+            RAW="$(node -p "require('./workers/package.json').version")"
+            # Validate strict semver
+            if ! printf '%s' "$RAW" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+              echo "❌ ERROR: workers/package.json version is not strict semver: '$RAW'"
+              exit 1
+            fi
+            VERSION="${RAW#v}"
+            TAG="v$VERSION"
+            # Prerelease detection
+            CORE_AND_PRERELEASE="${VERSION%%+*}"
+            case "$CORE_AND_PRERELEASE" in
+              *"-"*) PRERELEASE=true ;;
+              *) PRERELEASE=false ;;
+            esac
+            echo "VERSION=$VERSION" >> $BASH_ENV
+            echo "TAG=$TAG" >> $BASH_ENV
+            echo "PRERELEASE=$PRERELEASE" >> $BASH_ENV
+            echo "Version: $VERSION → tag $TAG (prerelease: $PRERELEASE)"
+
+      - run:
+          name: Check existing tag and release
+          command: |
+            TAG="${TAG}"
+            if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+              echo "TAG_EXISTS=true" >> $BASH_ENV
+              echo "Tag $TAG already exists"
+            else
+              echo "TAG_EXISTS=false" >> $BASH_ENV
+              echo "Tag $TAG not found"
+            fi
+            if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+              echo "RELEASE_EXISTS=true" >> $BASH_ENV
+              echo "Release $TAG already exists"
+            else
+              echo "RELEASE_EXISTS=false" >> $BASH_ENV
+              echo "Release $TAG not found"
+            fi
+          environment:
+            GH_TOKEN: ${GH_TOKEN}
+
+      - run:
+          name: Create and push tag
+          command: |
+            if [ "$TAG_EXISTS" = "false" ]; then
+              git config user.name "$GIT_USER_NAME"
+              git config user.email "$GIT_USER_EMAIL"
+              git tag "$TAG" "$(git rev-parse HEAD)"
+              git push origin "$TAG"
+              echo "Tag $TAG created"
+            else
+              echo "Tag already exists, skipping"
+            fi
+
+      - run:
+          name: Create GitHub Release
+          command: |
+            if [ "$RELEASE_EXISTS" = "false" ]; then
+              ARGS=(
+                --title "cloudflare-image-mcp $TAG"
+                --target "$(git rev-parse HEAD)"
+                --generate-notes
+              )
+              if [ "$PRERELEASE" = "true" ]; then
+                ARGS+=(--prerelease)
+              fi
+              gh release create "$TAG" "${ARGS[@]}"
+              echo "Release $TAG published"
+            else
+              echo "Release already exists, skipping"
+            fi
+          environment:
+            GH_TOKEN: ${GH_TOKEN}
+
+workflows:
+  version: 2
+  tag-release:
+    jobs:
+      - tag-and-release:
+          context:
+            - github-release
+          filters:
+            branches:
+              only:
+                - main
+            # Only trigger when workers/package.json changes
+            paths:
+              only:
+                - workers/package.json
