@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { AdminKeyProvider } from "./app/admin-key";
 import { AuthProvider } from "./app/auth";
 import { ThemeProvider } from "./app/theme";
-import { AdminView } from "./components/Workbench/AdminView";
+import { AdminShell } from "./components/Workbench/AdminShell";
 import { GeneratorView } from "./components/Playground/GeneratorView";
 
 /**
@@ -180,13 +180,20 @@ describe("the workbench's DOM contract", () => {
   it("keeps every element id the legacy page published", async () => {
     stubApi();
     const user = userEvent.setup();
-    render(<AdminView />, { wrapper: wrapper(newClient()) });
+    render(<AdminShell route="admin" />, { wrapper: wrapper(newClient()) });
 
-    // The ids that are always present, locked or not.
+    // The ids that are always present, locked or not. The admin area is
+    // rendered through its shell, which owns the spaces rail, the one
+    // gate, and the lock/theme/logout controls the workbench header used
+    // to carry. `adminBackBtn` and `adminApiKeysBtn` are gone: the rail
+    // is the navigation now.
     for (const id of [
+      "adminShell",
+      "adminNav",
+      "adminSkipLink",
+      "adminNavPlayground",
       "adminView",
       "adminViewTitle",
-      "adminBackBtn",
       "adminGate",
       "adminKey",
       "adminUnlock",
@@ -198,15 +205,31 @@ describe("the workbench's DOM contract", () => {
       "adminLock",
       "themeToggleAdmin",
       "logoutButtonAdmin",
+      "adminNavSpaces",
     ]) {
       expect(document.getElementById(id), id).not.toBeNull();
     }
+
+    // The admin spaces are hidden while locked, and reveal on unlock.
+    expect(document.getElementById("adminNavSpaces")?.className).toContain(
+      "hidden"
+    );
 
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
     await user.click(screen.getByRole("button", { name: /Unlock/i }));
     await waitFor(() =>
       expect(document.getElementById("adminRail")).not.toBeNull()
     );
+
+    expect(document.getElementById("adminNavSpaces")?.className).not.toContain(
+      "hidden"
+    );
+
+    // The rail lists both spaces, and the one that is open says so.
+    const spaces = document.querySelectorAll("#adminNav a[aria-current]");
+    expect(spaces.length).toBe(1);
+    expect(spaces[0].id).toBe("adminNav-admin");
+    expect(document.getElementById("adminNav-admin-api-keys")).not.toBeNull();
 
     // The ids that need the panel open.
     for (const id of [
@@ -224,7 +247,7 @@ describe("the workbench's DOM contract", () => {
   it("keeps every element id of the add/edit drawer", async () => {
     stubApi();
     const user = userEvent.setup();
-    render(<AdminView />, { wrapper: wrapper(newClient()) });
+    render(<AdminShell route="admin" />, { wrapper: wrapper(newClient()) });
 
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
     await user.click(screen.getByRole("button", { name: /Unlock/i }));
@@ -254,5 +277,30 @@ describe("the workbench's DOM contract", () => {
     ]) {
       expect(document.getElementById(id), id).not.toBeNull();
     }
+  });
+
+  it("moves between the two spaces through the rail and keeps one session", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    render(<AdminShell route="admin" />, { wrapper: wrapper(newClient()) });
+
+    await user.type(screen.getByLabelText(/Management Key/i), "management-key");
+    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminRail")).not.toBeNull()
+    );
+
+    // The nav is the way between the spaces, and it is labelled.
+    const nav = document.getElementById("adminNav");
+    expect(nav?.getAttribute("aria-label")).toBe("Administration");
+    expect(nav?.querySelector("a[href='#admin/api-keys']")).not.toBeNull();
+    expect(nav?.querySelector("a[href='#admin']")).not.toBeNull();
+
+    // Following the API-keys entry lands on that route.
+    await user.click(screen.getByRole("link", { name: /API keys/i }));
+    await waitFor(() => expect(window.location.hash).toBe("#admin/api-keys"));
+    // The gate stays unlocked with the mock route held at admin, which is
+    // what "one session across the two screens" means.
+    expect(document.getElementById("adminGate")?.className).toContain("hidden");
   });
 });

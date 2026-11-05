@@ -170,7 +170,7 @@ test.describe("SPA shell", () => {
     await expect(page.locator("#adminPanel")).toBeHidden();
     await expect(page.locator("#adminKeys tr")).toHaveCount(0);
 
-    await page.click("#adminBackBtn");
+    await page.click("#adminNavPlayground");
     await expect(page.locator("#generatorView")).toBeVisible();
   });
 
@@ -190,7 +190,7 @@ test.describe("SPA shell", () => {
     await page.goto("/admin");
     await expect(page.locator("#adminView")).toBeVisible();
 
-    await page.click("#adminBackBtn");
+    await page.click("#adminNavPlayground");
     await expect(page.locator("#generatorView")).toBeVisible();
     await expect(page.locator("#adminView")).toHaveCount(0);
   });
@@ -304,7 +304,7 @@ test.describe("Workbench", () => {
     await page.click("#adminWorkbenchButton");
     await unlock(page);
 
-    await page.click("#adminApiKeysBtn");
+    await page.click("#adminNav-admin-api-keys");
     await expect(page).toHaveURL(/#admin\/api-keys$/);
     await expect(page.locator("#apiKeysView")).toBeVisible();
     // The page says what the keys are for, and which secret they are not.
@@ -315,7 +315,7 @@ test.describe("Workbench", () => {
 
     // Back returns to the workbench without asking for the key again: the
     // two screens share one unlock.
-    await page.click("#apiKeysBackBtn");
+    await page.click("#adminNav-admin");
     await expect(page.locator("#adminView")).toBeVisible();
     await expect(page.locator("#adminGate")).toBeHidden();
 
@@ -333,7 +333,7 @@ test.describe("Workbench", () => {
     await expect(page.locator("#adminChipsActive")).toBeVisible();
 
     // Back to the generator: the management key goes with it.
-    await page.click("#adminBackBtn");
+    await page.click("#adminNavPlayground");
     await expect(page.locator("#generatorView")).toBeVisible();
 
     // Coming back asks for the key again.

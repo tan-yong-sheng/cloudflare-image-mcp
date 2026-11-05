@@ -155,7 +155,7 @@ export function CallerKeyCreate({
               Hide
             </button>
           </div>
-          <p className="text-xs opacity-60 mt-2">
+          <p className="text-xs text-text-light mt-2">
             Stored only as a one-way verifier. If it is lost, rotate the key.
           </p>
         </div>
@@ -164,7 +164,10 @@ export function CallerKeyCreate({
       <h2 id="callerKeyCreateTitle" className="text-lg font-bold mb-1">
         Add key
       </h2>
-      <p id="callerKeyCreateHint" className="text-sm opacity-60 mb-4">
+      <p
+        id="callerKeyCreateHint"
+        className="text-sm text-text-light mb-4 max-w-prose"
+      >
         Both fields are optional: a blank name gets “Key N”, a blank secret gets
         one generated for you. The plaintext is shown once, above, the moment
         the key is created.
@@ -195,7 +198,7 @@ export function CallerKeyCreate({
             className="block text-sm font-medium mb-1"
           >
             Your own secret{" "}
-            <span className="opacity-60 font-normal">
+            <span className="text-text-light font-normal">
               (optional — blank generates one)
             </span>
           </label>

@@ -7,15 +7,24 @@ import {
 import type { AdminKey } from "../../api/types";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
-import { LogoutButton, ThemeToggleButton } from "../AppHeader";
 import type { AdminApiError } from "../../api/admin";
-import { adminRefusal, gateErrorFor } from "./admin-gate";
+import { adminRefusal } from "./admin-gate";
 import { FamilyRail } from "./FamilyRail";
 import { KeySheet, type SheetValues } from "./KeySheet";
 import { KeyTable } from "./KeyTable";
-import { UnlockGate } from "./UnlockGate";
 
 type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
+
+interface AdminViewProps {
+  /**
+   * Hand a refused management key to the shell that owns the gate.
+   *
+   * Absent when the screen is rendered on its own, which is how the
+   * page-level tests mount it: there is then no gate to move and the
+   * refusal is simply the end of the session.
+   */
+  onGateRefusal?: (failure: unknown) => void;
+}
 
 /**
  * The provider credentials workbench.
@@ -23,10 +32,13 @@ type SheetState = { mode: "add" | "edit"; key: AdminKey | null } | null;
  * The management key lives in memory only, so the panel is a gate until
  * the operator unlocks it. Nothing behind the gate is requested before
  * that: the health route is only read once a key is in hand.
+ *
+ * The gate itself belongs to `AdminShell`, because the two operator
+ * screens share one session and therefore one gate.
  */
-export function AdminView() {
+export function AdminView({ onGateRefusal }: AdminViewProps) {
   const session = useAdminSession();
-  const { adminKey, unlock, lock } = useAdminKey();
+  const { adminKey, lock } = useAdminKey();
   const { logout } = useAuth();
 
   // A refused session is a refused session whichever request hit it:
@@ -56,7 +68,6 @@ export function AdminView() {
   // must not free the drawer that replaced it, or the operator could
   // send the same save twice.
   const savingSheetRef = useRef<SheetState>(null);
-  const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
@@ -92,15 +103,15 @@ export function AdminView() {
       return;
     }
     // The credential payload could not be read, so the admin session is
-    // over: the management key goes with it, and the gate says why. An
-    // error the operator cannot see is not an error they can act on.
-    lock();
-    if (refusal?.status === 403) {
-      setGateError(gateErrorFor(refusal));
+    // over: the management key goes with it, and the reason goes to the
+    // gate the operator is about to see. An error the operator cannot
+    // see is not an error they can act on.
+    if (onGateRefusal) {
+      onGateRefusal(failure);
       return;
     }
-    setGateError(failure instanceof Error ? failure.message : String(failure));
-  }, [health.isError, health.error, endRefusedSession, lock]);
+    lock();
+  }, [health.isError, health.error, endRefusedSession, lock, onGateRefusal]);
 
   // A notice fades on its own, the way the legacy page's did.
   useEffect(() => {
@@ -108,6 +119,21 @@ export function AdminView() {
     const timer = setTimeout(() => setNotice(null), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // Locking ends the session from anywhere — the rail's lock button, the
+  // sign-out, or a key the server refused. The screen's own state goes
+  // with it: a drawer or a panel error must not outlive the key that
+  // opened it, and the lock button no longer lives in this screen.
+  const wasUnlocked = useRef(unlocked);
+  useEffect(() => {
+    if (wasUnlocked.current && !unlocked) {
+      setPanelError(null);
+      setSheetError(null);
+      setSheet(null);
+      setSelected("");
+    }
+    wasUnlocked.current = unlocked;
+  }, [unlocked]);
 
   // Escape leaves the workbench for the generator. The add/edit drawer
   // owns its own Escape, so an open drawer swallows it first.
@@ -124,16 +150,6 @@ export function AdminView() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
-
-  const handleLock = () => {
-    // The provider owns the teardown: it drops the key and the cached
-    // credential payload together.
-    lock();
-    setGateError(null);
-    setPanelError(null);
-    setSheet(null);
-    setSelected("");
-  };
 
   const handleSave = async (values: SheetValues) => {
     // The drawer the request was sent from. The operator may dismiss it
@@ -191,31 +207,24 @@ export function AdminView() {
   return (
     <main
       id="adminView"
-      className="container mx-auto px-4 py-4 max-w-6xl"
+      className="min-w-0"
       role="main"
       aria-labelledby="adminViewTitle"
     >
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
-        <div className="flex items-center space-x-3">
-          <button
-            id="adminBackBtn"
-            type="button"
-            className="btn btn-secondary p-2 h-12 flex items-center justify-center rounded"
-            aria-label="Back to Image Generator"
-            onClick={() => {
-              window.location.hash = "";
-            }}
-          >
-            <i className="fa-solid fa-arrow-left mr-2" />
-            Back
-          </button>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <i className="fa-solid fa-server text-primary" />
+            Provider Credentials
+          </h2>
+          <p className="text-xs text-muted">
+            Credentials authenticating this Worker to upstream model providers
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span
             id="adminChipsActive"
-            className={`chip chip-ok${
-              unlocked && healthLoaded ? "" : " hidden"
-            }`}
+            className={`chip chip-ok${unlocked && healthLoaded ? "" : " hidden"}`}
           >
             {keys.filter((key) => key.enabled).length}/{keys.length} active keys
           </span>
@@ -226,32 +235,6 @@ export function AdminView() {
             {providers.length}{" "}
             {providers.length === 1 ? "provider family" : "provider families"}
           </span>
-          <button
-            id="adminApiKeysBtn"
-            type="button"
-            className="btn btn-secondary p-2 h-10 flex items-center justify-center"
-            aria-label="Open API keys"
-            onClick={() => {
-              window.location.hash = "#admin/api-keys";
-            }}
-          >
-            <i className="fa-solid fa-key mr-2" />
-            API keys
-          </button>
-          <button
-            id="adminLock"
-            type="button"
-            className={`btn btn-secondary p-2 h-12 flex items-center justify-center${
-              unlocked ? "" : " hidden"
-            }`}
-            aria-label="Lock provider credentials"
-            onClick={handleLock}
-          >
-            <i className="fa-solid fa-lock mr-2" />
-            Lock
-          </button>
-          <ThemeToggleButton id="themeToggleAdmin" />
-          <LogoutButton id="logoutButtonAdmin" />
         </div>
       </div>
 
@@ -283,7 +266,8 @@ export function AdminView() {
           >
             <h1
               id="adminViewTitle"
-              className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700"
+              className="text-xl font-bold flex items-center mb-4 pb-3 border-b border-gray-700 min-w-0 break-words"
+              tabIndex={-1}
             >
               <i className="fa-solid fa-server mr-2 text-primary" />
               Administration
@@ -352,16 +336,6 @@ export function AdminView() {
           </div>
         </div>
       </div>
-
-      <UnlockGate
-        key={unlocked ? "unlocked" : "locked"}
-        hidden={unlocked}
-        error={gateError}
-        onUnlock={(key) => {
-          setGateError(null);
-          unlock(key);
-        }}
-      />
 
       {sheet ? (
         <KeySheet

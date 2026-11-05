@@ -69,13 +69,18 @@ export function KeyTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-muted border-b border-gray-800">
-            <th id="adminKeysHead" className="p-3 font-medium">
+            <th
+              id="adminKeysHead"
+              className="p-3 font-medium whitespace-nowrap"
+            >
               Key
             </th>
             {hasAccount ? (
-              <th className="p-3 font-medium">Account ID</th>
+              <th className="p-3 font-medium whitespace-nowrap">Account ID</th>
             ) : null}
-            <th className="p-3 font-medium text-right">Actions</th>
+            <th className="p-3 font-medium text-right whitespace-nowrap">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody id="adminKeys">
@@ -183,7 +188,7 @@ export function KeyTable({
       </table>
       <p
         id="adminEmpty"
-        className={`text-sm text-muted text-center py-10${
+        className={`text-sm text-muted text-center py-10 whitespace-nowrap${
           rows.length > 0 ? " hidden" : ""
         }`}
       >

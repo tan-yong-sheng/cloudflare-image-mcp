@@ -9,13 +9,16 @@ import {
 } from "../../api/admin";
 import { useAdminKey, useAdminSession } from "../../app/admin-key";
 import { useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
-import { LogoutButton, ThemeToggleButton } from "../AppHeader";
 import type { AdminCallerKey } from "../../api/types";
-import { adminRefusal, gateErrorFor } from "./admin-gate";
+import { adminRefusal } from "./admin-gate";
 import { CallerKeyCreate } from "./CallerKeyCreate";
 import { CallerKeyTable } from "./CallerKeyTable";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { UnlockGate } from "./UnlockGate";
+
+interface ApiKeysPageProps {
+  /** Called when the admin gate refuses a request (403). */
+  onGateRefusal?: (failure: unknown) => void;
+}
 
 /**
  * The API-keys page.
@@ -33,11 +36,11 @@ import { UnlockGate } from "./UnlockGate";
  * It is behind the same management-key gate as the workbench, and the
  * unlock is shared: arriving here from the workbench keeps the session,
  * opening it cold asks for the key. Nothing behind the gate is requested
- * before it is in hand.
+ * before it is in hand. The gate itself belongs to `AdminShell`.
  */
-export function ApiKeysPage() {
+export function ApiKeysPage({ onGateRefusal }: ApiKeysPageProps = {}) {
   const session = useAdminSession();
-  const { adminKey, unlock, lock } = useAdminKey();
+  const { adminKey, lock } = useAdminKey();
   const { logout } = useAuth();
 
   // Every piece of one-shot secret material this page holds. Teardown
@@ -83,7 +86,6 @@ export function ApiKeysPage() {
   const renameKey = useRenameCallerKey(session, endRefusedSession);
   const deleteKey = useDeleteCallerKey(session, endRefusedSession);
 
-  const [gateError, setGateError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const handledError = useRef<unknown>(null);
   // Whether the panel is unlocked right now, read from an async
@@ -110,7 +112,6 @@ export function ApiKeysPage() {
   useEffect(() => {
     if (!callerKeys.isError) {
       handledError.current = null;
-      setPanelError(null);
       return;
     }
     if (handledError.current === callerKeys.error) return;
@@ -122,9 +123,12 @@ export function ApiKeysPage() {
       return;
     }
     if (refusal?.status === 403) {
-      lock();
-      clearSecretState();
-      setGateError(gateErrorFor(refusal));
+      if (onGateRefusal) {
+        onGateRefusal(failure);
+      } else {
+        lock();
+        clearSecretState();
+      }
       return;
     }
     setPanelError(failure instanceof Error ? failure.message : String(failure));
@@ -134,71 +138,36 @@ export function ApiKeysPage() {
     clearSecretState,
     endRefusedSession,
     lock,
+    onGateRefusal,
   ]);
 
   const unlocked = adminKey !== null;
 
-  const handleLock = () => {
-    // The provider owns the teardown: it drops the key and the cached
-    // list together — and the one-shot secret and the open confirmation
-    // with them. A locked panel leaves nothing behind to read.
-    lock();
-    setGateError(null);
-    setPanelError(null);
-    clearSecretState();
-  };
-
   return (
     <main
       id="apiKeysView"
-      className="container mx-auto px-4 py-4 max-w-6xl"
+      className="min-w-0"
       role="main"
       aria-labelledby="apiKeysTitle"
     >
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-700">
-        <div className="flex items-center space-x-3">
-          <button
-            id="apiKeysBackBtn"
-            type="button"
-            className="btn btn-secondary p-2 h-10 flex items-center justify-center rounded"
-            aria-label="Back to the provider workbench"
-            onClick={() => {
-              window.location.hash = "#admin";
-            }}
-          >
-            <i className="fa-solid fa-arrow-left mr-2" />
-            Workbench
-          </button>
-          <h1 id="apiKeysTitle" className="text-xl font-bold">
-            API keys
-          </h1>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            id="apiKeysLock"
-            type="button"
-            className={`btn btn-secondary p-2 h-10 flex items-center justify-center${
-              unlocked ? "" : " hidden"
-            }`}
-            aria-label="Lock API keys"
-            onClick={handleLock}
-          >
-            <i className="fa-solid fa-lock mr-2" />
-            Lock
-          </button>
-          <ThemeToggleButton id="themeToggleApiKeys" />
-          <LogoutButton id="logoutButtonApiKeys" />
-        </div>
+      <div className="mb-4">
+        <h1
+          id="apiKeysTitle"
+          className="text-lg font-bold flex items-center gap-2"
+          tabIndex={-1}
+        >
+          <i className="fa-solid fa-key text-primary" />
+          API keys
+        </h1>
+        <p id="apiKeysIntro" className="text-xs text-muted mt-1 max-w-3xl">
+          The keys your clients send in{" "}
+          <span className="font-mono">Authorization: Bearer</span> to call this
+          Worker&apos;s <span className="font-mono">/v1</span> and{" "}
+          <span className="font-mono">/mcp</span> endpoints. They are not
+          provider credentials: a provider key authenticates the Worker to
+          Cloudflare and lives on the workbench.
+        </p>
       </div>
-
-      <p id="apiKeysIntro" className="text-sm opacity-70 mb-4 max-w-3xl">
-        The keys your clients send in{" "}
-        <span className="font-mono">Authorization: Bearer</span> to call this
-        Worker&apos;s <span className="font-mono">/v1</span> and{" "}
-        <span className="font-mono">/mcp</span> endpoints. They are not provider
-        credentials: a provider key authenticates the Worker to Cloudflare and
-        lives on the workbench.
-      </p>
 
       <p
         id="apiKeysError"
@@ -211,7 +180,7 @@ export function ApiKeysPage() {
       </p>
 
       <div
-        id="apiKeysPanel"
+        id="adminCallerKeys"
         className={`space-y-4${unlocked ? "" : " hidden"}`}
       >
         {/*
@@ -305,7 +274,7 @@ export function ApiKeysPage() {
         open={
           deleting
             ? {
-                title: `Delete “${deleting.name}”?`,
+                title: `Delete "${deleting.name}"?`,
                 message:
                   "This cannot be undone. Clients using this key will lose access. The audit trail stays; the key does not come back.",
               }
@@ -333,7 +302,7 @@ export function ApiKeysPage() {
         open={
           rotating
             ? {
-                title: `Rotate “${rotating.name}”?`,
+                title: `Rotate "${rotating.name}"?`,
                 message:
                   "Clients using this key will need the new key. The old secret stops working when the rotation lands — unless that same secret is also set in API_KEYS, in which case it keeps working and you are told so afterwards.",
               }
@@ -360,16 +329,6 @@ export function ApiKeysPage() {
             );
             setRotating(null);
           }
-        }}
-      />
-
-      <UnlockGate
-        key={unlocked ? "unlocked" : "locked"}
-        hidden={unlocked}
-        error={gateError}
-        onUnlock={(key) => {
-          setGateError(null);
-          unlock(key);
         }}
       />
     </main>

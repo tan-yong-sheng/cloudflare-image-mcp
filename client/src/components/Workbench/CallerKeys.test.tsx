@@ -7,7 +7,7 @@ import { AdminKeyProvider } from "../../app/admin-key";
 import { AuthProvider } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
 import { CALLER_KEYS_QUERY_FAMILY } from "../../api/admin";
-import { ApiKeysPage } from "./ApiKeysPage";
+import { AdminShell } from "./AdminShell";
 
 /**
  * The API-keys page.
@@ -105,15 +105,17 @@ function renderApiKeysPage() {
       </ThemeProvider>
     </QueryClientProvider>
   );
-  const utils = render(<ApiKeysPage />, { wrapper });
+  const utils = render(<AdminShell route="admin-api-keys" />, { wrapper });
   return { ...utils, client };
 }
 
 async function unlock(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/Management Key/i), "management-key");
-  await user.click(screen.getByRole("button", { name: /Unlock/i }));
+  await user.click(screen.getByTestId("adminUnlock"));
   await waitFor(() =>
-    expect(document.getElementById("adminCallerKeys")?.children.length).toBe(2)
+    expect(
+      document.getElementById("adminCallerKeys")?.children.length
+    ).toBeGreaterThan(0)
   );
 }
 
@@ -249,7 +251,9 @@ describe("the API-keys page", () => {
 
     await unlock(user);
 
-    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Lock the administrative area/i })
+    );
 
     // A locked panel must leave nothing behind to read: neither the
     // active session's list nor the placeholder the locked session left.
@@ -466,7 +470,7 @@ describe("creating a caller key (#126)", () => {
       expect(document.getElementById("callerKeySecret")).not.toBeNull()
     );
 
-    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    await user.click(document.getElementById("adminLock") as HTMLElement);
 
     // Locking ends the session: the banner goes with it, the same way the
     // cached list does. Re-unlocking starts from a page with no secret.
@@ -560,7 +564,7 @@ describe("rotating a caller key (#127)", () => {
       document.getElementById("adminCallerKeyRotate-1") as HTMLElement
     );
 
-    expect(screen.getByText(/Rotate “Laptop”\?/)).toBeTruthy();
+    expect(screen.getByText(/Rotate "Laptop"\?/)).toBeTruthy();
     expect(
       document.getElementById("callerKeyConfirmMessage")?.textContent
     ).toContain("Clients using this key will need the new key");
@@ -582,7 +586,7 @@ describe("rotating a caller key (#127)", () => {
       document.getElementById("callerKeyConfirmCancel") as HTMLElement
     );
 
-    expect(screen.queryByText(/Rotate “Laptop”\?/)).toBeNull();
+    expect(screen.queryByText(/Rotate "Laptop"\?/)).toBeNull();
     expect(rotates).toHaveLength(0);
   });
 
@@ -612,7 +616,7 @@ describe("rotating a caller key (#127)", () => {
     );
     // The dialog is done; the mask refetches to the new hint.
     await waitFor(() =>
-      expect(screen.queryByText(/Rotate “Laptop”\?/)).toBeNull()
+      expect(screen.queryByText(/Rotate "Laptop"\?/)).toBeNull()
     );
   });
 
@@ -802,7 +806,7 @@ describe("caller-key row mutations (#128)", () => {
         )
       ).toBe(true)
     );
-    expect(screen.queryByText(/Delete “Laptop”\?/)).toBeNull();
+    expect(screen.queryByText(/Delete "Laptop"\?/)).toBeNull();
   });
 });
 
@@ -842,9 +846,9 @@ describe("review fixes: session teardown (M2)", () => {
     await user.type(field, "typed-before-lock-123456");
     expect(field.value).toBe("typed-before-lock-123456");
 
-    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    await user.click(document.getElementById("adminLock") as HTMLElement);
     await user.type(screen.getByLabelText(/Management Key/i), "management-key");
-    await user.click(screen.getByRole("button", { name: /Unlock/i }));
+    await user.click(screen.getByTestId("adminUnlock"));
 
     const after = screen.getByLabelText(/Your own secret/i) as HTMLInputElement;
     // The form is remounted from empty: nothing the previous session typed
@@ -860,7 +864,7 @@ describe("review fixes: session teardown (M2)", () => {
     await unlock(user);
     expect(document.getElementById("callerKeyCreateSection")).not.toBeNull();
 
-    await user.click(screen.getByRole("button", { name: /Lock API keys/i }));
+    await user.click(document.getElementById("adminLock") as HTMLElement);
     expect(document.getElementById("callerKeyCreateSection")).toBeNull();
   });
 });

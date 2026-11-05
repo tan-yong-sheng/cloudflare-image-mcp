@@ -204,7 +204,7 @@ describe("the client shell", () => {
     expect(document.getElementById("adminView")).not.toBeNull();
 
     await user.click(
-      screen.getByRole("button", { name: /Back to Image Generator/i })
+      screen.getByRole("link", { name: /Back to the playground/i })
     );
 
     await waitFor(() =>
@@ -267,7 +267,7 @@ describe("the client shell", () => {
 
     // Leave the workbench: no further credentialed request goes out.
     await user.click(
-      screen.getByRole("button", { name: /Back to Image Generator/i })
+      screen.getByRole("link", { name: /Back to the playground/i })
     );
     await waitFor(() =>
       expect(document.getElementById("generatorView")).not.toBeNull()
@@ -298,7 +298,7 @@ describe("the client shell", () => {
 
     // Leave the workbench for the generator.
     await user.click(
-      screen.getByRole("button", { name: /Back to Image Generator/i })
+      screen.getByRole("link", { name: /Back to the playground/i })
     );
     await waitFor(() =>
       expect(document.getElementById("generatorView")).not.toBeNull()

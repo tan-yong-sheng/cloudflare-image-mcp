@@ -39,14 +39,19 @@ export function UnlockGate({ error, hidden, onUnlock }: UnlockGateProps) {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-2">
             <i className="fa-solid fa-shield-halved text-xl" />
           </div>
-          <h2 className="text-lg font-bold">Unlock Provider Administration</h2>
+          <h2 className="text-lg font-bold break-words">
+            Unlock Provider Administration
+          </h2>
           <p className="text-xs text-muted">
             Enter your management key to inspect and configure provider
             credentials.
           </p>
         </div>
         <div className="space-y-2">
-          <label htmlFor="adminKey" className="block text-xs font-medium">
+          <label
+            htmlFor="adminKey"
+            className="block text-xs font-medium whitespace-nowrap"
+          >
             Management key
           </label>
           <input
@@ -70,6 +75,7 @@ export function UnlockGate({ error, hidden, onUnlock }: UnlockGateProps) {
         </div>
         <button
           id="adminUnlock"
+          data-testid="adminUnlock"
           type="submit"
           className="btn btn-primary w-full py-2 flex items-center justify-center"
         >
