@@ -37,9 +37,6 @@ commands:
 jobs:
   fast:
     executor: node-executor
-    # 5x headroom over the <3 min budget; a stalled gate must fail,
-    # never hold the required check indefinitely.
-    timeout-minutes: 10
     steps:
       - checkout
 

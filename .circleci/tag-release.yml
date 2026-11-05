@@ -25,7 +25,6 @@ jobs:
     environment:
       GIT_USER_NAME: github-actions[bot]
       GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
-    timeout-minutes: 10
     steps:
       - checkout
 
@@ -124,7 +123,3 @@ workflows:
             branches:
               only:
                 - main
-            # Only trigger when workers/package.json changes
-            paths:
-              only:
-                - workers/package.json
