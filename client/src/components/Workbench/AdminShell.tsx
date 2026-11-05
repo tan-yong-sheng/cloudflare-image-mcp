@@ -204,7 +204,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
         */}
         <button
           type="button"
-          className="group hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-[60] h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="group max-md:hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-[60] h-12 w-7 items-center justify-center rounded-full border border-border bg-[var(--card-bg)] text-text-light shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-colors duration-150 hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           onClick={toggleSidebar}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!sidebarCollapsed}
@@ -425,7 +425,7 @@ export function AdminShell({ route }: { route: AdminRoute }) {
             {/* Tablet & Laptop Quick Sidebar Toggle */}
             <button
               type="button"
-              className="hidden md:flex items-center justify-center w-9 h-9 min-h-[36px] min-w-[36px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors border border-border/80 mr-1"
+              className="max-md:hidden md:flex items-center justify-center w-9 h-9 min-h-[36px] min-w-[36px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors border border-border/80 mr-1"
               onClick={toggleSidebar}
               aria-label={
                 sidebarCollapsed

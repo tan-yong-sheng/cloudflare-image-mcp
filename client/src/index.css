@@ -343,8 +343,11 @@ textarea:focus {
   width: 100%;
 }
 
+/* Utility class used to hide elements dynamically when an condition is met.
+   Must NOT use !important because Tailwind responsive variants like md:flex
+   need to override it (e.g. max-md:hidden). */
 .hidden {
-  display: none !important;
+  display: none;
 }
 
 /* Provider credentials workbench (variant A, #91) */
