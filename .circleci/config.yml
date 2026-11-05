@@ -1,8 +1,7 @@
 version: 2.1
 
-# E2E test workflow: deploys staging, runs Playwright tests, cleans up.
-# Triggered manually or on schedule; gated on release-integration branches.
-# Mirrors .github/workflows/e2e-tests.yml logic.
+# Combined CircleCI config for cloudflare-image-mcp
+# Replicates GitHub Actions: pr-checks.yml, tag-release.yml, e2e-tests.yml
 
 executors:
   node-executor:
@@ -18,6 +17,28 @@ executors:
     resource_class: medium
 
 commands:
+  setup-node:
+    description: "Setup Node.js and restore cache"
+    steps:
+      - restore_cache:
+          keys:
+            - workers-deps-{{ checksum "workers/package-lock.json" }}
+            - client-deps-{{ checksum "client/package-lock.json" }}
+      - run:
+          name: Install workers dependencies
+          command: cd workers && npm ci
+      - run:
+          name: Install client dependencies
+          command: cd client && npm ci
+      - save_cache:
+          key: workers-deps-{{ checksum "workers/package-lock.json" }}
+          paths:
+            - workers/node_modules
+      - save_cache:
+          key: client-deps-{{ checksum "client/package-lock.json" }}
+          paths:
+            - client/node_modules
+
   setup-wrangler:
     description: "Setup Wrangler for deployment"
     steps:
@@ -46,6 +67,157 @@ commands:
           command: npx playwright install --with-deps chromium
 
 jobs:
+  # Fast per-push gate for feature PRs
+  fast:
+    executor: node-executor
+    steps:
+      - checkout
+
+      - run:
+          name: Agent doc pointers
+          command: node scripts/check-agent-doc-paths.mjs
+
+      - setup-node
+
+      - run:
+          name: Type check
+          working_directory: workers
+          command: npm run check
+
+      - run:
+          name: Client type check
+          working_directory: client
+          command: npm run check
+
+      - run:
+          name: Client build
+          working_directory: client
+          command: npm run build
+
+      - run:
+          name: Client unit tests
+          working_directory: client
+          command: npm test
+
+      - run:
+          name: Client format check
+          working_directory: client
+          command: npx --no-install prettier --check "src/**/*.{ts,tsx,css}" "*.{ts,js,json,html}"
+
+      - run:
+          name: Format check
+          working_directory: workers
+          command: npx --no-install prettier --check "src/**/*.test.ts" "src/test-utils/**/*.ts" "tsconfig*.json" "package.json" ".circleci/config.yml"
+
+      - run:
+          name: Unit tests
+          working_directory: workers
+          command: npm test
+
+      - run:
+          name: Version consistency
+          working_directory: workers
+          command: |
+            PKG="$(node -p "require('./package.json').version")"
+            SRC="$(node -p "require('fs').readFileSync('src/version.ts','utf8').match(/WORKER_VERSION = \"([^\"]+)\"/)[1]")"
+            if [ "$PKG" != "$SRC" ]; then
+              echo "❌ ERROR: version skew: package.json ($PKG) != src/version.ts ($SRC) — bump both in the same PR"
+              exit 1
+            fi
+            echo "✅ Version consistent: $PKG"
+
+  # Tag and release on main branch
+  tag-and-release:
+    executor: node-executor
+    environment:
+      GIT_USER_NAME: github-actions[bot]
+      GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+    steps:
+      - checkout
+
+      - run:
+          name: Install gh CLI
+          command: |
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+
+      - run:
+          name: Resolve version
+          command: |
+            RAW="$(node -p "require('./workers/package.json').version")"
+            if ! printf '%s' "$RAW" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+              echo "❌ ERROR: workers/package.json version is not strict semver: '$RAW'"
+              exit 1
+            fi
+            VERSION="${RAW#v}"
+            TAG="v$VERSION"
+            CORE_AND_PRERELEASE="${VERSION%%+*}"
+            case "$CORE_AND_PRERELEASE" in
+              *"-"*) PRERELEASE=true ;;
+              *) PRERELEASE=false ;;
+            esac
+            echo "VERSION=$VERSION" >> $BASH_ENV
+            echo "TAG=$TAG" >> $BASH_ENV
+            echo "PRERELEASE=$PRERELEASE" >> $BASH_ENV
+            echo "Version: $VERSION → tag $TAG (prerelease: $PRERELEASE)"
+
+      - run:
+          name: Check existing tag and release
+          command: |
+            TAG="${TAG}"
+            if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+              echo "TAG_EXISTS=true" >> $BASH_ENV
+              echo "Tag $TAG already exists"
+            else
+              echo "TAG_EXISTS=false" >> $BASH_ENV
+              echo "Tag $TAG not found"
+            fi
+            if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+              echo "RELEASE_EXISTS=true" >> $BASH_ENV
+              echo "Release $TAG already exists"
+            else
+              echo "RELEASE_EXISTS=false" >> $BASH_ENV
+              echo "Release $TAG not found"
+            fi
+          environment:
+            GH_TOKEN: ${GH_TOKEN}
+
+      - run:
+          name: Create and push tag
+          command: |
+            if [ "$TAG_EXISTS" = "false" ]; then
+              git config user.name "$GIT_USER_NAME"
+              git config user.email "$GIT_USER_EMAIL"
+              git tag "$TAG" "$(git rev-parse HEAD)"
+              git push origin "$TAG"
+              echo "Tag $TAG created"
+            else
+              echo "Tag already exists, skipping"
+            fi
+
+      - run:
+          name: Create GitHub Release
+          command: |
+            if [ "$RELEASE_EXISTS" = "false" ]; then
+              ARGS=(
+                --title "cloudflare-image-mcp $TAG"
+                --target "$(git rev-parse HEAD)"
+                --generate-notes
+              )
+              if [ "$PRERELEASE" = "true" ]; then
+                ARGS+=(--prerelease)
+              fi
+              gh release create "$TAG" "${ARGS[@]}"
+              echo "Release $TAG published"
+            else
+              echo "Release already exists, skipping"
+            fi
+          environment:
+            GH_TOKEN: ${GH_TOKEN}
+
+  # E2E test jobs
   deploy_staging:
     executor: node-executor
     environment:
@@ -119,7 +291,6 @@ jobs:
             if [ -n "$WORKERS_URL" ]; then
               echo "TEST_BASE_URL=$WORKERS_URL" >> $BASH_ENV
             else
-              # Derive from workers.dev subdomain
               SUBDOMAIN=$(curl -sS \
                 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
                 "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
@@ -159,7 +330,6 @@ jobs:
           name: Run E2E tests
           working_directory: e2e
           command: |
-            # Default to contract tier; schedule runs canary
             E2E_TIER="${E2E_TIER:-contract}"
             echo "Running E2E tier: $E2E_TIER"
             npx playwright test --reporter=list,junit,html
@@ -205,13 +375,10 @@ jobs:
 
   e2e-gate-sentinel:
     executor: node-executor
-    # Honest-skip sentinel: fails closed if E2E did not succeed on gated branches
     steps:
       - run:
           name: Evaluate gate honesty
           command: |
-            # Gated = release-integration prefix OR e2e label
-            # In CircleCI, we'll use environment variables to control this
             if [ "$E2E_GATED" = "true" ]; then
               if [ "$E2E_RESULT" != "success" ]; then
                 echo "❌ E2E did not succeed on gated branch (result: $E2E_RESULT) — blocking merge"
@@ -232,6 +399,28 @@ jobs:
 
 workflows:
   version: 2
+
+  # Fast per-push checks on main branch
+  pr-checks:
+    jobs:
+      - fast:
+          filters:
+            branches:
+              only:
+                - main
+
+  # Tag and release on main branch
+  tag-release:
+    jobs:
+      - tag-and-release:
+          context:
+            - github-release
+          filters:
+            branches:
+              only:
+                - main
+
+  # E2E tests on main and release branches
   e2e-tests:
     jobs:
       - deploy_staging:
@@ -252,11 +441,11 @@ workflows:
             - e2e-tests
             - cleanup-staging
 
-  # Scheduled run (canary tier)
+  # Scheduled daily E2E (canary tier)
   e2e-scheduled:
     triggers:
       - schedule:
-          cron: "0 0 * * *" # Daily at midnight UTC
+          cron: "0 0 * * *"
           filters:
             branches:
               only:
