@@ -422,10 +422,10 @@ export function AdminShell({ route }: { route: AdminRoute }) {
               <i className="fa-solid fa-bars text-base" />
             </button>
 
-            {/* Tablet & Laptop Quick Sidebar Toggle */}
+            {/* Mobile Menu Toggle */}
             <button
               type="button"
-              className="max-md:hidden md:flex items-center justify-center w-9 h-9 min-h-[36px] min-w-[36px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors border border-border/80 mr-1"
+              className="md:hidden flex items-center justify-center w-9 h-9 min-h-[36px] min-w-[36px] rounded-lg text-text-light hover:text-text hover:bg-[var(--secondary)] transition-colors border border-border/80 mr-1"
               onClick={toggleSidebar}
               aria-label={
                 sidebarCollapsed
