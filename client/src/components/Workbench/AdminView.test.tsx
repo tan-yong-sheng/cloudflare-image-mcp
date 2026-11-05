@@ -6,7 +6,7 @@ import { useEffect, type ReactNode } from "react";
 import { AdminKeyProvider } from "../../app/admin-key";
 import { AuthProvider, useAuth, SESSION_EXPIRED_MESSAGE } from "../../app/auth";
 import { ThemeProvider } from "../../app/theme";
-import { AdminView } from "./AdminView";
+import { AdminShell } from "./AdminShell";
 
 /**
  * The workbench.
@@ -125,7 +125,7 @@ function renderWorkbench() {
       </ThemeProvider>
     </QueryClientProvider>
   );
-  const utils = render(<AdminView />, { wrapper });
+  const utils = render(<AdminShell route="admin" />, { wrapper });
   return { ...utils, client, session };
 }
 
@@ -727,7 +727,7 @@ describe("the provider credentials workbench", () => {
 
     await unlock(user);
     await user.click(
-      screen.getByRole("button", { name: /Lock provider credentials/i })
+      screen.getByRole("button", { name: /Lock the administrative area/i })
     );
 
     await waitFor(() =>
@@ -736,6 +736,47 @@ describe("the provider credentials workbench", () => {
       ).toBeInTheDocument()
     );
     expect(client.getQueryData(["admin", "health"])).toBeUndefined();
+  });
+
+  it("drops the drawer and the panel error when the rail locks the area", async () => {
+    // The lock button lives in the shell rail now, not in this screen, so
+    // the screen has to notice the key going away on its own. A drawer or
+    // a panel error that outlived the key would be showing the operator
+    // something they are no longer allowed to see.
+    stubApi((route) =>
+      route.path.endsWith("/api/admin/keys/1/delete")
+        ? jsonResponse(false, { error: { message: "Delete failed." } }, 500)
+        : null
+    );
+    const user = userEvent.setup();
+    renderWorkbench();
+    await unlock(user);
+
+    // Raise a panel error: the delete is refused, so the panel says why.
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(screen.getByRole("button", { name: /Delete key #1/i }));
+    await waitFor(() =>
+      expect(document.getElementById("adminPanelError")?.textContent).toContain(
+        "Delete failed."
+      )
+    );
+
+    // Open a drawer as well, so both pieces of screen state are live.
+    await user.click(document.getElementById("adminAddKey")!);
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).not.toBeNull()
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /Lock the administrative area/i })
+    );
+
+    await waitFor(() =>
+      expect(document.getElementById("adminSheet")).toBeNull()
+    );
+    expect(document.getElementById("adminPanelError")?.className).toContain(
+      "hidden"
+    );
   });
 
   it("does not put the credential payload back when a request fails after the lock", async () => {
@@ -770,7 +811,7 @@ describe("the provider credentials workbench", () => {
     // The toggle is in flight, then the operator locks the panel.
     await user.click(screen.getByRole("switch", { name: /Disable key-1/i }));
     await user.click(
-      screen.getByRole("button", { name: /Lock provider credentials/i })
+      screen.getByRole("button", { name: /Lock the administrative area/i })
     );
     await waitFor(() =>
       expect(

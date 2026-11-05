@@ -280,7 +280,7 @@ export function GeneratorView() {
   return (
     <main
       id="generatorView"
-      className="container mx-auto px-4 py-4 max-w-6xl"
+      className="container mx-auto px-4 py-4 pt-safe-top max-w-6xl"
       role="main"
       aria-labelledby="generatorViewTitle"
     >

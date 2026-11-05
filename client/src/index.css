@@ -69,12 +69,12 @@
 }
 
 .dark {
-  --primary: #675fe8;
-  --primary-rgb: 103 95 232;
-  --primary-light: #8a84ee;
-  --primary-light-rgb: 138 132 238;
-  --primary-dark: #5046e5;
-  --primary-dark-rgb: 80 70 229;
+  --primary: #6b5bd0;
+  --primary-rgb: 107 91 208;
+  --primary-light: #8b7ee0;
+  --primary-light-rgb: 139 126 224;
+  --primary-dark: #5a4bc0;
+  --primary-dark-rgb: 90 75 192;
   --secondary: #2d3748;
   --secondary-rgb: 45 55 72;
   --text: #f7fafc;
@@ -135,6 +135,10 @@ body {
   color: var(--primary);
 }
 
+.text-primary-light {
+  color: var(--primary-light);
+}
+
 /* Helper and metadata copy. Uses the token rather than a Tailwind gray so it
    flips with the theme: a fixed gray fails the contrast bar in one of them. */
 .text-muted {
@@ -186,6 +190,14 @@ body {
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark .btn-primary {
+  background-color: var(--primary-dark);
+}
+
+.dark .btn-primary:hover {
+  background-color: var(--primary);
 }
 
 .btn-secondary {
@@ -339,8 +351,11 @@ textarea:focus {
   width: 100%;
 }
 
+/* Utility class used to hide elements dynamically when an condition is met.
+   Must NOT use !important because Tailwind responsive variants like md:flex
+   need to override it (e.g. max-md:hidden). */
 .hidden {
-  display: none !important;
+  display: none;
 }
 
 /* Provider credentials workbench (variant A, #91) */
@@ -504,4 +519,23 @@ textarea:focus {
   .container {
     max-width: 1200px;
   }
+}
+
+/* Safe area support for mobile devices with notches and dynamic islands */
+/* Mobile-only: use max(env(...), 40px) to clear notch area on devices without env support */
+@media (max-width: 767px) {
+  .pt-safe-top {
+    padding-top: max(env(safe-area-inset-top, 0px), 40px);
+  }
+}
+
+/* Desktop: apply safe-area inset only if device reports it (e.g., tablet with notch) */
+@media (min-width: 768px) {
+  .pt-safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { AdminView } from "./components/Workbench/AdminView";
-import { ApiKeysPage } from "./components/Workbench/ApiKeysPage";
+import { AdminShell } from "./components/Workbench/AdminShell";
 import { LoginDialog } from "./components/Auth/LoginDialog";
 import { GeneratorView } from "./components/Playground/GeneratorView";
 import { AdminKeyProvider, useAdminKey } from "./app/admin-key";
@@ -65,13 +64,7 @@ function AppShell() {
 
   return (
     <>
-      {route === "admin" ? (
-        <AdminView />
-      ) : route === "admin-api-keys" ? (
-        <ApiKeysPage />
-      ) : (
-        <GeneratorView />
-      )}
+      {inAdminArea ? <AdminShell route={route} /> : <GeneratorView />}
       {!isAuthenticated ? <LoginDialog /> : null}
     </>
   );
