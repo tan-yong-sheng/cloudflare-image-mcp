@@ -3,6 +3,7 @@ version: 2.1
 # Continuation config for cloudflare-image-mcp
 # This config is dynamically triggered by setup.yml based on path filtering
 # Pipeline parameters are set by circleci/path-filtering orb
+# Updated to trigger path-filtering for CI testing
 
 parameters:
   run_workers:
